@@ -171,6 +171,7 @@ const schema = defineSchema(
     // VelRepeat analytics: every "สนใจ / view" click a shopper makes on velshop.
     // Data is kept per customer so Velnox can learn who is interested in what
     // and recommend the right products to the right person.
+    // NOTE: productId is the NEON product id (Commerce Core lives in Neon).
     productViews: defineTable({
       userId: v.optional(v.id("users")), // null = signed-out visitor
       productId: v.id("products"),
@@ -178,6 +179,29 @@ const schema = defineSchema(
     })
       .index("by_product", ["productId"])
       .index("by_user", ["userId"]),
+
+    // VelRepeat interests for the Neon storefront (legacy productViews above
+    // are kept for the legacy Convex storefront; this table tracks clicks on
+    // products whose source of truth lives in Neon).
+    interests: defineTable({
+      userId: v.optional(v.id("users")), // null = signed-out visitor
+      productId: v.string(), // Neon product id
+      viewedAt: v.number(),
+    })
+      .index("by_product", ["productId"])
+      .index("by_user", ["userId"]),
+
+    // Neon -> Convex business event bridge (realtime/intelligence foundation).
+    // The commerce layer writes an event here whenever a business fact changes
+    // in Neon (OrderCreated, PaymentConfirmed, OrderStatusChanged, ...).
+    businessEvents: defineTable({
+      type: v.string(),
+      entityId: v.string(), // Neon entity id (order id, product id, ...)
+      payload: v.any(),
+      createdAt: v.number(),
+    })
+      .index("by_entity", ["entityId"])
+      .index("by_type", ["type"]),
 
     // Monthly subscription purchases (velshop "สั่งรายเดือน"): the shop
     // auto-places a new order every intervalDays for the customer.

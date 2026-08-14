@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any -- DB row mappers */
 /**
  * Velnox Backend — Payments & Refunds
  *

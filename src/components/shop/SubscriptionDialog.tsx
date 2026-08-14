@@ -17,28 +17,29 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { api } from "@/convex/_generated/api";
-import type { Doc } from "@/convex/_generated/dataModel";
 import { useAuth } from "@/hooks/use-auth";
-import { formatBaht } from "@/lib/shop";
-import { useMutation } from "convex/react";
+import { formatBaht, type StoreProduct } from "@/lib/commerce";
+import { useAction } from "convex/react";
 import { CalendarClock, Loader2 } from "lucide-react";
 import { useState } from "react";
 import { useNavigate } from "react-router";
 import { toast } from "sonner";
 
 interface SubscriptionDialogProps {
-  product: Doc<"products"> | null;
+  product: StoreProduct | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }
 
 export function SubscriptionDialog({ product, open, onOpenChange }: SubscriptionDialogProps) {
   const { isAuthenticated } = useAuth();
-  const createSubscription = useMutation(api.subscriptions.createSubscription);
+  const createVelRepeat = useAction(api.commerce.createVelRepeat);
   const navigate = useNavigate();
   const [intervalDays, setIntervalDays] = useState("30");
   const [quantity, setQuantity] = useState(1);
   const [submitting, setSubmitting] = useState(false);
+
+  const stock = (product?.inventory?.available ?? product?.inventory?.quantity) ?? 0;
 
   const handleSubscribe = async () => {
     if (!product) return;
@@ -49,10 +50,11 @@ export function SubscriptionDialog({ product, open, onOpenChange }: Subscription
     }
     setSubmitting(true);
     try {
-      await createSubscription({
-        productId: product._id,
+      await createVelRepeat({
+        productId: product.id,
         quantity,
         intervalDays: Number(intervalDays),
+        frequency: "monthly",
       });
       toast.success(`สมัครรับ "${product.name}" ทุก ${intervalDays} วันแล้ว 🗓️`);
       onOpenChange(false);
@@ -74,9 +76,9 @@ export function SubscriptionDialog({ product, open, onOpenChange }: Subscription
           </DialogTitle>
           <DialogDescription>
             ระบบจะสร้างออเดอร์ให้อัตโนมัติทุกช่วงเวลา — ไม่ต้องสั่งเองทุกครั้ง
-            {product?.price !== undefined && (
+            {product && product.price > 0 && (
               <span className="mt-1 block font-medium text-slate-700">
-                {formatBaht(product.price)} / {product?.unit} ต่อรอบ
+                {formatBaht(product.price)} / {product.unit} ต่อรอบ
               </span>
             )}
           </DialogDescription>
@@ -102,14 +104,14 @@ export function SubscriptionDialog({ product, open, onOpenChange }: Subscription
               id="sub-qty"
               type="number"
               min={1}
-              max={Math.max(1, product?.currentStock ?? 99)}
+              max={Math.max(1, stock)}
               value={quantity}
               onChange={(e) => setQuantity(Math.max(1, Number(e.target.value) || 1))}
               className="rounded-[10px] border-slate-200"
             />
-            {product && product.currentStock > 0 && (
+            {product && stock > 0 && (
               <p className="text-xs text-slate-400">
-                สต็อกปัจจุบัน {product.currentStock} {product.unit} — ถ้าสต็อกไม่พอรอบนั้นจะถูกข้าม
+                สต็อกปัจจุบัน {stock} {product.unit} — ถ้าสต็อกไม่พอรอบนั้นจะถูกข้าม
               </p>
             )}
           </div>

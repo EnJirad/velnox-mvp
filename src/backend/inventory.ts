@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any -- DB row mappers */
 /**
  * Velnox Backend — Inventory
  * Inventory is a separate entity from Product (supports multiple warehouses later).
@@ -37,14 +38,31 @@ export async function getInventory(db: Db, productId: string): Promise<Inventory
   return rows[0] ? mapInventory(rows[0]) : null;
 }
 
+/**
+ * Ensure an inventory row exists for a product (created with the product).
+ * Keeps Product and Inventory as separate entities while guaranteeing a row.
+ */
+export async function ensureInventory(db: Db, productId: string, shopId: string): Promise<Inventory> {
+  const rows = await db(
+    `INSERT INTO inventory (product_id, shop_id, quantity)
+     VALUES ($1, $2, 0)
+     ON CONFLICT (product_id) DO UPDATE SET shop_id = EXCLUDED.shop_id
+     RETURNING *`,
+    [productId, shopId],
+  );
+  return mapInventory(rows[0]);
+}
+
 /** Set the on-hand stock level (e.g. after a stock count / restock). */
 export async function setStock(db: Db, productId: string, quantity: number): Promise<Inventory> {
   if (quantity < 0) throw new Error("quantity must be >= 0");
+  const product = await db("SELECT shop_id FROM products WHERE id = $1 LIMIT 1", [productId]);
+  if (!product[0]) throw new Error(`Product ${productId} not found`);
+  await ensureInventory(db, productId, product[0].shop_id);
   const rows = await db(
-    `UPDATE inventory SET quantity = $2 WHERE product_id = $1 RETURNING *`,
+    `UPDATE inventory SET quantity = $2, updated_at = now() WHERE product_id = $1 RETURNING *`,
     [productId, quantity],
   );
-  if (!rows[0]) throw new Error(`No inventory row for product ${productId}`);
   return mapInventory(rows[0]);
 }
 

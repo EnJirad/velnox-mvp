@@ -9,7 +9,8 @@
     "lint": "eslint .",
     "format": "prettier --write .",
     "preview": "vite preview",
-    "db:migrate": "bun run db/migrate.ts"
+    "db:migrate": "bun run db/migrate.ts",
+    "db:smoke": "bun run db/smoke.ts"
   },
   "dependencies": {
     "@convex-dev/auth": "^0.0.90",

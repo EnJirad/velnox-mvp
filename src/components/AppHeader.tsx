@@ -1,11 +1,12 @@
 import { Logo } from "@/components/Logo";
 import { SiteSwitcher } from "@/components/SiteSwitcher";
 import { UserMenu } from "@/components/UserMenu";
-import { RefreshCw, ShoppingBag, Target, Wallet } from "lucide-react";
+import { RefreshCw, ShoppingBag, Store, Target, Wallet } from "lucide-react";
 import { Link, useLocation, useNavigate } from "react-router";
 
 const NAV_ITEMS = [
   { to: "/seller/goals", label: "แดชบอร์ดเป้าหมาย", icon: Target },
+  { to: "/seller/shop", label: "ร้านของฉัน", icon: Store },
   { to: "/seller/reorder", label: "Smart Reorder", icon: RefreshCw },
   { to: "/seller/orders", label: "ออเดอร์", icon: ShoppingBag },
   { to: "/seller/income", label: "รายได้", icon: Wallet },

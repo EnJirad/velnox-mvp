@@ -14,6 +14,7 @@ import { BrowserRouter, Navigate, Route, Routes } from "react-router";
 import "../../index.css";
 
 const Dashboard = lazy(() => import("@/pages/Dashboard"));
+const MyShop = lazy(() => import("@/pages/MyShop"));
 const Reorder = lazy(() => import("@/pages/Reorder"));
 const SellerOrders = lazy(() => import("@/pages/SellerOrders"));
 const Income = lazy(() => import("@/pages/Income"));
@@ -35,6 +36,14 @@ createRoot(document.getElementById("root")!).render(
               element={
                 <RequireRole role="seller">
                   <Dashboard />
+                </RequireRole>
+              }
+            />
+            <Route
+              path="/seller/shop"
+              element={
+                <RequireRole role="seller">
+                  <MyShop />
                 </RequireRole>
               }
             />

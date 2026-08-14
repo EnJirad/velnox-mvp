@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any -- DB row mappers */
 /**
  * Velnox Backend — Subscriptions (VelRepeat)
  *
@@ -24,7 +25,7 @@ function mapSubscription(r: Record<string, any>): Subscription {
     customerUserId: r.customer_user_id,
     productId: r.product_id,
     shopId: r.shop_id,
-    merchantId: r.merchant_id,
+    sellerId: r.seller_id,
     quantity: Number(r.quantity),
     unitPriceSnapshot: Number(r.unit_price_snapshot),
     frequency: r.frequency,
@@ -36,6 +37,7 @@ function mapSubscription(r: Record<string, any>): Subscription {
     createdAt: r.created_at,
     updatedAt: r.updated_at,
     productName: r.product_name ?? undefined,
+    productImageUrl: r.product_image_url ?? undefined,
   };
 }
 
@@ -65,7 +67,7 @@ export function computeNextOrderDate(
 
 export async function createSubscription(db: Db, input: CreateSubscriptionInput): Promise<Subscription> {
   const product = await db(
-    "SELECT p.id, p.shop_id, p.status, p.price, s.merchant_id FROM products p JOIN shops s ON s.id = p.shop_id WHERE p.id = $1",
+    "SELECT p.id, p.shop_id, p.status, p.price, s.seller_id FROM products p JOIN shops s ON s.id = p.shop_id WHERE p.id = $1",
     [input.productId],
   );
   if (!product[0]) throw new SubscriptionError(`Product ${input.productId} not found`);
@@ -74,7 +76,7 @@ export async function createSubscription(db: Db, input: CreateSubscriptionInput)
   const unitPriceSnapshot = round2(input.unitPriceSnapshot ?? Number(product[0].price));
   const rows = await db(
     `INSERT INTO subscriptions
-       (customer_user_id, product_id, shop_id, merchant_id, quantity,
+       (customer_user_id, product_id, shop_id, seller_id, quantity,
         unit_price_snapshot, frequency, interval_days, next_order_date)
      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
      RETURNING *`,
@@ -82,7 +84,7 @@ export async function createSubscription(db: Db, input: CreateSubscriptionInput)
       input.customerUserId,
       input.productId,
       product[0].shop_id,
-      product[0].merchant_id,
+      product[0].seller_id,
       input.quantity,
       unitPriceSnapshot,
       input.frequency,
@@ -96,8 +98,10 @@ export async function createSubscription(db: Db, input: CreateSubscriptionInput)
 export async function listSubscriptions(db: Db, customerUserId?: string): Promise<Subscription[]> {
   if (customerUserId) {
     const rows = await db(
-      `SELECT s.*, p.name AS product_name
-       FROM subscriptions s JOIN products p ON p.id = s.product_id
+      `SELECT s.*, p.name AS product_name, pi.url AS product_image_url
+       FROM subscriptions s
+       JOIN products p ON p.id = s.product_id
+       LEFT JOIN product_images pi ON pi.product_id = p.id AND pi.is_primary = true
        WHERE s.customer_user_id = $1
        ORDER BY s.created_at DESC`,
       [customerUserId],
@@ -105,17 +109,37 @@ export async function listSubscriptions(db: Db, customerUserId?: string): Promis
     return rows.map(mapSubscription);
   }
   const rows = await db(
-    `SELECT s.*, p.name AS product_name
-     FROM subscriptions s JOIN products p ON p.id = s.product_id
+    `SELECT s.*, p.name AS product_name, pi.url AS product_image_url
+     FROM subscriptions s
+     JOIN products p ON p.id = s.product_id
+     LEFT JOIN product_images pi ON pi.product_id = p.id AND pi.is_primary = true
      ORDER BY s.created_at DESC`,
   );
   return rows.map(mapSubscription);
 }
 
+/** All subscriptions for one seller's products (velseller VelRepeat panel). */
+export async function listSubscriptionsBySeller(db: Db, sellerId: string): Promise<Subscription[]> {
+  const rows = await db(
+    `SELECT s.*, p.name AS product_name, pi.url AS product_image_url,
+            u.name AS customer_name, u.email AS customer_email
+     FROM subscriptions s
+     JOIN products p ON p.id = s.product_id
+     LEFT JOIN product_images pi ON pi.product_id = p.id AND pi.is_primary = true
+     LEFT JOIN users u ON u.id = s.customer_user_id
+     WHERE s.seller_id = $1
+     ORDER BY s.created_at DESC`,
+    [sellerId],
+  );
+  return rows.map((r) => ({ ...mapSubscription(r), customerName: r.customer_name, customerEmail: r.customer_email }));
+}
+
 export async function getSubscription(db: Db, subscriptionId: string): Promise<Subscription | null> {
   const rows = await db(
-    `SELECT s.*, p.name AS product_name
-     FROM subscriptions s JOIN products p ON p.id = s.product_id
+    `SELECT s.*, p.name AS product_name, pi.url AS product_image_url
+     FROM subscriptions s
+     JOIN products p ON p.id = s.product_id
+     LEFT JOIN product_images pi ON pi.product_id = p.id AND pi.is_primary = true
      WHERE s.id = $1 LIMIT 1`,
     [subscriptionId],
   );
@@ -152,8 +176,10 @@ export async function rescheduleSubscription(
  */
 export async function getDueSubscriptions(db: Db, onDate: string): Promise<Subscription[]> {
   const rows = await db(
-    `SELECT s.*, p.name AS product_name
-     FROM subscriptions s JOIN products p ON p.id = s.product_id
+    `SELECT s.*, p.name AS product_name, pi.url AS product_image_url
+     FROM subscriptions s
+     JOIN products p ON p.id = s.product_id
+     LEFT JOIN product_images pi ON pi.product_id = p.id AND pi.is_primary = true
      WHERE s.status = 'active' AND s.next_order_date <= $1::date
      ORDER BY s.next_order_date ASC`,
     [onDate],

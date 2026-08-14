@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any -- DB row mappers */
 /**
  * Velnox Backend — Orders (Commerce Core heart)
  *
@@ -81,7 +82,7 @@ function mapOrderItem(r: Record<string, any>): OrderItem {
     orderId: r.order_id,
     productId: r.product_id,
     shopId: r.shop_id,
-    merchantId: r.merchant_id,
+    sellerId: r.seller_id,
     productName: r.product_name,
     unit: r.unit,
     unitPrice: Number(r.unit_price),
@@ -111,7 +112,7 @@ export async function createOrder(input: CreateOrderInput): Promise<Order> {
       productId: string;
       quantity: number;
       shopId: string;
-      merchantId: string;
+      sellerId: string;
       name: string;
       unit: string;
       unitPrice: number;
@@ -122,7 +123,7 @@ export async function createOrder(input: CreateOrderInput): Promise<Order> {
     for (const item of input.items) {
       const product = await tx.query(
         `SELECT p.id, p.shop_id, p.name, p.unit, p.price, p.status,
-                s.merchant_id, s.commission_rate
+                s.seller_id, s.commission_rate
          FROM products p
          JOIN shops s ON s.id = p.shop_id
          WHERE p.id = $1
@@ -147,7 +148,7 @@ export async function createOrder(input: CreateOrderInput): Promise<Order> {
         productId: item.productId,
         quantity: item.quantity,
         shopId: p.shop_id,
-        merchantId: p.merchant_id,
+        sellerId: p.seller_id,
         name: p.name,
         unit: p.unit,
         unitPrice,
@@ -186,20 +187,20 @@ export async function createOrder(input: CreateOrderInput): Promise<Order> {
     for (const l of lines) {
       const item = await tx.query(
         `INSERT INTO order_items
-           (order_id, product_id, shop_id, merchant_id, product_name, unit,
+           (order_id, product_id, shop_id, seller_id, product_name, unit,
             unit_price, quantity, subtotal, commission_rate)
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
          RETURNING *`,
-        [order.rows[0].id, l.productId, l.shopId, l.merchantId, l.name, l.unit, l.unitPrice, l.quantity, l.subtotal, l.commissionRate],
+        [order.rows[0].id, l.productId, l.shopId, l.sellerId, l.name, l.unit, l.unitPrice, l.quantity, l.subtotal, l.commissionRate],
       );
       await tx.query(
         `INSERT INTO commissions
-           (order_item_id, order_id, merchant_id, shop_id, order_amount, commission_rate, commission_amount)
+           (order_item_id, order_id, seller_id, shop_id, order_amount, commission_rate, commission_amount)
          VALUES ($1, $2, $3, $4, $5, $6, $7)`,
         [
           item.rows[0].id,
           order.rows[0].id,
-          l.merchantId,
+          l.sellerId,
           l.shopId,
           l.subtotal,
           l.commissionRate,
@@ -252,17 +253,38 @@ export async function listOrdersForCustomer(db: Db, customerUserId: string, limi
   return rows.map(mapOrder);
 }
 
-export async function listOrdersForMerchant(db: Db, merchantId: string, limit = 50): Promise<Order[]> {
+export async function listOrdersForMerchant(db: Db, sellerId: string, limit = 50): Promise<Order[]> {
+  return listOrdersForSeller(db, sellerId, limit);
+}
+
+/**
+ * Orders for a seller: only orders containing the seller's products, with the
+ * seller's own line items + customer contact details (from the frozen address
+ * snapshot) so the seller can fulfill them.
+ */
+export async function listOrdersForSeller(db: Db, sellerId: string, limit = 50): Promise<Order[]> {
   const rows = await db(
     `SELECT DISTINCT o.*
      FROM orders o
      JOIN order_items oi ON oi.order_id = o.id
-     WHERE oi.merchant_id = $1
+     WHERE oi.seller_id = $1
      ORDER BY o.created_at DESC
      LIMIT $2`,
-    [merchantId, limit],
+    [sellerId, limit],
   );
-  return rows.map(mapOrder);
+  const orders = rows.map(mapOrder);
+  for (const order of orders) {
+    const items = await db(
+      `SELECT * FROM order_items WHERE order_id = $1 AND seller_id = $2 ORDER BY created_at ASC`,
+      [order.id, sellerId],
+    );
+    order.items = items.map(mapOrderItem);
+    order.itemCount = order.items.reduce((s, i) => s + i.quantity, 0);
+    const snap = order.addressSnapshot;
+    order.customerName = snap.recipientName ?? "ลูกค้า";
+    order.customerPhone = snap.phone ?? "";
+  }
+  return orders;
 }
 
 // ---------------------------------------------------------------------------
@@ -297,6 +319,26 @@ export async function updateOrderStatus(input: UpdateOrderInput): Promise<Order>
     if (!PAYMENT_STATUSES.includes(paymentStatus)) throw new OrderError(`Invalid payment status: ${paymentStatus}`);
     if (!SHIPPING_STATUSES.includes(shippingStatus)) throw new OrderError(`Invalid shipping status: ${shippingStatus}`);
     if (before.status === "cancelled") throw new OrderError("Order is already cancelled");
+
+    // --- order state machine ---
+    // pending -> confirmed -> shipped -> delivered -> completed
+    // pending -> cancelled, confirmed -> cancelled
+    // shipped/delivered/completed -> cancelled is NOT allowed (use refund flow)
+    const ALLOWED_NEXT: Record<string, string[]> = {
+      pending: ["confirmed", "cancelled"],
+      confirmed: ["shipped", "cancelled"],
+      shipped: ["delivered"],
+      delivered: ["completed"],
+      completed: [],
+      cancelled: [],
+    };
+    if (status !== before.status) {
+      if (!ALLOWED_NEXT[before.status]?.includes(status)) {
+        throw new OrderError(
+          `Cannot move order from '${before.status}' to '${status}' — status transition not allowed`,
+        );
+      }
+    }
 
     const updated = await tx.query(
       `UPDATE orders
@@ -364,4 +406,98 @@ export async function cancelOrder(orderId: string): Promise<Order> {
     );
     return mapOrder(updated.rows[0]);
   });
+}
+
+// ---------------------------------------------------------------------------
+// seller income report (velseller "รายได้")
+// ---------------------------------------------------------------------------
+const SELLER_COMMISSION_RATE = 0.03; // Velnox charges 3% per item sold
+const RETURN_COVERAGE_RATE = 0.1; // returns covered up to 10% of sales
+
+export interface SellerIncomeReport {
+  gross: number;
+  grossCount: number;
+  returns: number;
+  returnCount: number;
+  commission: number;
+  commissionRate: number;
+  returnRate: number;
+  returnCoverage: number;
+  payout: number;
+  transactions: Array<{
+    order: Order;
+    items: OrderItem[];
+    subtotal: number;
+    pending: boolean;
+  }>;
+}
+
+/**
+ * Seller income: gross completed sales, returned value, the 3% commission,
+ * and the payout estimate under Velnox's return policy (returns beyond 10% of
+ * sales are the seller's responsibility). All math is server-side, rounded to
+ * 2 decimals — never trust frontend numbers.
+ */
+export async function sellerIncome(db: Db, sellerId: string, limit = 200): Promise<SellerIncomeReport> {
+  const rows = await db(
+    `SELECT DISTINCT o.*
+     FROM orders o
+     JOIN order_items oi ON oi.order_id = o.id
+     WHERE oi.seller_id = $1
+     ORDER BY o.created_at DESC
+     LIMIT $2`,
+    [sellerId, limit],
+  );
+
+  let gross = 0;
+  let grossCount = 0;
+  let returns = 0;
+  let returnCount = 0;
+  const transactions: SellerIncomeReport["transactions"] = [];
+
+  for (const r of rows) {
+    const order = mapOrder(r);
+    const items = await db(
+      `SELECT * FROM order_items WHERE order_id = $1 AND seller_id = $2 ORDER BY created_at ASC`,
+      [order.id, sellerId],
+    );
+    const mine = items.map(mapOrderItem);
+    if (mine.length === 0) continue;
+    const subtotal = round2(mine.reduce((s, i) => s + i.subtotal, 0));
+    const qty = mine.reduce((s, i) => s + i.quantity, 0);
+
+    if (order.status === "cancelled") {
+      returns += subtotal;
+      returnCount += qty;
+    } else if (order.status === "completed") {
+      gross += subtotal;
+      grossCount += qty;
+      transactions.push({ order, items: mine, subtotal, pending: false });
+    } else {
+      transactions.push({ order, items: mine, subtotal, pending: true });
+    }
+  }
+
+  gross = round2(gross);
+  returns = round2(returns);
+  const commission = round2(gross * SELLER_COMMISSION_RATE);
+  const totalOrdered = gross + returns;
+  const returnRate = totalOrdered > 0 ? round2(returns / totalOrdered) : 0;
+  const returnCoverage = round2(Math.min(returns, gross * RETURN_COVERAGE_RATE));
+  const payout = round2(gross - commission - (returns - returnCoverage));
+
+  transactions.sort((a, b) => (a.order.createdAt < b.order.createdAt ? 1 : -1));
+
+  return {
+    gross,
+    grossCount,
+    returns,
+    returnCount,
+    commission,
+    commissionRate: SELLER_COMMISSION_RATE,
+    returnRate,
+    returnCoverage,
+    payout,
+    transactions: transactions.slice(0, 20),
+  };
 }
