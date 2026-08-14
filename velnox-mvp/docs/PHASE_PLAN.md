@@ -26,7 +26,10 @@ Phase 12 Production — staging/prod env, deploy pipeline, monitoring, backup
 
 ---
 
-## Phase 2 — Database (Neon Commerce Core)
+## Phase 2 — Database (Neon Commerce Core) ✅ เสร็จแล้ว
+
+> 📄 รายละเอียดเต็ม: **`docs/PHASE2_DATABASE.md`** — design + conflicts ที่รายงาน + Definition of Done
+> สรุป: 36 ตาราง (14 base + 22 ใหม่ใน `db/migrations/002…010`) — `bun run db:migrate` รัน base + migrations เรียงลำดับอัตโนมัติ, `bun run db:smoke` ตรวจตาราง + seeds ครบ
 
 **เป้าหมาย:** schema รองรับ spec ครบโดยไม่ทำลายของเดิม (migration แบบ safe, backward compatible)
 

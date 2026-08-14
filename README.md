@@ -11,6 +11,11 @@
 - 🔍 [`docs/GAP_ANALYSIS.md`](./docs/GAP_ANALYSIS.md) — เทียบ spec ข้อต่อข้อ vs โค้ดปัจจุบัน (มีแล้ว / มีบางส่วน / ยังไม่มี)
 - 🗺 [`docs/PHASE_PLAN.md`](./docs/PHASE_PLAN.md) — แผนงาน Phase 2–12 แบบละเอียด (Database → Backend → Auth → VelShop → VelSeller → VelCenter → Shipping → Payment → Financial → Testing → Production)
 
+### 🗄 เอกสาร Phase 2 — Database (เสร็จแล้ว)
+
+- 📦 [`docs/PHASE2_DATABASE.md`](./docs/PHASE2_DATABASE.md) — schema 36 ตาราง + conflicts ที่รายงาน + Definition of Done
+- 🧱 `db/migrations/002…010` — migration idempotent (รัน `DATABASE_URL="..." bun run db:migrate` ได้ทันที)
+
 ---
 
 ## Overview

@@ -11,6 +11,7 @@
 import { getPool } from "../src/backend/db";
 
 const REQUIRED_TABLES = [
+  // base Commerce Core (schema.sql)
   "users",
   "sellers",
   "shops",
@@ -25,6 +26,30 @@ const REQUIRED_TABLES = [
   "commissions",
   "settlements",
   "subscriptions",
+  // Phase 2 migrations
+  "user_profiles",
+  "categories",
+  "product_variants",
+  "carts",
+  "cart_items",
+  "wishlists",
+  "wishlist_items",
+  "payment_transactions",
+  "shipments",
+  "tracking_events",
+  "returns",
+  "return_items",
+  "reviews",
+  "velrepeat_orders",
+  "seller_balances",
+  "seller_payouts",
+  "financial_ledger",
+  "platform_settings",
+  "notifications",
+  "audit_logs",
+  "staff_profiles",
+  "coupons",
+  "promotions",
 ] as const;
 
 const pool = getPool();
@@ -44,7 +69,25 @@ try {
     console.error("Run: DATABASE_URL=<neon-connection-string> bun run db:migrate");
     process.exitCode = 1;
   } else {
-    console.log(`✅ All ${REQUIRED_TABLES.length} Commerce Core tables exist.`);
+    console.log(`✅ All ${REQUIRED_TABLES.length} required tables exist.`);
+  }
+
+  // platform_settings seeds (commission/return threshold must not be hard-coded)
+  const seeds = await pool.query(`SELECT key FROM platform_settings`);
+  const seedKeys = new Set((seeds.rows as { key: string }[]).map((r) => r.key));
+  const EXPECTED_SEEDS = [
+    "platform_name",
+    "currency",
+    "platform_commission_percent",
+    "shipping_company_percent",
+    "return_rate_threshold",
+  ];
+  const missingSeeds = EXPECTED_SEEDS.filter((k) => !seedKeys.has(k));
+  if (missingSeeds.length > 0) {
+    console.error(`❌ Missing platform_settings seeds: ${missingSeeds.join(", ")}`);
+    process.exitCode = 1;
+  } else {
+    console.log(`✅ platform_settings seeds present (${EXPECTED_SEEDS.length} keys).`);
   }
 
   const cols = await pool.query(
