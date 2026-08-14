@@ -1,3 +1,12 @@
+# Velnox — Commerce that remembers you (จำแทนคุณ)
+
+โปรเจกต์ **3 เว็บไซต์แยก deploy** (velshop / velseller / velcenter) บน **Convex backend + ฐานข้อมูลชุดเดียว**
+
+- 📖 **คู่มือติดตั้งและใช้งาน (ภาษาไทย):** [`INSTALL_AND_USAGE.md`](./INSTALL_AND_USAGE.md)
+- 🏗 **รายละเอียดสถาปัตยกรรม + ฟีเจอร์:** [`velnox-mvp/README.md`](./velnox-mvp/README.md)
+
+---
+
 ## Overview
 
 This project uses the following tech stack:
