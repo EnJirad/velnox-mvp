@@ -30,7 +30,7 @@ This repo is the **V1 MVP**: three websites (**velshop · velseller · velcenter
 
 | Site | Route | Who | What |
 |---|---|---|---|
-| **velshop** | `/shop` | ลูกค้า | Browse published products, cart, place orders, track order status |
+| **velshop** | `/shop` | ลูกค้า | Browse published products, cart, place orders, track order status, **Customer Memory** ("Velnox จำคุณได้" — reorder reminders from your own history) |
 | **velseller** | `/seller/*` | เจ้าของร้าน (seller/admin) | Goals dashboard, Smart Reorder (learned purchase cycles), manage customer orders |
 | **velcenter** | `/center` | ผู้ดูแล (admin) | Business overview + KPIs, Velnox Intelligence (next-order predictions), user roles, product publishing, store settings |
 
@@ -45,6 +45,7 @@ In the MVP a signed-in user can self-serve "open your shop" (become seller) and
 - **Landing page** — Velnox-themed (white/slate/navy + emerald accent), Thai copy, 3-site ecosystem section
 - **Auth** — email OTP + anonymous guest, protected routes, role-aware post-login redirect
 - **velshop** — product grid with search/category filters, cart drawer (localStorage), checkout form, "ออเดอร์ของฉัน" with live status
+  - **Customer Memory (v1)** — "Velnox จำคุณได้": the shop learns which products each customer orders regularly (from their own order history) and shows them a "สั่งซื้ออีกครั้ง" reorder strip on the storefront, ranked by order frequency
 - **velseller**
   - **แดชบอร์ดเป้าหมาย**: goals CRUD, progress logging, auto status (สำเร็จ / เกินกำหนด / ตามแผน)
   - **Smart Reorder**: inventory CRUD, **learns real purchase cycles** (rolling average of days between reorders), auto reminders (ถึงเวลาสั่ง / ใกล้ถึงรอบ / สต็อกต่ำ), 1-click reorder, sale/stock deduction, purchase history
@@ -160,10 +161,10 @@ velnox-mvp/
 
 ## 🗺 Next Steps (per `Main_objective.md` roadmap)
 
+- **Customer Memory v2** — learn each customer's *personal* purchase cycle per product (from gaps between their orders) and predict "ถึงเวลาสั่งอีกแล้ว" per customer, not just frequency
 - **VelRepeat** — proactive reminders (email/Line/SMS) before a product hits its reorder window
 - **Payment** — online checkout on velshop (e.g. Stripe/PromptPay)
 - **Velnox Intelligence v2** — sales trend charts, usage-rate forecasts, auto insights
-- **Customer Memory** — remember each customer's purchase cycles (v2 scope)
 
 ---
 

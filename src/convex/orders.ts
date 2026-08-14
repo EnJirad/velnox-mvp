@@ -1,6 +1,6 @@
 import { v } from "convex/values";
 import { mutation, query, QueryCtx } from "./_generated/server";
-import { Id } from "./_generated/dataModel";
+import { Doc, Id } from "./_generated/dataModel";
 import { orderStatusValidator } from "./schema";
 import { canSell, getCurrentUser } from "./users";
 
@@ -103,6 +103,70 @@ const fetchOrdersWithItems = async (ctx: QueryCtx, orderIds: Id<"orders">[]) => 
   }
   return rows;
 };
+
+/**
+ * Customer Memory (velshop "Velnox จำคุณได้"): the products this customer
+ * orders regularly, learned from their own order history. Returns the
+ * still-published items, ranked by how often the customer orders them, with
+ * the last order date so the shop can remind them when it's time again.
+ * Returns [] for signed-out visitors instead of throwing, so the storefront
+ * can safely subscribe to this query for everyone.
+ */
+export const customerRegulars = query({
+  args: {},
+  handler: async (ctx) => {
+    const user = await getCurrentUser(ctx);
+    if (user === null) return [];
+
+    const orders = await ctx.db
+      .query("orders")
+      .withIndex("by_user", (q) => q.eq("userId", user._id))
+      .order("desc")
+      .take(100);
+
+    const active = orders.filter((o) => o.status !== "cancelled");
+    const byProduct = new Map<
+      Id<"products">,
+      { times: number; qty: number; lastOrderedAt: number }
+    >();
+
+    for (const order of active) {
+      const items = await ctx.db
+        .query("orderItems")
+        .withIndex("by_order", (q) => q.eq("orderId", order._id))
+        .collect();
+      for (const item of items) {
+        const agg = byProduct.get(item.productId) ?? {
+          times: 0,
+          qty: 0,
+          lastOrderedAt: 0,
+        };
+        agg.times += 1;
+        agg.qty += item.quantity;
+        agg.lastOrderedAt = Math.max(agg.lastOrderedAt, order.createdAt);
+        byProduct.set(item.productId, agg);
+      }
+    }
+
+    const rows: {
+      product: Doc<"products">;
+      times: number;
+      qty: number;
+      lastOrderedAt: number;
+    }[] = [];
+
+    for (const [productId, agg] of byProduct) {
+      const product = await ctx.db.get(productId);
+      if (!product || !product.published || product.price === undefined) continue;
+      rows.push({ product, ...agg });
+    }
+
+    rows.sort(
+      (a, b) => b.times - a.times || b.lastOrderedAt - a.lastOrderedAt,
+    );
+    return rows.slice(0, 8);
+  },
+});
 
 /** Orders placed by the signed-in customer (velshop "ออเดอร์ของฉัน"). */
 export const myOrders = query({
