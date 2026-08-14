@@ -58,6 +58,8 @@
 | **Bun** | 1.2+ | เช็คด้วย `bun --version` — ติดตั้งจาก https://bun.sh |
 | Node.js | 20.19+ หรือ 22.12+ | Vite 7 กำหนดขั้นต่ำ (ถ้าใช้ npm แทน bun) |
 | บัญชี Convex | ฟรี | https://convex.dev — ใช้สร้าง deployment (database) |
+| บัญชี Neon (PostgreSQL) | ฟรี | https://neon.tech — **Commerce Core / Source of Truth** (สินค้า ออเดอร์ เงิน สต็อก) |
+| บัญชี Cloudinary | ฟรี | https://cloudinary.com — เก็บรูปสินค้า (upload ตรงจากเบราว์เซอร์ ไม่ผ่าน server) |
 | บัญชี GitHub | — | เฉพาะตอน push ขึ้น git |
 
 ---
@@ -103,17 +105,37 @@ VITE_VELSHOP_URL=/velshop.html      # โดเมนจริงของ velsh
 VITE_VELSELLER_URL=/velseller.html  # โดเมนจริงของ velseller
 VITE_VELCENTER_URL=/velcenter.html  # โดเมนจริงของ velcenter
 VITE_SITE_BASENAME=                 # ปล่อยว่าง (router อยู่ที่ /)
-
-# ---------- Convex backend (ตั้งผ่านคำสั่ง convex env) ----------
-# bunx convex env set JWKS ...
-# bunx convex env set JWT_PRIVATE_KEY ...
-# bunx convex env set SITE_URL http://localhost:5173
 ```
 
 > 💡 ถ้าทำงานบน **Freebuff**: `VITE_CONVEX_URL` และคีย์ auth ของ Convex ถูกตั้งให้อัตโนมัติแล้ว
 > ผ่าน UI ของ Keys/API keys — ไม่ต้องแก้ `.env` เอง
 
-### ขั้นที่ 5 — รันโปรเจกต์
+### ขั้นที่ 5 — ตั้งค่า Neon + Cloudinary (Commerce Core + รูปสินค้า)
+
+Commerce Core (สินค้า/ออเดอร์/เงิน/สต็อก) อยู่ใน **Neon PostgreSQL** และรูปสินค้าอัปโหลดผ่าน
+**Cloudinary** — ตั้งค่าใน Convex deployment env (Freebuff: วางในแท็บ Keys/API keys):
+
+```bash
+# ---------- Neon (Commerce Core / Source of Truth) ----------
+bunx convex env set DATABASE_URL "postgresql://<user>:<password>@<host>.neon.tech/<db>?sslmode=require"
+
+# ---------- Cloudinary (product image upload) ----------
+bunx convex env set CLOUDINARY_CLOUD_NAME "<cloud-name>"
+bunx convex env set CLOUDINARY_API_KEY "<api-key>"
+bunx convex env set CLOUDINARY_API_SECRET "<api-secret>"
+```
+
+จากนั้นสร้างตารางทั้ง 14 (รันซ้ำได้ — เป็น idempotent):
+
+```bash
+DATABASE_URL="<neon-connection-string>" bun run db:migrate   # สร้างตาราง Commerce Core
+DATABASE_URL="<neon-connection-string>" bun run db:smoke     # ตรวจว่าตารางครบ (optional)
+```
+
+> รูปสินค้าถ้าอยากเริ่มขายได้ทันที ต้องครบทั้ง 3 ค่า Cloudinary — ถ้ายังไม่ตั้ง ระบบจะยังทำงานได้
+> แต่ฟีเจอร์อัปโหลดรูปจะแจ้งว่ายังไม่ได้ตั้งค่า
+
+### ขั้นที่ 6 — รันโปรเจกต์
 
 ```bash
 bun convex dev --once   # push schema + codegen (รันทุกครั้งที่ดึงโค้ดใหม่)
@@ -129,7 +151,7 @@ bun run dev             # เปิด dev server ที่ http://localhost:517
 | velseller (หลังบ้านพ่อค้า) | `http://localhost:5173/velseller.html` |
 | velcenter (หลังบ้านบริษัท) | `http://localhost:5173/velcenter.html` |
 
-### ขั้นที่ 6 — ตรวจสอบโค้ด
+### ขั้นที่ 7 — ตรวจสอบโค้ด
 
 ```bash
 bun tsc -b --noEmit     # typecheck (ต้องผ่าน ไม่มี error)
@@ -152,12 +174,14 @@ bun run build           # build production (ได้ไฟล์แยก 4 ent
 
 ### Backend (Convex — ตั้งด้วย `bunx convex env set <ชื่อ> <ค่า>`)
 
-| ตัวแปร | คำอธิบาย |
-|---|---|
-| `JWKS` | คีย์ของ Convex Auth (สร้างอัตโนมัติใน Freebuff) |
-| `JWT_PRIVATE_KEY` | คีย์ JWT ของ Convex Auth (สร้างอัตโนมัติใน Freebuff) |
-| `SITE_URL` | โดเมนของเว็บ (ใช้สร้างลิงก์ในอีเมล) เช่น `http://localhost:5173` |
-| `VLY_INTEGRATION_KEY` | คีย์สำหรับ AI / Email / Payment integrations (ดู `integrations.md`) |
+| ตัวแปร | จำเป็น? | คำอธิบาย |
+|---|---|---|
+| `DATABASE_URL` | ✅ (Commerce) | Neon connection string — **Commerce Core** (สินค้า ออเดอร์ เงิน สต็อก ฯลฯ) |
+| `CLOUDINARY_CLOUD_NAME` / `_API_KEY` / `_API_SECRET` | ✅ (อัปโหลดรูป) | Cloudinary — เก็บรูปสินค้า (upload ตรงจากเบราว์เซอร์ ผ่าน signed params) |
+| `JWKS` | ✅ | คีย์ของ Convex Auth (สร้างอัตโนมัติใน Freebuff) |
+| `JWT_PRIVATE_KEY` | ✅ | คีย์ JWT ของ Convex Auth (สร้างอัตโนมัติใน Freebuff) |
+| `SITE_URL` | ❌ | โดเมนของเว็บ (ใช้สร้างลิงก์ในอีเมล) เช่น `http://localhost:5173` |
+| `VLY_INTEGRATION_KEY` | ❌ | คีย์สำหรับ AI / Email / Payment integrations (ดู `integrations.md`) |
 
 ---
 
@@ -197,7 +221,7 @@ bun run build           # build production (ได้ไฟล์แยก 4 ent
 > เริ่มต้น: ไปที่ velseller → กด "เปิดร้านของฉัน" (เลื่อนบทบาทเป็น seller — MVP ยังเป็น self-serve)
 
 1. **แดชบอร์ดเป้าหมาย** — ตั้งเป้าหมายยอดขาย สร้าง/แก้ไข/ลบ ดูความคืบหน้า
-2. **สินค้าของฉัน** — เพิ่มสินค้าใหม่, แก้ไข, เปิด/ปิดการขาย
+2. **สินค้าของฉัน** — เพิ่มสินค้าใหม่, แก้ไข, เปิด/ปิดการขาย, **อัปโหลดรูปสินค้า** (Cloudinary CDN: ตั้งรูปหลัก / จัดเรียง / ลบ — สูงสุด 10 รูป, 5 MB/รูป)
 3. **Smart Reorder** — ระบบจำรอบการขายจริงของสินค้าแต่ละตัว เตือนเมื่อถึงเวลาเติมสต็อก + กดเติม 1 คลิก
 4. **ออเดอร์ของร้าน** — เห็นเฉพาะออเดอร์ที่มีสินค้าของร้านตัวเอง + ออเดอร์รายเดือนของลูกค้า ("สร้างออเดอร์รอบครบกำหนด")
 5. **รายได้** — คำนวณอัตโนมัติ:
@@ -274,6 +298,8 @@ bun run build
 | อาการ | สาเหตุ / วิธีแก้ |
 |---|---|
 | หน้าว่าง หรือขึ้น `Did you forget to run convex dev?` | ยังไม่ได้ push schema / codegen → รัน `bun convex dev --once` |
+| เปิดร้าน / เพิ่มสินค้าแล้ว error เกี่ยวกับตาราง (เช่น `relation "sellers" does not exist`) | ยังไม่ได้สร้างตาราง Neon → รัน `DATABASE_URL="..." bun run db:migrate` |
+| อัปโหลดรูปสินค้าไม่ได้ (ขึ้น `Image storage is not configured`) | ยังไม่ได้ตั้ง Cloudinary env ครบทั้ง 3 ตัวใน Keys/API keys |
 | Typecheck error เกี่ยวกับ `_generated` | ไฟล์ codegen เก่า/หาย → รัน `bun convex dev --once` (ห้ามแก้ `_generated` ด้วยมือ) |
 | ล็อกอินแล้วพาไปผิดที่ / ตก 404 | ตรวจ `VITE_*_URL` — การข้ามเว็บใช้การโหลดหน้าใหม่ทั้งหน้า (ต้องเป็น URL จริง) |
 | คลิกไปเว็บอื่นแล้ว 404 | กำลัง preview ใน repo เดียวกันต้องใช้ path default (`/velshop.html` ฯลฯ) — deploy จริงต้องตั้ง `VITE_*_URL` |

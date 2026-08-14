@@ -64,8 +64,8 @@
 | # | ตาราง | หน้าที่ |
 |---|---|---|
 | 1 | `users` | ลูกค้า/พ่อค้า/พนักงาน — business attributes (auth อยู่ Convex) |
-| 2 | `merchants` | เจ้าของร้าน (User -> Merchant) |
-| 3 | `shops` | ร้านค้า (Merchant -> Shop, commission_rate ค่าเริ่มต้น 0.03) |
+| 2 | `sellers` | เจ้าของร้าน (User -> Seller; เปลี่ยนชื่อจาก `merchants` — ดู migration ด้านล่าง) |
+| 3 | `shops` | ร้านค้า (Seller -> Shop, commission_rate ค่าเริ่มต้น 0.03) |
 | 4 | `products` | สินค้า (Shop -> Product) — ราคาปัจจุบันเท่านั้น |
 | 5 | `product_images` | รูปสินค้า |
 | 6 | `inventory` | stock แยก entity (quantity/reserved/reorderLevel/warehouse) |
@@ -101,12 +101,14 @@
 
 ```
 db/
-  schema.sql          # Neon schema (14 ตาราง + indexes + trigger)
-  migrate.ts          # runner: bun run db:migrate (ใช้ DATABASE_URL)
+  schema.sql          # Neon schema (14 ตาราง + indexes + trigger) ✅ มีแล้ว
+  migrate.ts          # runner: bun run db:migrate (ใช้ DATABASE_URL) ✅ มีแล้ว
+  smoke.ts            # ตรวจตารางครบ: bun run db:smoke ✅ มีแล้ว
 src/backend/          # Velnox Backend layer (Business Logic ฝั่ง server)
   db.ts               # Neon client factory (getDb)
   types.ts            # TS types ของ 14 entities
-  merchants.ts        # merchant + shop
+  sellers.ts          # seller + shop (rename จาก merchants)
+  merchants.ts        # backward-compat shim (deprecated)
   products.ts         # product + product_images
   inventory.ts        # reserve / deduct / release / reorderLevel
   orders.ts           # createOrder (transaction: stock+order+items+payment+commission)
@@ -126,19 +128,31 @@ src/convex/commerce.ts # "use node" — Convex node actions เรียก src/
 - [x] อ่าน repo + วิเคราะห์ schema/functions/auth/3 เว็บ
 - [x] ติดตั้ง `@neondatabase/serverless`
 - [x] เขียน Migration Plan นี้
-- [ ] `db/schema.sql` + `db/migrate.ts` (script `bun run db:migrate`)
-- [ ] `src/backend/*` — Commerce Core layer
-- [ ] `src/convex/commerce.ts` — Convex node actions bridge
-- [ ] ขอ `DATABASE_URL` จากผู้ใช้ (ตั้งค่าใน Keys/API keys) แล้วรัน migrate จริง
+- [x] `db/schema.sql` + `db/migrate.ts` (script `bun run db:migrate`) + `db/smoke.ts` (`bun run db:smoke`)
+- [x] `src/backend/*` — Commerce Core layer (รวม rename Merchant -> Seller)
+- [x] `src/convex/commerce.ts` — Convex node actions bridge
+- [ ] ผู้ใช้ตั้ง `DATABASE_URL` + Cloudinary keys (ใน Keys/API keys) แล้วรัน `bun run db:migrate`
 
 ### Phase 1 — วางฐานข้อมูล
 1. ผู้ใช้ตั้ง `DATABASE_URL` → รัน `bun run db:migrate`
-2. รัน `bun run db:verify` (script ตรวจตารางครบ 14 + indexes)
+2. รัน `bun run db:smoke` (script ตรวจตารางครบ 14 + indexes)
 
-### Phase 2 — Users/Merchant/Shop
+### Phase 2 — Users/Seller/Shop
 1. `syncUser` หลัง auth สำเร็จ (ทั้ง 3 เว็บ)
-2. สร้าง `merchants` + `shops` จาก velseller (หน้าเปิดร้าน) — ข้อมูลใหม่เขียนเข้า Neon
+2. สร้าง `sellers` + `shops` จาก velseller (หน้าเปิดร้าน) — ข้อมูลใหม่เขียนเข้า Neon
 3. velshop อ่านสินค้าจาก Neon (fallback ไป Convex ถ้ายังไม่มี DATABASE_URL)
+
+### Phase 2.5 — rename Merchant -> Seller (ทำเสร็จแล้ว)
+- ตาราง `merchants` เปลี่ยนชื่อเป็น `sellers` (`seller_id`, `requireSeller()`, `SellerStatus`)
+- `src/backend/merchants.ts` เก็บไว้เป็น backward-compat shim เท่านั้น — โค้ดใหม่ห้ามใช้
+- ถ้ามีฐานข้อมูลเก่าที่มีตาราง `merchants` อยู่ ให้รัน:
+  ```sql
+  ALTER TABLE merchants RENAME TO sellers;
+  ALTER TABLE shops RENAME COLUMN merchant_id TO seller_id;
+  ALTER TABLE products RENAME COLUMN merchant_id TO seller_id; -- ถ้ามี
+  ALTER TABLE order_items RENAME COLUMN merchant_id TO seller_id;
+  ALTER TABLE commissions RENAME COLUMN merchant_id TO seller_id;
+  ```
 
 ### Phase 3 — Products/Inventory
 1. ย้าย create/update product ไป Neon (`products` + `product_images` + `inventory`)
@@ -155,6 +169,13 @@ src/convex/commerce.ts # "use node" — Convex node actions เรียก src/
 1. `subscriptions` อยู่ Neon; cron (Convex) ตรวจ `next_order_date` → สร้าง order ผ่าน Commerce Core
 2. Convex เก็บ behavior (`productViews` อยู่แล้ว) + คำนวณ purchase cycle → แนะนำ + แจ้งเตือน
 3. Event bridge: Neon เปลี่ยนสถานะ (order/payment/inventory) → Convex mutation บันทึก `realtime_state` → frontend subscribe (เพิ่ม `realtime_events` table ใน Convex ภายหลัง)
+
+### Phase 5.5 — Product Image Upload (ทำเสร็จแล้ว)
+- ระบบอัปโหลดรูปสินค้าแบบ Marketplace: **Cloudinary** (signed upload ตรงจากเบราว์เซอร์)
+- Neon `product_images` เก็บ metadata เท่านั้น (url/storage_key/alt/sort/primary/dimensions) — **ห้ามเก็บ binary ใน Neon**
+- Flow: `getProductImageUploadSignature` (node action) → browser POST ตรงไป Cloudinary → `saveProductImage` (node action: re-validate + persist)
+- ลบรูป → ลบ row + ลบ binary จาก storage (best-effort)
+- Required env: `CLOUDINARY_CLOUD_NAME` / `CLOUDINARY_API_KEY` / `CLOUDINARY_API_SECRET`
 
 ### Phase 6 — Cleanup
 - ลบตาราง Convex ที่ย้ายไป Neon แล้ว (ทีละตัว หลัง E2E ผ่าน)

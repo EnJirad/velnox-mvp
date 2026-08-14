@@ -109,6 +109,7 @@ velcenter เข้าถึงได้เฉพาะผู้ที่เจ�
   สั่งรายเดือน, "Velnox จำคุณได้" (regular items), "แนะนำสำหรับคุณ" (VelRepeat), สินค้ายอดนิยม
 - **velseller**
   - แดชบอร์ดเป้าหมาย (CRUD + progress + auto status)
+  - **สินค้า + รูปสินค้า** (สร้าง/แก้ไข/เปิด-ปิดขาย + อัปโหลดรูปผ่าน Cloudinary CDN: ตั้งรูปหลัก/จัดเรียง/ลบ)
   - Smart Reorder (learns real purchase cycles, reminders, 1-click reorder, publish/unpublish)
   - ออเดอร์ของร้านตัวเอง + การสั่งรายเดือนของลูกค้า
   - **รายได้** (3% commission + return policy 10%)
@@ -122,6 +123,8 @@ velcenter เข้าถึงได้เฉพาะผู้ที่เจ�
 
 - React + TypeScript + Vite (multi-page: 4 entries — portal + 3 sites)
 - Convex — backend + database (one deployment for all 3 sites)
+- **Neon PostgreSQL — Commerce Core / Source of Truth** (sellers, shops, products, product_images, inventory, orders, order_items, payments, refunds, commissions, settlements, subscriptions — schema ใน `db/schema.sql`)
+- **Cloudinary** — product image upload (signed upload ตรงจากเบราว์เซอร์; Neon เก็บ metadata เท่านั้น)
 - Convex Auth — email OTP + anonymous
 - Tailwind CSS + shadcn/ui + Framer Motion, Bun
 
@@ -136,9 +139,19 @@ emerald `#10B981` accent (~5%), Inter + Noto Sans Thai, radius 10–14px, soft c
 bun install
 # set VITE_CONVEX_URL (or use the platform env UI)
 bun convex dev --once     # push schema + codegen
+
+# Neon Commerce Core (สินค้า/ออเดอร์/เงิน/สต็อก) — ต้องมี DATABASE_URL
+DATABASE_URL="postgresql://...neon.tech/..." bun run db:migrate   # สร้าง 14 ตาราง (idempotent)
+DATABASE_URL="postgresql://...neon.tech/..." bun run db:smoke     # ตรวจว่าตารางครบ
+
+# รูปสินค้า (Cloudinary) — ตั้งใน Keys/API keys / convex env:
+#   CLOUDINARY_CLOUD_NAME / CLOUDINARY_API_KEY / CLOUDINARY_API_SECRET
+
 bun run dev               # portal at /, sites at /velshop.html etc.
 bun tsc -b --noEmit       # typecheck
 ```
+
+> คู่มือเต็ม (ภาษาไทย): `INSTALL_AND_USAGE.md` · แผน migration: `ARCHITECTURE_V3_MIGRATION.md`
 
 **Deploy 3 เว็บแยก:** นำ `velshop.html` / `velseller.html` / `velcenter.html`
 (พร้อม entry ที่ชี้ไป `src/sites/*/main.tsx`) ไป build เป็น 3 app แยกคนละโดเมน
