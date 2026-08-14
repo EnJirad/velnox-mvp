@@ -5,6 +5,12 @@
 - 📖 **คู่มือติดตั้งและใช้งาน (ภาษาไทย):** [`INSTALL_AND_USAGE.md`](./INSTALL_AND_USAGE.md)
 - 🏗 **รายละเอียดสถาปัตยกรรม + ฟีเจอร์:** [`velnox-mvp/README.md`](./velnox-mvp/README.md)
 
+### 🏛 เอกสาร Phase 1 — Architecture (spec ฉบับเต็ม)
+
+- 📐 [`docs/ARCHITECTURE.md`](./docs/ARCHITECTURE.md) — สถาปัตยกรรมเป้าหมาย + การตัดสินใจเชิงสถาปัตยกรรม (deliberate decisions)
+- 🔍 [`docs/GAP_ANALYSIS.md`](./docs/GAP_ANALYSIS.md) — เทียบ spec ข้อต่อข้อ vs โค้ดปัจจุบัน (มีแล้ว / มีบางส่วน / ยังไม่มี)
+- 🗺 [`docs/PHASE_PLAN.md`](./docs/PHASE_PLAN.md) — แผนงาน Phase 2–12 แบบละเอียด (Database → Backend → Auth → VelShop → VelSeller → VelCenter → Shipping → Payment → Financial → Testing → Production)
+
 ---
 
 ## Overview
