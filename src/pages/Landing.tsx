@@ -169,8 +169,9 @@ function Hero() {
             you.
           </h1>
           <p className="mt-5 max-w-md text-base leading-7 text-slate-500 sm:text-lg">
-            แดชบอร์ดเป้าหมายสำหรับเจ้าของธุรกิจ ตั้งเป้ายอดขาย ออเดอร์ และลูกค้าใหม่
-            ให้ Velnox จำแทนคุณ และติดตามความคืบหน้าให้อัตโนมัติ
+            เครื่องมือสำหรับเจ้าของธุรกิจ ตั้งเป้ายอดขาย ออเดอร์ และลูกค้าใหม่
+            พร้อม Smart Reorder ที่จำรอบการสั่งซื้อของคุณ และเตือนเมื่อถึงเวลา
+            ให้ Velnox จำแทนคุณ ไม่ต้องคิดเอง
           </p>
           <div className="mt-8 flex flex-col gap-3 sm:flex-row">
             <Button
@@ -365,7 +366,8 @@ function Vision() {
               ))}
             </div>
             <p className="mt-5 text-xs leading-5 text-slate-500">
-              เวอร์ชันแรกเริ่มจากแดชบอร์ดเป้าหมาย — ความสามารถเหล่านี้จะต่อยอดจากข้อมูลที่คุณป้อนตั้งแต่วันนี้
+              มีให้ใช้งานแล้ววันนี้: แดชบอร์ดเป้าหมาย + Smart Reorder —
+              ข้อมูลที่คุณป้อนตั้งแต่วันนี้คือรากฐานของ Velnox Intelligence ในอนาคต
             </p>
           </div>
         </motion.div>
@@ -431,6 +433,11 @@ function Footer() {
                 <li>
                   <Link to="/dashboard" className="text-slate-400 transition-colors hover:text-white">
                     แดชบอร์ดเป้าหมาย
+                  </Link>
+                </li>
+                <li>
+                  <Link to="/reorder" className="text-slate-400 transition-colors hover:text-white">
+                    Smart Reorder
                   </Link>
                 </li>
                 <li>

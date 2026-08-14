@@ -33,6 +33,17 @@ export const goalPeriodValidator = v.union(
 );
 export type GoalPeriod = Infer<typeof goalPeriodValidator>;
 
+// Product categories for the Smart Reorder inventory
+export const productCategoryValidator = v.union(
+  v.literal("general"),
+  v.literal("food"),
+  v.literal("daily"),
+  v.literal("beauty"),
+  v.literal("packaging"),
+  v.literal("other"),
+);
+export type ProductCategory = Infer<typeof productCategoryValidator>;
+
 const schema = defineSchema(
   {
     // default auth tables using convex auth.
@@ -62,6 +73,37 @@ const schema = defineSchema(
       dueDate: v.optional(v.number()),
       createdAt: v.number(),
       updatedAt: v.number(),
+    }).index("by_user", ["userId"]),
+
+    // inventory products for the Smart Reorder feature (owner restocking)
+    products: defineTable({
+      userId: v.id("users"),
+      name: v.string(),
+      category: productCategoryValidator,
+      unit: v.string(),
+      currentStock: v.number(),
+      reorderLevel: v.number(),
+      supplier: v.optional(v.string()),
+      // Velnox "Learn": estimated cycle set by the owner, overwritten once real
+      // purchase history teaches the actual average cycle (days between reorders).
+      estimatedCycleDays: v.optional(v.number()),
+      avgCycleDays: v.optional(v.number()),
+      purchaseCount: v.number(),
+      lastOrderedAt: v.optional(v.number()),
+      lastPurchaseQty: v.optional(v.number()),
+      createdAt: v.number(),
+      updatedAt: v.number(),
+    }).index("by_user", ["userId"]),
+
+    // reorder history (purchase history) — the basis of Velnox Intelligence
+    purchases: defineTable({
+      userId: v.id("users"),
+      productId: v.id("products"),
+      quantity: v.number(),
+      cost: v.optional(v.number()),
+      note: v.optional(v.string()),
+      orderedAt: v.number(),
+      createdAt: v.number(),
     }).index("by_user", ["userId"]),
   },
   {
