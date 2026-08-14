@@ -4,9 +4,11 @@ import { RequireAuth } from "@/components/RequireAuth";
 import { VlyToolbar } from "../vly-toolbar-readonly.tsx";
 import { ConvexAuthProvider } from "@convex-dev/auth/react";
 import { ConvexReactClient } from "convex/react";
+import { CartProvider } from "@/lib/cart";
+import { RequireRole } from "@/components/RequireRole";
 import React, { StrictMode, useEffect, lazy, Suspense } from "react";
 import { createRoot } from "react-dom/client";
-import { BrowserRouter, Route, Routes, useLocation } from "react-router";
+import { BrowserRouter, Navigate, Route, Routes, useLocation } from "react-router";
 import "./index.css";
 
 // Lazy load route components for better code splitting
@@ -14,6 +16,11 @@ const Landing = lazy(() => import("./pages/Landing.tsx"));
 const AuthPage = lazy(() => import("./pages/Auth.tsx"));
 const Dashboard = lazy(() => import("./pages/Dashboard.tsx"));
 const Reorder = lazy(() => import("./pages/Reorder.tsx"));
+const SellerOrders = lazy(() => import("./pages/SellerOrders.tsx"));
+const ShopHome = lazy(() => import("./pages/ShopHome.tsx"));
+const ShopCheckout = lazy(() => import("./pages/ShopCheckout.tsx"));
+const MyOrders = lazy(() => import("./pages/MyOrders.tsx"));
+const Center = lazy(() => import("./pages/Center.tsx"));
 const NotFound = lazy(() => import("./pages/NotFound.tsx"));
 
 // Simple loading fallback for route transitions
@@ -118,32 +125,76 @@ createRoot(document.getElementById("root")!).render(
       <ConvexAuthProvider client={convex}>
         <BrowserRouter>
           <RouteSyncer />
-          <Suspense fallback={<RouteLoading />}>
-            <Routes>
-              <Route path="/" element={<Landing />} />
-              <Route
-                path="/auth"
-                element={<AuthPage redirectAfterAuth="/dashboard" />}
-              />
-              <Route
-                path="/dashboard"
-                element={
-                  <RequireAuth>
-                    <Dashboard />
-                  </RequireAuth>
-                }
-              />
-              <Route
-                path="/reorder"
-                element={
-                  <RequireAuth>
-                    <Reorder />
-                  </RequireAuth>
-                }
-              />
-              <Route path="*" element={<NotFound />} />
-            </Routes>
-          </Suspense>
+          <CartProvider>
+            <Suspense fallback={<RouteLoading />}>
+              <Routes>
+                <Route path="/" element={<Landing />} />
+                <Route path="/auth" element={<AuthPage />} />
+
+                {/* velshop — customer storefront (browse public, checkout auth) */}
+                <Route path="/shop" element={<ShopHome />} />
+                <Route
+                  path="/shop/checkout"
+                  element={
+                    <RequireAuth>
+                      <ShopCheckout />
+                    </RequireAuth>
+                  }
+                />
+                <Route
+                  path="/shop/orders"
+                  element={
+                    <RequireAuth>
+                      <MyOrders />
+                    </RequireAuth>
+                  }
+                />
+
+                {/* velseller — owner tools (seller or admin) */}
+                <Route path="/seller" element={<Navigate to="/seller/goals" replace />} />
+                <Route
+                  path="/seller/goals"
+                  element={
+                    <RequireRole role="seller">
+                      <Dashboard />
+                    </RequireRole>
+                  }
+                />
+                <Route
+                  path="/seller/reorder"
+                  element={
+                    <RequireRole role="seller">
+                      <Reorder />
+                    </RequireRole>
+                  }
+                />
+                <Route
+                  path="/seller/orders"
+                  element={
+                    <RequireRole role="seller">
+                      <SellerOrders />
+                    </RequireRole>
+                  }
+                />
+
+                {/* velcenter — admin / control center */}
+                <Route
+                  path="/center"
+                  element={
+                    <RequireRole role="admin">
+                      <Center />
+                    </RequireRole>
+                  }
+                />
+
+                {/* legacy paths redirect to the new site namespaces */}
+                <Route path="/dashboard" element={<Navigate to="/seller/goals" replace />} />
+                <Route path="/reorder" element={<Navigate to="/seller/reorder" replace />} />
+
+                <Route path="*" element={<NotFound />} />
+              </Routes>
+            </Suspense>
+          </CartProvider>
         </BrowserRouter>
         <Toaster />
       </ConvexAuthProvider>

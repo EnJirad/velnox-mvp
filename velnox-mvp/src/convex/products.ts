@@ -1,6 +1,6 @@
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
-import { getCurrentUser } from "./users";
+import { canAdmin, getCurrentUser } from "./users";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -28,6 +28,28 @@ export const list = query({
   },
 });
 
+/** Public storefront query: products the owner has published for sale. */
+export const listPublished = query({
+  args: {},
+  handler: async (ctx) => {
+    return await ctx.db
+      .query("products")
+      .filter((q) => q.eq(q.field("published"), true))
+      .order("desc")
+      .collect();
+  },
+});
+
+/** All products across the shop (velcenter, admin only). */
+export const listAll = query({
+  args: {},
+  handler: async (ctx) => {
+    const user = await getCurrentUser(ctx);
+    if (user === null || !canAdmin(user.role)) throw new Error("Admin only");
+    return await ctx.db.query("products").order("desc").collect();
+  },
+});
+
 /** List the latest reorder (purchase) history for the signed-in user. */
 export const listPurchases = query({
   args: { limit: v.optional(v.number()) },
@@ -51,6 +73,10 @@ export const create = mutation({
     unit: v.string(),
     currentStock: v.number(),
     reorderLevel: v.number(),
+    price: v.optional(v.number()),
+    description: v.optional(v.string()),
+    imageUrl: v.optional(v.string()),
+    published: v.optional(v.boolean()),
     supplier: v.optional(v.string()),
     estimatedCycleDays: v.optional(v.number()),
   },
@@ -65,6 +91,10 @@ export const create = mutation({
       unit: args.unit.trim() || "ชิ้น",
       currentStock: Math.max(0, args.currentStock),
       reorderLevel: Math.max(0, args.reorderLevel),
+      price: args.price && args.price > 0 ? args.price : undefined,
+      description: args.description?.trim() || undefined,
+      imageUrl: args.imageUrl?.trim() || undefined,
+      published: args.published ?? false,
       supplier: args.supplier?.trim() || undefined,
       estimatedCycleDays:
         args.estimatedCycleDays && args.estimatedCycleDays > 0
@@ -89,6 +119,10 @@ export const update = mutation({
     unit: v.optional(v.string()),
     currentStock: v.optional(v.number()),
     reorderLevel: v.optional(v.number()),
+    price: v.optional(v.number()),
+    description: v.optional(v.string()),
+    imageUrl: v.optional(v.string()),
+    published: v.optional(v.boolean()),
     supplier: v.optional(v.string()),
     estimatedCycleDays: v.optional(v.number()),
   },
@@ -104,12 +138,31 @@ export const update = mutation({
       name: patch.name?.trim(),
       unit: patch.unit?.trim(),
       supplier: patch.supplier?.trim() || undefined,
+      price: patch.price && patch.price > 0 ? patch.price : undefined,
+      description: patch.description?.trim() || undefined,
+      imageUrl: patch.imageUrl?.trim() || undefined,
       estimatedCycleDays:
         patch.estimatedCycleDays && patch.estimatedCycleDays > 0
           ? Math.round(patch.estimatedCycleDays)
           : undefined,
       updatedAt: Date.now(),
     });
+  },
+});
+
+/** Publish / unpublish a product for the velshop storefront (owner only). */
+export const togglePublished = mutation({
+  args: {
+    productId: v.id("products"),
+    published: v.boolean(),
+  },
+  handler: async (ctx, { productId, published }) => {
+    const user = await getCurrentUser(ctx);
+    if (user === null) throw new Error("Not authenticated");
+    const product = await ctx.db.get(productId);
+    if (!product || product.userId !== user._id) throw new Error("Product not found");
+    if (published && !product.price) throw new Error("ต้องตั้งราคาก่อนจึงจะประกาศขายได้");
+    await ctx.db.patch(productId, { published, updatedAt: Date.now() });
   },
 });
 

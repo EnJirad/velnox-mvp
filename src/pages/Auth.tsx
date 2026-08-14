@@ -20,38 +20,31 @@ import { ArrowRight, Loader2, Mail, UserX } from "lucide-react";
 import { Suspense, useEffect, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router";
 
-interface AuthProps {
-  redirectAfterAuth?: string;
+/** Where to land after sign-in when no explicit returnTo was requested. */
+function roleHome(role: string | undefined): string {
+  if (role === "admin") return "/center";
+  if (role === "seller") return "/seller/goals";
+  return "/shop";
 }
 
-function resolveRedirectAfterAuth(
-  returnTo: string | null,
-  fallback = "/dashboard",
-) {
-  if (returnTo?.startsWith("/") && !returnTo.startsWith("//")) {
-    return returnTo;
-  }
-  return fallback;
-}
-
-function Auth({ redirectAfterAuth }: AuthProps = {}) {
-  const { isLoading: authLoading, isAuthenticated, signIn } = useAuth();
+function Auth() {
+  const { isLoading: authLoading, isAuthenticated, user, signIn } = useAuth();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const redirect = resolveRedirectAfterAuth(
-    searchParams.get("returnTo"),
-    redirectAfterAuth,
-  );
+  const returnTo = searchParams.get("returnTo");
   const [step, setStep] = useState<"signIn" | { email: string }>("signIn");
   const [otp, setOtp] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!authLoading && isAuthenticated) {
-      navigate(redirect);
+    if (authLoading || !isAuthenticated) return;
+    if (returnTo?.startsWith("/") && !returnTo.startsWith("//")) {
+      navigate(returnTo);
+    } else {
+      navigate(roleHome(user?.role));
     }
-  }, [authLoading, isAuthenticated, navigate, redirect]);
+  }, [authLoading, isAuthenticated, navigate, returnTo, user?.role]);
   const handleEmailSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setIsLoading(true);
@@ -79,10 +72,6 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
     try {
       const formData = new FormData(event.currentTarget);
       await signIn("email-otp", formData);
-
-      console.log("signed in");
-
-      navigate(redirect);
     } catch (error) {
       console.error("OTP verification error:", error);
 
@@ -97,10 +86,7 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
     setIsLoading(true);
     setError(null);
     try {
-      console.log("Attempting anonymous sign in...");
       await signIn("anonymous");
-      console.log("Anonymous sign in successful");
-      navigate(redirect);
     } catch (error) {
       console.error("Guest login error:", error);
       console.error("Error details:", JSON.stringify(error, null, 2));
@@ -293,10 +279,10 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
   );
 }
 
-export default function AuthPage(props: AuthProps) {
+export default function AuthPage() {
   return (
     <Suspense>
-      <Auth {...props} />
+      <Auth />
     </Suspense>
   );
 }

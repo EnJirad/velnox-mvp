@@ -3,16 +3,18 @@ import { defineSchema, defineTable } from "convex/server";
 import { Infer, v } from "convex/values";
 
 // default user roles. can add / remove based on the project as needed
+// Velnox has 3 sites sharing one backend: velshop (customer), velseller
+// (seller/owner tools), velcenter (admin/control center).
 export const ROLES = {
   ADMIN: "admin",
-  USER: "user",
-  MEMBER: "member",
+  SELLER: "seller",
+  CUSTOMER: "customer",
 } as const;
 
 export const roleValidator = v.union(
   v.literal(ROLES.ADMIN),
-  v.literal(ROLES.USER),
-  v.literal(ROLES.MEMBER),
+  v.literal(ROLES.SELLER),
+  v.literal(ROLES.CUSTOMER),
 );
 export type Role = Infer<typeof roleValidator>;
 
@@ -32,6 +34,15 @@ export const goalPeriodValidator = v.union(
   v.literal("yearly"),
 );
 export type GoalPeriod = Infer<typeof goalPeriodValidator>;
+
+// Customer order status (velshop -> seller fulfillment)
+export const orderStatusValidator = v.union(
+  v.literal("pending"),
+  v.literal("confirmed"),
+  v.literal("completed"),
+  v.literal("cancelled"),
+);
+export type OrderStatus = Infer<typeof orderStatusValidator>;
 
 // Product categories for the Smart Reorder inventory
 export const productCategoryValidator = v.union(
@@ -76,6 +87,7 @@ const schema = defineSchema(
     }).index("by_user", ["userId"]),
 
     // inventory products for the Smart Reorder feature (owner restocking)
+    // and the velshop storefront (published + price)
     products: defineTable({
       userId: v.id("users"),
       name: v.string(),
@@ -83,6 +95,10 @@ const schema = defineSchema(
       unit: v.string(),
       currentStock: v.number(),
       reorderLevel: v.number(),
+      price: v.optional(v.number()),
+      description: v.optional(v.string()),
+      imageUrl: v.optional(v.string()),
+      published: v.optional(v.boolean()),
       supplier: v.optional(v.string()),
       // Velnox "Learn": estimated cycle set by the owner, overwritten once real
       // purchase history teaches the actual average cycle (days between reorders).
@@ -105,6 +121,42 @@ const schema = defineSchema(
       orderedAt: v.number(),
       createdAt: v.number(),
     }).index("by_user", ["userId"]),
+
+    // customer orders placed on velshop (customer -> shop)
+    orders: defineTable({
+      userId: v.id("users"), // the customer who placed the order
+      status: orderStatusValidator,
+      customerName: v.string(),
+      customerPhone: v.string(),
+      customerAddress: v.optional(v.string()),
+      note: v.optional(v.string()),
+      total: v.number(),
+      itemCount: v.number(),
+      createdAt: v.number(),
+      updatedAt: v.number(),
+    }).index("by_user", ["userId"]),
+
+    // line items snapshot of an order (product name/price at order time)
+    orderItems: defineTable({
+      orderId: v.id("orders"),
+      productId: v.id("products"),
+      productName: v.string(),
+      unit: v.string(),
+      quantity: v.number(),
+      price: v.number(), // unit price snapshot (THB)
+      subtotal: v.number(),
+    }).index("by_order", ["orderId"]),
+
+    // single store settings doc (shopName, contact info, announcement)
+    storeSettings: defineTable({
+      key: v.literal("main"),
+      shopName: v.optional(v.string()),
+      tagline: v.optional(v.string()),
+      phone: v.optional(v.string()),
+      address: v.optional(v.string()),
+      announcement: v.optional(v.string()),
+      updatedAt: v.number(),
+    }).index("by_key", ["key"]),
   },
   {
     schemaValidation: false,

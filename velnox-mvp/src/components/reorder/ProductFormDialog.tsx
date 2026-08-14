@@ -22,8 +22,10 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Switch } from "@/components/ui/switch";
+import { Textarea } from "@/components/ui/textarea";
 import { useMutation } from "convex/react";
-import { Loader2 } from "lucide-react";
+import { Loader2, Store } from "lucide-react";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 
@@ -40,6 +42,9 @@ const defaultForm = {
   unit: "ชิ้น",
   currentStock: "",
   reorderLevel: "",
+  price: "",
+  description: "",
+  published: false,
   estimatedCycleDays: "",
   supplier: "",
 };
@@ -61,6 +66,9 @@ export function ProductFormDialog({ open, onOpenChange, product }: ProductFormDi
             unit: product.unit,
             currentStock: String(product.currentStock),
             reorderLevel: String(product.reorderLevel),
+            price: product.price ? String(product.price) : "",
+            description: product.description ?? "",
+            published: product.published ?? false,
             estimatedCycleDays: product.estimatedCycleDays ? String(product.estimatedCycleDays) : "",
             supplier: product.supplier ?? "",
           }
@@ -87,32 +95,37 @@ export function ProductFormDialog({ open, onOpenChange, product }: ProductFormDi
       toast.error("กรุณากรอกจุดสั่งซื้อซ้ำให้ถูกต้อง");
       return;
     }
+    const price = Number(form.price);
+    if (form.price && (!Number.isFinite(price) || price <= 0)) {
+      toast.error("กรุณากรอกราคาให้ถูกต้อง");
+      return;
+    }
+    if (form.published && price <= 0) {
+      toast.error("ต้องตั้งราคาก่อนจึงจะประกาศขายได้");
+      return;
+    }
     const estimatedCycleDays = Number(form.estimatedCycleDays);
+
+    const baseArgs = {
+      name: form.name,
+      category: form.category,
+      unit: form.unit.trim() || "ชิ้น",
+      currentStock,
+      reorderLevel,
+      price: price > 0 ? price : undefined,
+      description: form.description || undefined,
+      published: form.published,
+      estimatedCycleDays: Number.isFinite(estimatedCycleDays) && estimatedCycleDays > 0 ? estimatedCycleDays : undefined,
+      supplier: form.supplier || undefined,
+    };
 
     setSaving(true);
     try {
       if (product) {
-        await updateProduct({
-          productId: product._id,
-          name: form.name,
-          category: form.category,
-          unit: form.unit.trim() || "ชิ้น",
-          currentStock,
-          reorderLevel,
-          estimatedCycleDays: Number.isFinite(estimatedCycleDays) && estimatedCycleDays > 0 ? estimatedCycleDays : undefined,
-          supplier: form.supplier || undefined,
-        });
+        await updateProduct({ productId: product._id, ...baseArgs });
         toast.success("อัปเดตสินค้าแล้ว");
       } else {
-        await createProduct({
-          name: form.name,
-          category: form.category,
-          unit: form.unit.trim() || "ชิ้น",
-          currentStock,
-          reorderLevel,
-          estimatedCycleDays: Number.isFinite(estimatedCycleDays) && estimatedCycleDays > 0 ? estimatedCycleDays : undefined,
-          supplier: form.supplier || undefined,
-        });
+        await createProduct(baseArgs);
         toast.success("เพิ่มสินค้าแล้ว");
       }
       onOpenChange(false);
@@ -207,6 +220,18 @@ export function ProductFormDialog({ open, onOpenChange, product }: ProductFormDi
 
           <div className="grid grid-cols-2 gap-3">
             <div className="grid gap-2">
+              <Label htmlFor="product-price">ราคาขาย (บาท)</Label>
+              <Input
+                id="product-price"
+                type="number"
+                min="0"
+                step="0.5"
+                value={form.price}
+                onChange={(e) => set("price", e.target.value)}
+                placeholder="เช่น 45"
+              />
+            </div>
+            <div className="grid gap-2">
               <Label htmlFor="product-cycle">รอบการซื้อโดยประมาณ (วัน, ไม่บังคับ)</Label>
               <Input
                 id="product-cycle"
@@ -218,6 +243,20 @@ export function ProductFormDialog({ open, onOpenChange, product }: ProductFormDi
                 placeholder="เช่น 30"
               />
             </div>
+          </div>
+
+          <div className="grid gap-2">
+            <Label htmlFor="product-description">คำอธิบายสินค้า (แสดงที่หน้าร้าน)</Label>
+            <Textarea
+              id="product-description"
+              value={form.description}
+              onChange={(e) => set("description", e.target.value)}
+              placeholder="เช่น สูตรคลาสสิก ขนาด 150 กรัม"
+              rows={2}
+            />
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
             <div className="grid gap-2">
               <Label htmlFor="product-supplier">ซัพพลายเออร์ (ไม่บังคับ)</Label>
               <Input
@@ -225,6 +264,18 @@ export function ProductFormDialog({ open, onOpenChange, product }: ProductFormDi
                 value={form.supplier}
                 onChange={(e) => set("supplier", e.target.value)}
                 placeholder="ชื่อร้านค้าส่ง"
+              />
+            </div>
+            <div className="flex items-end gap-2 rounded-[10px] border border-slate-200 px-3 py-2.5">
+              <Store className="size-4 shrink-0 text-[#10B981]" />
+              <div className="flex-1">
+                <p className="text-sm font-medium text-slate-900">ประกาศขายที่หน้าร้าน</p>
+                <p className="text-xs text-slate-400">แสดงใน velshop ให้ลูกค้าสั่งซื้อได้</p>
+              </div>
+              <Switch
+                checked={form.published}
+                onCheckedChange={(v) => set("published", v)}
+                aria-label="ประกาศขายที่หน้าร้าน"
               />
             </div>
           </div>

@@ -4,10 +4,13 @@ import { motion } from "framer-motion";
 import {
   ArrowRight,
   Brain,
+  Briefcase,
   Check,
   CheckCircle2,
+  ShieldCheck,
   ShoppingBag,
   Sparkles,
+  Store,
   Target,
   TrendingUp,
   Users,
@@ -34,11 +37,17 @@ function NavBar() {
           <Logo />
         </Link>
         <nav className="hidden items-center gap-8 md:flex">
-          <a
-            href="#how"
+          <Link
+            to="/shop"
             className="text-sm font-medium text-slate-600 transition-colors hover:text-slate-900"
           >
-            วิธีทำงาน
+            velshop
+          </Link>
+          <a
+            href="#sites"
+            className="text-sm font-medium text-slate-600 transition-colors hover:text-slate-900"
+          >
+            เว็บไซต์ทั้ง 3
           </a>
           <a
             href="#vision"
@@ -55,10 +64,10 @@ function NavBar() {
         </nav>
         <div className="flex items-center gap-2">
           <Button variant="ghost" className="text-slate-700" asChild>
-            <Link to="/auth?returnTo=/dashboard">เข้าสู่ระบบ</Link>
+            <Link to="/auth">เข้าสู่ระบบ</Link>
           </Button>
           <Button className="hidden bg-slate-900 text-white hover:bg-slate-800 sm:inline-flex" asChild>
-            <Link to="/auth?returnTo=/dashboard">
+            <Link to="/auth?returnTo=/seller/goals">
               เริ่มใช้งานฟรี
               <ArrowRight className="size-4" />
             </Link>
@@ -179,13 +188,13 @@ function Hero() {
               className="gap-2 bg-slate-900 text-white hover:bg-slate-800"
               asChild
             >
-              <Link to="/auth?returnTo=/dashboard">
+              <Link to="/auth?returnTo=/seller/goals">
                 เริ่มต้นใช้งานฟรี
                 <ArrowRight className="size-4" />
               </Link>
             </Button>
             <Button size="lg" variant="outline" className="border-slate-200 text-slate-700" asChild>
-              <a href="#how">ดูวิธีทำงาน</a>
+              <Link to="/shop">เยี่ยมชมร้านค้า velshop</Link>
             </Button>
           </div>
           <div className="mt-8 flex flex-wrap items-center gap-x-6 gap-y-2 text-sm text-slate-400">
@@ -270,6 +279,97 @@ function HowItWorks() {
               </div>
               <h3 className="mt-5 text-lg font-semibold text-slate-900">{step.title}</h3>
               <p className="mt-2 text-sm leading-6 text-slate-500">{step.body}</p>
+            </motion.div>
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function Ecosystem() {
+  const sites = [
+    {
+      icon: Store,
+      name: "velshop",
+      th: "หน้าร้านสำหรับลูกค้า",
+      to: "/shop",
+      desc: "ร้านค้าออนไลน์ของธุรกิจคุณ — ลูกค้าเลือกสินค้า สั่งซื้อ และติดตามออเดอร์",
+      cta: "เยี่ยมชมร้านค้า",
+      points: ["ดูสินค้าที่ประกาศขาย", "สั่งซื้อ + ใส่ตะกร้า", "ติดตามสถานะออเดอร์"],
+    },
+    {
+      icon: Briefcase,
+      name: "velseller",
+      th: "เครื่องมือเจ้าของร้าน",
+      to: "/seller/goals",
+      desc: "แดชบอร์ดเป้าหมาย, Smart Reorder ที่จำรอบการสั่ง และรับออเดอร์จากหน้าร้าน",
+      cta: "เปิดเครื่องมือเจ้าของร้าน",
+      points: ["ตั้งเป้าหมายธุรกิจ", "เตือนสั่งซื้อซ้ำอัตโนมัติ", "จัดการออเดอร์ลูกค้า"],
+    },
+    {
+      icon: ShieldCheck,
+      name: "velcenter",
+      th: "ศูนย์กลางธุรกิจ",
+      to: "/center",
+      desc: "ภาพรวมทั้งธุรกิจ Velnox Intelligence และการจัดการผู้ใช้ สินค้า ตั้งค่าร้าน",
+      cta: "เปิดศูนย์ควบคุม",
+      points: ["ยอดขาย + KPI รวม", "คาดการณ์รอบถัดไป", "จัดการบทบาทผู้ใช้"],
+    },
+  ];
+
+  return (
+    <section id="sites" className="border-b border-slate-100 bg-white">
+      <div className="mx-auto w-full max-w-6xl px-4 py-16 sm:px-6 sm:py-24">
+        <motion.div {...fadeUp} className="max-w-2xl">
+          <p className="text-sm font-semibold uppercase tracking-wider text-[#10B981]">
+            ระบบนิเวศ Velnox
+          </p>
+          <h2 className="mt-3 text-3xl font-bold tracking-tight text-slate-900 sm:text-4xl">
+            3 เว็บไซต์ ฐานข้อมูลเดียว จำแทนคุณคนเดียว
+          </h2>
+          <p className="mt-4 text-base leading-7 text-slate-500">
+            velshop · velseller · velcenter ใช้ backend และข้อมูลชุดเดียวกัน —
+            ลูกค้าสั่งซื้อ เจ้าของร้านจัดการ และศูนย์กลางวิเคราะห์
+          </p>
+        </motion.div>
+
+        <div className="mt-12 grid gap-4 sm:gap-6 md:grid-cols-3">
+          {sites.map((site, i) => (
+            <motion.div
+              key={site.name}
+              {...fadeUp}
+              transition={{ ...fadeUp.transition, delay: i * 0.1 }}
+              className="group flex flex-col rounded-2xl border border-slate-200 bg-white p-6 transition-all duration-200 hover:-translate-y-1 hover:border-[#10B981]/40 hover:shadow-[0_16px_40px_rgba(15,23,42,0.08)]"
+            >
+              <div className="flex items-center justify-between">
+                <span className="flex size-11 items-center justify-center rounded-xl bg-[#ECFDF5]">
+                  <site.icon className="size-5 text-[#10B981]" />
+                </span>
+                <span className="rounded-full border border-slate-200 px-2.5 py-1 text-xs font-semibold text-slate-500">
+                  {site.name}
+                </span>
+              </div>
+              <h3 className="mt-5 text-lg font-semibold text-slate-900">{site.th}</h3>
+              <p className="mt-2 text-sm leading-6 text-slate-500">{site.desc}</p>
+              <ul className="mt-4 space-y-2">
+                {site.points.map((point) => (
+                  <li key={point} className="flex items-center gap-2 text-sm text-slate-600">
+                    <Check className="size-4 shrink-0 text-[#10B981]" />
+                    {point}
+                  </li>
+                ))}
+              </ul>
+              <Button
+                variant="outline"
+                className="mt-6 w-full gap-1.5 border-slate-200 bg-white text-slate-700 hover:border-[#10B981] hover:bg-[#ECFDF5] hover:text-emerald-700"
+                asChild
+              >
+                <Link to={site.to}>
+                  {site.cta}
+                  <ArrowRight className="size-4" />
+                </Link>
+              </Button>
             </motion.div>
           ))}
         </div>
@@ -366,8 +466,9 @@ function Vision() {
               ))}
             </div>
             <p className="mt-5 text-xs leading-5 text-slate-500">
-              มีให้ใช้งานแล้ววันนี้: แดชบอร์ดเป้าหมาย + Smart Reorder —
-              ข้อมูลที่คุณป้อนตั้งแต่วันนี้คือรากฐานของ Velnox Intelligence ในอนาคต
+              มีให้ใช้งานแล้ววันนี้: velshop หน้าร้าน + velseller เครื่องมือเจ้าของร้าน +
+              velcenter ศูนย์กลางพร้อม Intelligence — ข้อมูลที่คุณป้อนตั้งแต่วันนี้
+              คือรากฐานที่ Velnox ใช้คาดการณ์ให้แม่นขึ้นเรื่อย ๆ
             </p>
           </div>
         </motion.div>
@@ -399,13 +500,13 @@ function CtaSection() {
             className="gap-2 bg-slate-900 text-white hover:bg-slate-800"
             asChild
           >
-            <Link to="/auth?returnTo=/dashboard">
+            <Link to="/auth?returnTo=/seller/goals">
               สร้างบัญชีฟรี
               <ArrowRight className="size-4" />
             </Link>
           </Button>
           <Button size="lg" variant="outline" className="border-slate-200 text-slate-700" asChild>
-            <Link to="/auth?returnTo=/dashboard">เข้าสู่ระบบ</Link>
+            <Link to="/shop">เยี่ยมชม velshop</Link>
           </Button>
         </motion.div>
       </div>
@@ -428,21 +529,21 @@ function Footer() {
           </div>
           <div className="grid grid-cols-2 gap-12 text-sm">
             <div>
-              <p className="font-semibold text-white">ผลิตภัณฑ์</p>
+              <p className="font-semibold text-white">เว็บไซต์ทั้ง 3</p>
               <ul className="mt-4 space-y-3">
                 <li>
-                  <Link to="/dashboard" className="text-slate-400 transition-colors hover:text-white">
-                    แดชบอร์ดเป้าหมาย
+                  <Link to="/shop" className="text-slate-400 transition-colors hover:text-white">
+                    velshop · หน้าร้าน
                   </Link>
                 </li>
                 <li>
-                  <Link to="/reorder" className="text-slate-400 transition-colors hover:text-white">
-                    Smart Reorder
+                  <Link to="/seller/goals" className="text-slate-400 transition-colors hover:text-white">
+                    velseller · เจ้าของร้าน
                   </Link>
                 </li>
                 <li>
-                  <Link to="/auth?returnTo=/dashboard" className="text-slate-400 transition-colors hover:text-white">
-                    เริ่มใช้งาน
+                  <Link to="/center" className="text-slate-400 transition-colors hover:text-white">
+                    velcenter · ศูนย์กลาง
                   </Link>
                 </li>
               </ul>
@@ -451,12 +552,12 @@ function Footer() {
               <p className="font-semibold text-white">บัญชี</p>
               <ul className="mt-4 space-y-3">
                 <li>
-                  <Link to="/auth?returnTo=/dashboard" className="text-slate-400 transition-colors hover:text-white">
+                  <Link to="/auth" className="text-slate-400 transition-colors hover:text-white">
                     เข้าสู่ระบบ
                   </Link>
                 </li>
                 <li>
-                  <Link to="/auth?returnTo=/dashboard" className="text-slate-400 transition-colors hover:text-white">
+                  <Link to="/auth?returnTo=/seller/goals" className="text-slate-400 transition-colors hover:text-white">
                     สมัครสมาชิก
                   </Link>
                 </li>
@@ -479,6 +580,7 @@ export default function Landing() {
       <NavBar />
       <Hero />
       <HowItWorks />
+      <Ecosystem />
       <Vision />
       <CtaSection />
       <Footer />

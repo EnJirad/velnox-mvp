@@ -40,6 +40,7 @@ import {
   reorderInfo,
   type Product,
 } from "@/lib/reorder";
+import { formatBaht } from "@/lib/shop";
 import { useMutation, useQuery } from "convex/react";
 import {
   AlertTriangle,
@@ -387,6 +388,7 @@ export default function Reorder() {
                                 <p className="font-medium text-slate-900">{product.name}</p>
                                 <p className="text-xs text-slate-400">
                                   {meta.label}
+                                  {product.price !== undefined && ` · ${formatBaht(product.price)}`}
                                   {product.supplier && ` · ${product.supplier}`}
                                 </p>
                               </div>
@@ -437,6 +439,11 @@ export default function Reorder() {
                               {info.lowStock && (
                                 <Badge className="gap-1 rounded-full bg-rose-50 text-rose-700 ring-1 ring-inset ring-rose-600/15 hover:bg-rose-50">
                                   สต็อกต่ำ
+                                </Badge>
+                              )}
+                              {product.published && (
+                                <Badge className="gap-1 rounded-full bg-emerald-50 text-emerald-700 ring-1 ring-inset ring-emerald-600/15 hover:bg-emerald-50">
+                                  ขายหน้าร้าน
                                 </Badge>
                               )}
                             </div>
