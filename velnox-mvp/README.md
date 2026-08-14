@@ -3,168 +3,174 @@
 **Commerce that remembers you · จำแทนคุณ**
 
 Velnox is not just a storefront — it is a business tool that **remembers** for the owner.
-It learns purchase cycles, predicts when to restock, and turns that memory into action.
-
-This repo is the **V1 MVP**: three websites (**velshop · velseller · velcenter**) that share
-**one backend and one database**.
+It learns purchase cycles, predicts when to restock, remembers what each customer
+clicks and buys, and turns that memory into action.
 
 > Built from the product docs in [`EnJirad/velnox`](https://github.com/EnJirad/velnox)
 > (`KeyDataset/Main_objective.md`, `VELNOX_DESIGN_THEME.md`).
 
 ---
 
-## 🌐 The 3 websites (same backend, same database)
+## 🌐 3 websites · deploy SEPARATELY · same backend + database
+
+**เน้นย้ำ: ทั้ง 3 เว็บไซต์ทำงานคนละที่กัน (deploy แยกคนละโดเมน)** — แต่ละเว็บเป็น entry
+อิสระของตัวเอง (velshop.html / velseller.html / velcenter.html) ใช้ **Convex backend
+และฐานข้อมูลชุดเดียว** ไม่มีเว็บไหนฝังอยู่ในอีกเว็บ
 
 ```
-        ┌─────────────────────────────────────────┐
-        │   Convex Backend + ฐานข้อมูลเดียวกัน      │
-        │   users · products · orders · goals ... │
-        └─────────────────────────────────────────┘
-              ▲              ▲              ▲
-        ┌──────────┐   ┌──────────┐   ┌──────────┐
-        │  velshop │   │ velseller│   │ velcenter│
-        │  หน้าร้าน │   │  เจ้าของ  │   │ ศูนย์กลาง │
-        │  (ลูกค้า) │   │  (ร้าน)   │   │  (ผู้ดูแล)│
-        └──────────┘   └──────────┘   └──────────┘
+        ┌────────────────────────────────────────────────┐
+        │   Convex Backend + ฐานข้อมูลเดียวกัน (deploy ครั้งเดียว)  │
+        │   users · products · orders · subscriptions ·     │
+        │   productViews (VelRepeat) · goals ...            │
+        └────────────────────────────────────────────────┘
+              ▲                    ▲                    ▲
+      deploy คนละที่      deploy คนละที่      deploy คนละที่
+        ┌──────────┐      ┌──────────┐      ┌──────────────┐
+        │  velshop │      │ velseller│      │  velcenter   │
+        │   ตลาด   │      │  พ่อค้า   │      │  บริษัทเท่านั้น │
+        └──────────┘      └──────────┘      └──────────────┘
 ```
 
-| Site | Route | Who | What |
+| Site | Entry | Who | What |
 |---|---|---|---|
-| **velshop** | `/shop` | ลูกค้า | Browse published products, cart, place orders, track order status, **Customer Memory** ("Velnox จำคุณได้" — reorder reminders from your own history) |
-| **velseller** | `/seller/*` | เจ้าของร้าน (seller/admin) | Goals dashboard, Smart Reorder (learned purchase cycles), manage customer orders |
-| **velcenter** | `/center` | ผู้ดูแล (admin) | Business overview + KPIs, Velnox Intelligence (next-order predictions), user roles, product publishing, store settings |
+| **velshop** | `velshop.html` | ลูกค้า (ทุกคน) | ตลาดซื้อขายสไตล์ Shopee: ดูสินค้า, ตะกร้า, สั่งซื้อ, **สั่งรายเดือน**, ติดตามออเดอร์, Customer Memory + VelRepeat recommendation |
+| **velseller** | `velseller.html` | พ่อค้าที่เปิดร้านกับเรา (seller/admin/owner) | หลังบ้านของร้านตัวเอง: สินค้า, สต็อก, Smart Reorder, ออเดอร์ของตัวเอง, **รายได้ + ค่าธรรมเนียม 3%** |
+| **velcenter** | `velcenter.html` | เฉพาะบริษัท (owner / admin / staff) | ภาพรวมทั้งบริษัท, ออเดอร์ทุกตลาด, Intelligence, **จัดการพนักงาน + แยกสิทธิ์ตามยศ** |
 
-**Roles:** `customer` (default) · `seller` · `admin` — one shared account system.
-In the MVP a signed-in user can self-serve "open your shop" (become seller) and
-"become admin" (production would gate these behind approval).
+**Cross-site links** ใช้ `src/lib/sites.ts` — ชี้ URL จริงของแต่ละเว็บได้ผ่าน
+`VITE_VELSHOP_URL` / `VITE_VELSELLER_URL` / `VITE_VELCENTER_URL`
+(ใน repo นี้ค่า default คือ `/velshop.html` ฯลฯ เพื่อให้ preview ทำงานได้)
+`VITE_SITE_BASENAME` ควบคุม router basename — เวลาขึ้น domain จริง (เช่น velshop.com)
+ตั้งเป็นค่าว่าง แล้ว route จะอยู่ที่ `/`
 
 ---
 
-## ✨ Features (V1 scope)
+## 🧑‍💼 velcenter: แยกสิทธิ์ตามยศ (company-only)
 
-- **Landing page** — Velnox-themed (white/slate/navy + emerald accent), Thai copy, 3-site ecosystem section
-- **Auth** — email OTP + anonymous guest, protected routes, role-aware post-login redirect
-- **velshop** — product grid with search/category filters, cart drawer (localStorage), checkout form, "ออเดอร์ของฉัน" with live status
-  - **Customer Memory (v1)** — "Velnox จำคุณได้": the shop learns which products each customer orders regularly (from their own order history) and shows them a "สั่งซื้ออีกครั้ง" reorder strip on the storefront, ranked by order frequency
+velcenter เข้าถึงได้เฉพาะผู้ที่เจ้าของบริษัทกำหนดสิทธิ์ **ไม่มีระบบสมัครแอดมินเอง**
+(คนแรกที่สมัครตอนยังไม่มีเจ้าของ จะได้เป็นเจ้าของ — หลังจากนั้นปิดถาวร)
+
+| ยศ | สิทธิ์ |
+|---|---|
+| **owner** (เจ้าของบริษัท) | เห็นทุกอย่าง + **จัดการพนักงาน** (ตั้งยศ + ฝ่าย) + ตั้งค่าร้าน |
+| **admin** (ผู้ดูแลฝ่าย) | เห็นข้อมูลธุรกิจทั้งหมด + จัดการออเดอร์, ตั้งค่าร้าน (ฝ่าย general) — **จัดการพนักงานไม่ได้** (เช่น แอดมินฝ่ายการตลาด เห็นยอดทั้งหมดแต่แตะพนักงานไม่ได้) |
+| **staff** (พนักงาน) | ดูตัวเลขธุรกิจ (ภาพรวม / ออเดอร์ / Intelligence / สินค้า) **แบบ view-only** — เปลี่ยนสถานะไม่ได้ |
+| **seller** / **customer** | เข้า velcenter ไม่ได้ |
+
+ฝ่าย (department): การตลาด · ฝ่ายขาย · ปฏิบัติการ · การเงิน · ทั่วไป
+— ฐานข้อมูลรองรับการ scope ข้อมูลตามฝ่ายใน v2 แล้ว
+
+---
+
+## 💰 velseller: รายได้ + นโยบายค่าธรรมเนียม
+
+หน้า **รายได้** คำนวณให้พ่อค้าอัตโนมัติจากออเดอร์ของตัวเองเท่านั้น:
+
+- **ยอดขายรวม** — ออเดอร์ที่เสร็จสิ้น (เฉพาะสินค้าของร้านนี้)
+- **ยอดตีกลับ + อัตรา %** — ออเดอร์ที่ยกเลิก
+- **ค่าธรรมเนียม 3% ต่อชิ้น** — ตามนโยบาย Velnox
+- **ยอดรับจริง** — หลังหักค่าธรรมเนียม และหักค่าตีกลับเกินนโยบาย
+
+> **นโยบายการตีกลับ:** Velnox ครอบคลุมค่าตีกลับ **ไม่เกิน 10%** ของยอดขาย
+> หากอัตราตีกลับเกิน 10% ร้านค้ารับผิดชอบส่วนต่าง (ระบบ flag เตือนเมื่อเกิน)
+
+พ่อค้าแต่ละร้านเห็น **เฉพาะสินค้า/ออเดอร์/รายได้ของตัวเอง** — ออเดอร์ที่ร้านอื่นขาย
+จะถูกกรองออก และเปิด-ปิดประกาศขายสินค้าของตัวเองได้จาก Smart Reorder
+
+---
+
+## 🧠 VelRepeat: จำพฤติกรรมลูกค้าแต่ละคน
+
+ตาราง `productViews` เก็บ **ทุกคลิก "สนใจ" ของลูกค้าแต่ละคน** (แยกตาม user)
+
+- หน้าสินค้ามีปุ่ม ❤️ "สนใจ" → บันทึกคลิกให้ Velnox
+- **แนะนำสำหรับคุณ** บน velshop — เลือกสินค้าให้ลูกค้าจากคลิก + ประวัติสั่งของตัวเอง
+- **สินค้ายอดนิยม** — ผู้ที่ไม่ล็อกอินเห็นสินค้าที่คนทั้งตลาดคลิกเยอะสุด
+- ต่อยอดอนาคต: "เว็บเลือกสินค้าให้คุณ" อัตโนมัติ — ยิ่งมีข้อมูล ยิ่งแม่นยำ
+
+**Customer Memory:** สินค้าที่ลูกค้าสั่งประจำ (จากประวัติออเดอร์จริง) + ปุ่มสั่งซื้อซ้ำ 1 คลิก
+
+---
+
+## 🗓 velshop: สั่งรายเดือน (subscription)
+
+- ลูกค้ากด "สั่งรายเดือน" บนสินค้า → เลือกรอบ (30/60/90 วัน) + จำนวน
+- ตาราง `subscriptions` เก็บรอบถัดไปอัตโนมัติ — ดู/ยกเลิกได้ที่ "ออเดอร์ของฉัน"
+- velseller มีปุ่ม "สร้างออเดอร์รอบครบกำหนด" → ระบบแปลง subscription ที่ครบรอบ
+  เป็นออเดอร์จริง (ตัดสต็อก + อัปเดตรอบถัดไป) — เวอร์ชันเต็มเป็น scheduled job (VelRepeat)
+
+---
+
+## ✨ Features (V1)
+
+- **Landing / portal** — Velnox-themed (white/slate/navy + emerald), Thai copy, 3-site ecosystem
+- **Auth** — email OTP + anonymous, role-aware redirect
+- **velshop** — product grid + search/category, cart (localStorage), checkout, ออเดอร์ของฉัน,
+  สั่งรายเดือน, "Velnox จำคุณได้" (regular items), "แนะนำสำหรับคุณ" (VelRepeat), สินค้ายอดนิยม
 - **velseller**
-  - **แดชบอร์ดเป้าหมาย**: goals CRUD, progress logging, auto status (สำเร็จ / เกินกำหนด / ตามแผน)
-  - **Smart Reorder**: inventory CRUD, **learns real purchase cycles** (rolling average of days between reorders), auto reminders (ถึงเวลาสั่ง / ใกล้ถึงรอบ / สต็อกต่ำ), 1-click reorder, sale/stock deduction, purchase history
-  - **ออเดอร์**: all customer orders with status management (ยืนยัน / เสร็จสิ้น / ยกเลิก)
+  - แดชบอร์ดเป้าหมาย (CRUD + progress + auto status)
+  - Smart Reorder (learns real purchase cycles, reminders, 1-click reorder, publish/unpublish)
+  - ออเดอร์ของร้านตัวเอง + การสั่งรายเดือนของลูกค้า
+  - **รายได้** (3% commission + return policy 10%)
 - **velcenter**
-  - **ภาพรวม**: revenue (completed orders), order counts, goals, inventory health, customers
-  - **Intelligence**: per-product predicted next order date from learned cycles
-  - **ผู้ใช้**: role management
-  - **สินค้า**: publish/unpublish toggles
-  - **ตั้งค่าร้าน**: shop name, tagline, phone, address, announcement (shown on velshop)
-
-The core loop — **Remember → Learn → Predict → Act** — is fully wired in v1:
-purchase history feeds the learned cycle, the learned cycle drives reorder reminders,
-and orders flow from velshop into velseller/velcenter.
+  - ภาพรวม KPIs, ออเดอร์ทุกตลาด, Intelligence (predicted next order dates)
+  - สินค้า registry (view), **พนักงาน + สิทธิ์ตามยศ (owner only)**, ตั้งค่าร้าน
 
 ---
 
 ## 🛠 Tech Stack
 
-- [React 18](https://react.dev) + [TypeScript](https://www.typescriptlang.org) + [Vite](https://vite.dev)
-- [Convex](https://convex.dev) — backend + database (queries/mutations/actions, reactive subscriptions)
-- [Convex Auth](https://labs.convex.dev/auth) — email OTP + anonymous
-- [Tailwind CSS](https://tailwindcss.com) + [shadcn/ui](https://ui.shadcn.com) + [Framer Motion](https://motion.dev)
-- [Bun](https://bun.sh) — package manager & scripts
+- React + TypeScript + Vite (multi-page: 4 entries — portal + 3 sites)
+- Convex — backend + database (one deployment for all 3 sites)
+- Convex Auth — email OTP + anonymous
+- Tailwind CSS + shadcn/ui + Framer Motion, Bun
 
-**Theme** (per `VELNOX_DESIGN_THEME.md`): white/slate/navy base (~80%), emerald `#10B981` accent (~5%),
-Inter + Noto Sans Thai, radius 10–14px, soft shadows, dark premium sections.
+**Theme** (per `VELNOX_DESIGN_THEME.md`): white/slate/navy base (~80%),
+emerald `#10B981` accent (~5%), Inter + Noto Sans Thai, radius 10–14px, soft cards.
 
 ---
 
 ## 🚀 Getting Started
 
-### Prerequisites
-
-- [Bun](https://bun.sh/docs/installation) ≥ 1.1
-- A Convex deployment (free tier is fine) — or run locally
-
-### 1. Install
-
 ```bash
 bun install
+# set VITE_CONVEX_URL (or use the platform env UI)
+bun convex dev --once     # push schema + codegen
+bun run dev               # portal at /, sites at /velshop.html etc.
+bun tsc -b --noEmit       # typecheck
 ```
 
-### 2. Set your Convex URL
-
-Create `.env.local` in the project root (or use your platform's env/keys UI):
-
-```
-VITE_CONVEX_URL=https://<your-deployment>.convex.cloud
-```
-
-> You can create a deployment with `bunx convex dev` and copy the URL it prints.
-
-### 3. Run the backend (codegen + push schema)
-
-```bash
-bun convex dev --once
-```
-
-### 4. Start the dev server
-
-```bash
-bun run dev
-```
-
-Open the printed URL — sign in with email OTP (or "เข้าสู่ระบบแบบผู้เยี่ยมชม").
-Customers land on `/shop`; after "เปิดร้านค้า" you get `/seller/*`, then "สมัครเป็นผู้ดูแล" unlocks `/center`.
-
-### Typecheck
-
-```bash
-bun tsc -b --noEmit
-```
+**Deploy 3 เว็บแยก:** นำ `velshop.html` / `velseller.html` / `velcenter.html`
+(พร้อม entry ที่ชี้ไป `src/sites/*/main.tsx`) ไป build เป็น 3 app แยกคนละโดเมน
+โดยตั้ง `VITE_VELSHOP_URL`/`VITE_VELSELLER_URL`/`VITE_VELCENTER_URL` ไปที่โดเมนจริง
+และ `VITE_SITE_BASENAME=""` — ทุกเว็บชี้ Convex deployment ตัวเดียวกัน
 
 ---
 
 ## 📁 Project Structure
 
 ```
-velnox-mvp/
+├── index.html / velshop.html / velseller.html / velcenter.html   # 4 deployable entries
 ├── src/
-│   ├── convex/              # Backend: schema, goals, products, orders, center
-│   │   ├── schema.ts        #   tables: users, goals, products, purchases, orders, orderItems, storeSettings
-│   │   ├── products.ts      #   products CRUD, listPublished (storefront), recordPurchase (cycle learning)
-│   │   ├── orders.ts        #   placeOrder, myOrders, allOrders, updateStatus (restock on cancel)
-│   │   ├── center.ts        #   overview KPIs, storeSettings get/update
-│   │   ├── users.ts         #   currentUser, becomeSeller/becomeAdmin, listUsers/setRole (admin)
-│   │   └── _generated/      #   auto-generated Convex client (regenerate via `bun convex dev --once`)
-│   ├── components/
-│   │   ├── shop/            # ShopHeader, CartDrawer
-│   │   ├── goals/           # GoalCard, GoalFormDialog, ProgressDialog
-│   │   ├── reorder/         # ProductFormDialog, ReorderDialog, StockDialog
-│   │   ├── AppHeader.tsx    # velseller header (goals / reorder / orders)
-│   │   ├── SiteSwitcher.tsx # switch between velshop / velseller / velcenter
-│   │   ├── RequireRole.tsx  # role gate (seller or admin) with self-serve promotion
-│   │   ├── UserMenu.tsx     # shared user dropdown
-│   │   └── ui/              # shadcn/ui components
-│   ├── lib/                 # goals.ts, reorder.ts (status logic), shop.ts, cart.tsx (cart context)
-│   ├── pages/               # Landing, Auth, ShopHome, ShopCheckout, MyOrders,
-│   │                        #   Dashboard (seller goals), Reorder (seller), SellerOrders, Center, NotFound
-│   ├── hooks/               # use-auth, use-mobile
-│   ├── main.tsx             # entry + router (/, /auth, /shop, /seller/*, /center + legacy redirects)
-│   └── index.css            # Velnox theme tokens (palette, fonts, radius)
-├── public/
-├── index.html
-├── vite.config.ts
-├── convex.json
-├── package.json
-└── tsconfig*.json
+│   ├── sites/            # velshop/ velseller/ velcenter/ — independent app routers
+│   ├── convex/           # ONE backend: schema, users (roles), products, orders,
+│   │                     #   subscriptions, center, goals
+│   ├── pages/            # Landing, Auth, ShopHome, ShopCheckout, MyOrders,
+│   │                     #   Dashboard, Reorder, SellerOrders, Income, Center, NotFound
+│   ├── components/       # ui/ + shop/ goals/ reorder/ + AppHeader, SiteSwitcher, ...
+│   ├── lib/              # sites.ts (deploy URLs), app-shell, cart, reorder, shop, goals
+│   └── main.tsx          # portal entry (landing + auth + redirects to the 3 sites)
 ```
 
 ---
 
-## 🗺 Next Steps (per `Main_objective.md` roadmap)
+## 🗺 Next Steps
 
-- **Customer Memory v2** — learn each customer's *personal* purchase cycle per product (from gaps between their orders) and predict "ถึงเวลาสั่งอีกแล้ว" per customer, not just frequency
-- **VelRepeat** — proactive reminders (email/Line/SMS) before a product hits its reorder window
-- **Payment** — online checkout on velshop (e.g. Stripe/PromptPay)
-- **Velnox Intelligence v2** — sales trend charts, usage-rate forecasts, auto insights
+- **Customer Memory v2** — เรียนรู้รอบการสั่งรายบุคคลต่อสินค้า (จากระยะห่างระหว่างออเดอร์) คาดการณ์ "ถึงเวลาสั่งอีกแล้ว" เฉพาะคน
+- **VelRepeat scheduled jobs** — สร้างออเดอร์รายเดือนอัตโนมัติ (cron) + แจ้งเตือน email/Line/SMS ก่อนสินค้าถึงรอบ
+- **Payment** — ชำระเงินออนไลน์บน velshop (Stripe/PromptPay)
+- **Velnox Intelligence v2** — กราฟยอดขาย เทรนด์, scope ข้อมูลตามฝ่าย (department) ใน velcenter
+- **Approval flow** — เปิดร้าน/ตั้งพนักงานต้องผ่านการอนุมัติ (แทน self-serve MVP)
 
 ---
 

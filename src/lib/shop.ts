@@ -45,7 +45,7 @@ export const ORDER_STATUS_ICONS: Record<OrderStatus, LucideIcon> = {
 };
 
 export const ROLE_META: Record<
-  "customer" | "seller" | "admin",
+  "customer" | "seller" | "admin" | "owner" | "staff",
   { label: string; badge: string }
 > = {
   customer: {
@@ -53,12 +53,20 @@ export const ROLE_META: Record<
     badge: "bg-slate-100 text-slate-600 ring-slate-600/10",
   },
   seller: {
-    label: "เจ้าของร้าน",
+    label: "พ่อค้า / ร้านค้า",
     badge: "bg-emerald-50 text-emerald-700 ring-emerald-600/10",
   },
+  staff: {
+    label: "พนักงาน (ดูข้อมูล)",
+    badge: "bg-amber-50 text-amber-700 ring-amber-600/10",
+  },
   admin: {
-    label: "ผู้ดูแลศูนย์กลาง",
+    label: "ผู้ดูแลฝ่าย",
     badge: "bg-sky-50 text-sky-700 ring-sky-600/10",
+  },
+  owner: {
+    label: "เจ้าของบริษัท",
+    badge: "bg-violet-50 text-violet-700 ring-violet-600/10",
   },
 };
 

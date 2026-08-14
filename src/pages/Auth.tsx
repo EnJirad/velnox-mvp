@@ -22,7 +22,7 @@ import { useNavigate, useSearchParams } from "react-router";
 
 /** Where to land after sign-in when no explicit returnTo was requested. */
 function roleHome(role: string | undefined): string {
-  if (role === "admin") return "/center";
+  if (role === "owner" || role === "admin" || role === "staff") return "/center";
   if (role === "seller") return "/seller/goals";
   return "/shop";
 }

@@ -23,8 +23,10 @@ function getInitials(name?: string, email?: string): string {
 }
 
 const ROLE_LABEL: Record<string, string> = {
-  admin: "ผู้ดูแลศูนย์กลาง",
-  seller: "เจ้าของธุรกิจ",
+  owner: "เจ้าของบริษัท",
+  admin: "ผู้ดูแลฝ่าย",
+  staff: "พนักงาน",
+  seller: "พ่อค้า / ร้านค้า",
   customer: "ลูกค้า",
 };
 

@@ -1,5 +1,6 @@
 import { AppHeader } from "@/components/AppHeader";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import {
   Select,
   SelectContent,
@@ -17,22 +18,28 @@ import {
 } from "@/components/ui/table";
 import { api } from "@/convex/_generated/api";
 import type { Id } from "@/convex/_generated/dataModel";
+import { formatThaiDate } from "@/lib/reorder";
 import {
   ORDER_STATUS_META,
   formatBaht,
-  formatThaiDate,
   shortOrderId,
   type OrderStatus,
 } from "@/lib/shop";
 import { useMutation, useQuery } from "convex/react";
-import { Inbox, ShoppingBag } from "lucide-react";
+import { CalendarClock, Inbox, Loader2, RefreshCw, ShoppingBag } from "lucide-react";
+import { useState } from "react";
 import { toast } from "sonner";
 
 const STATUS_OPTIONS: OrderStatus[] = ["pending", "confirmed", "completed", "cancelled"];
 
+const DAY_MS = 24 * 60 * 60 * 1000;
+
 export default function SellerOrders() {
   const orders = useQuery(api.orders.allOrders);
+  const subscriptions = useQuery(api.subscriptions.activeSubscriptions);
   const updateStatus = useMutation(api.orders.updateStatus);
+  const processDue = useMutation(api.subscriptions.processDueSubscriptions);
+  const [processing, setProcessing] = useState(false);
 
   const handleStatusChange = async (orderId: Id<"orders">, status: OrderStatus) => {
     try {
@@ -41,6 +48,19 @@ export default function SellerOrders() {
     } catch (error) {
       console.error("Update order status error:", error);
       toast.error("อัปเดตไม่สำเร็จ กรุณาลองอีกครั้ง");
+    }
+  };
+
+  const handleProcessDue = async () => {
+    setProcessing(true);
+    try {
+      const created = await processDue();
+      toast.success(created > 0 ? `สร้างออเดอร์รายเดือนแล้ว ${created} ออเดอร์` : "ยังไม่มีรอบครบกำหนด");
+    } catch (error) {
+      console.error("Process due subscriptions error:", error);
+      toast.error("ไม่สำเร็จ กรุณาลองอีกครั้ง");
+    } finally {
+      setProcessing(false);
     }
   };
 
@@ -62,8 +82,97 @@ export default function SellerOrders() {
           </p>
         </div>
 
-        {orders === undefined ? (
-          <div className="mt-8 space-y-4">
+        {/* Monthly subscriptions (velshop สั่งรายเดือน) */}
+        <section className="mt-8">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex items-center gap-2.5">
+              <span className="flex size-9 items-center justify-center rounded-[10px] bg-[#ECFDF5]">
+                <CalendarClock className="size-4 text-[#10B981]" />
+              </span>
+              <div>
+                <h2 className="text-base font-semibold text-slate-900">การสั่งรายเดือนของลูกค้า</h2>
+                <p className="text-xs text-slate-400">
+                  ลูกค้าสมัครรับสินค้าเป็นรอบ — กดสร้างออเดอร์เมื่อถึงรอบครบกำหนด
+                </p>
+              </div>
+            </div>
+            <Button
+              className="gap-1.5 bg-slate-900 text-white hover:bg-slate-800"
+              onClick={handleProcessDue}
+              disabled={processing}
+            >
+              {processing ? (
+                <Loader2 className="size-4 animate-spin" />
+              ) : (
+                <RefreshCw className="size-4" />
+              )}
+              สร้างออเดอร์รอบครบกำหนด
+            </Button>
+          </div>
+
+          {subscriptions === undefined ? (
+            <div className="mt-3 h-20 animate-pulse rounded-xl border border-slate-200 bg-white" />
+          ) : subscriptions.length === 0 ? (
+            <div className="mt-3 flex items-center gap-3 rounded-xl border border-slate-200 bg-white p-5">
+              <CalendarClock className="size-5 text-slate-300" />
+              <p className="text-sm text-slate-500">ยังไม่มีลูกค้าสมัครสั่งรายเดือน</p>
+            </div>
+          ) : (
+            <div className="mt-3 overflow-hidden rounded-xl border border-slate-200 bg-white">
+              <Table>
+                <TableHeader>
+                  <TableRow className="hover:bg-transparent">
+                    <TableHead className="pl-5 text-slate-400">ลูกค้า</TableHead>
+                    <TableHead className="text-slate-400">สินค้า</TableHead>
+                    <TableHead className="text-slate-400">รอบ</TableHead>
+                    <TableHead className="pr-5 text-right text-slate-400">รอบถัดไป</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {subscriptions.map(({ subscription, product, customer }) => {
+                    const due = subscription.nextOrderAt - Date.now();
+                    return (
+                      <TableRow key={subscription._id} className="hover:bg-slate-50/60">
+                        <TableCell className="pl-5">
+                          <p className="font-medium text-slate-900">
+                            {customer?.name || "สมาชิก"}
+                          </p>
+                          <p className="text-xs text-slate-400">{customer?.email ?? "—"}</p>
+                        </TableCell>
+                        <TableCell>
+                          <p className="text-sm text-slate-600">
+                            {product?.name ?? "สินค้าถูกลบ"}{" "}
+                            <span className="text-slate-400">× {subscription.quantity}</span>
+                          </p>
+                        </TableCell>
+                        <TableCell>
+                          <p className="text-sm text-slate-600">
+                            ทุก {subscription.intervalDays} วัน
+                          </p>
+                        </TableCell>
+                        <TableCell className="pr-5 text-right">
+                          <p className="text-sm text-slate-600">
+                            {formatThaiDate(subscription.nextOrderAt)}
+                          </p>
+                          <p className={`text-xs ${due <= 0 ? "font-medium text-rose-600" : "text-slate-400"}`}>
+                            {due <= 0 ? "ถึงรอบแล้ว" : `อีก ${Math.max(0, Math.round(due / DAY_MS))} วัน`}
+                          </p>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
+                </TableBody>
+              </Table>
+            </div>
+          )}
+        </section>
+
+        {/* Customer orders */}
+        <section className="mt-8">
+          <h2 className="text-base font-semibold text-slate-900">ออเดอร์ของลูกค้า</h2>
+
+          {orders === undefined ? (
+          <div className="mt-3 space-y-4">
             {Array.from({ length: 3 }).map((_, i) => (
               <div key={i} className="h-16 animate-pulse rounded-xl border border-slate-200 bg-white" />
             ))}
@@ -165,9 +274,9 @@ export default function SellerOrders() {
                   </div>
 
                   <div className="mt-4 flex items-center justify-between border-t border-slate-100 pt-4">
-                    <span className="text-sm text-slate-500">รวมทั้งสิ้น</span>
+                    <span className="text-sm text-slate-500">รวมทั้งสิ้น (สินค้าของคุณ)</span>
                     <p className="text-lg font-bold tabular-nums tracking-tight text-slate-900">
-                      {formatBaht(order.total)}
+                      {formatBaht(items.reduce((s, i) => s + i.subtotal, 0))}
                     </p>
                   </div>
                 </div>
@@ -175,6 +284,7 @@ export default function SellerOrders() {
             })}
           </div>
         )}
+        </section>
       </main>
     </div>
   );

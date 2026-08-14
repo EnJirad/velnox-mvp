@@ -1,4 +1,5 @@
 import { ShopHeader } from "@/components/shop/ShopHeader";
+import { SubscriptionDialog } from "@/components/shop/SubscriptionDialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -12,9 +13,19 @@ import {
   type ProductCategory,
 } from "@/lib/reorder";
 import { formatBaht } from "@/lib/shop";
-import { useQuery } from "convex/react";
+import { useMutation, useQuery } from "convex/react";
 import { motion } from "framer-motion";
-import { History, Megaphone, Plus, RefreshCw, Search, ShoppingBag, Store } from "lucide-react";
+import {
+  CalendarClock,
+  Heart,
+  History,
+  Megaphone,
+  Plus,
+  Search,
+  ShoppingBag,
+  Sparkles,
+  Store,
+} from "lucide-react";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
 
@@ -31,10 +42,14 @@ export default function ShopHome() {
   const products = useQuery(api.products.listPublished);
   const settings = useQuery(api.center.getSettings);
   const regulars = useQuery(api.orders.customerRegulars);
+  const interests = useQuery(api.products.customerInterests);
+  const popular = useQuery(api.products.popularProducts);
+  const recordView = useMutation(api.products.recordView);
   const { add } = useCart();
 
   const [query, setQuery] = useState("");
   const [category, setCategory] = useState<ProductCategory | "all">("all");
+  const [subProduct, setSubProduct] = useState<Product | null>(null);
 
   const filtered = useMemo(() => {
     const list = products ?? [];
@@ -46,9 +61,35 @@ export default function ShopHome() {
     });
   }, [products, query, category]);
 
+  // Personalized recommendations: this customer's own interests when signed in,
+  // otherwise what everyone is clicking (VelRepeat).
+  const recSource =
+    isAuthenticated && interests !== undefined && interests.length > 0
+      ? interests
+      : popular;
+  const regularIds = useMemo(
+    () => new Set((regulars ?? []).map((r) => r.product._id)),
+    [regulars],
+  );
+  const recommendations = useMemo(
+    () => (recSource ?? []).filter((r) => !regularIds.has(r.product._id)),
+    [recSource, regularIds],
+  );
+
   const handleAdd = (product: Product) => {
     add(product);
     toast.success(`เพิ่ม "${product.name}" ลงตะกร้าแล้ว`);
+  };
+
+  const handleInterest = async (product: Product) => {
+    toast.success(`บันทึกความสนใจ "${product.name}" แล้ว 💚`, {
+      description: "Velnox จะแนะนำสินค้าแบบนี้ให้คุณบ่อยขึ้น",
+    });
+    try {
+      await recordView({ productId: product._id });
+    } catch (error) {
+      console.error("Record view error:", error);
+    }
   };
 
   const shopName = settings?.shopName || "Velnox Shop";
@@ -66,7 +107,7 @@ export default function ShopHome() {
             <div>
               <p className="flex items-center gap-1.5 text-sm font-medium text-slate-400">
                 <Store className="size-4 text-[#10B981]" />
-                velshop · หน้าร้านของคุณ
+                velshop · ตลาดออนไลน์ Velnox
               </p>
               <h1 className="mt-2 text-3xl font-extrabold tracking-tight text-slate-900 sm:text-4xl">
                 {shopName}
@@ -175,8 +216,79 @@ export default function ShopHome() {
                         className="gap-1.5 bg-slate-900 text-white hover:bg-slate-800"
                         onClick={() => handleAdd(product)}
                       >
-                        <RefreshCw className="size-3.5" />
+                        <Plus className="size-3.5" />
                         สั่งซื้ออีกครั้ง
+                      </Button>
+                    </div>
+                  </motion.div>
+                );
+              })}
+            </div>
+          </div>
+        </section>
+      )}
+
+      {/* VelRepeat — แนะนำสำหรับคุณ */}
+      {!isLoading && recommendations.length > 0 && (
+        <section className="border-b border-slate-100 bg-white">
+          <div className="mx-auto w-full max-w-6xl px-4 py-8 sm:px-6">
+            <div className="flex items-center gap-2.5">
+              <span className="flex size-9 items-center justify-center rounded-[10px] bg-[#ECFDF5]">
+                <Sparkles className="size-4 text-[#10B981]" />
+              </span>
+              <div>
+                <h2 className="text-base font-bold tracking-tight text-slate-900">
+                  {isAuthenticated ? "แนะนำสำหรับคุณ" : "สินค้ายอดนิยม"}
+                </h2>
+                <p className="text-xs text-slate-400">
+                  {isAuthenticated
+                    ? "Velnox เลือกให้จากสิ่งที่คุณสนใจและสั่งบ่อย"
+                    : "จากยอดคลิกของลูกค้าทั่วตลาด (VelRepeat)"}
+                </p>
+              </div>
+            </div>
+
+            <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+              {recommendations.slice(0, 8).map(({ product, views }, i) => {
+                const meta = PRODUCT_CATEGORY_META[product.category];
+                const Icon = meta.icon;
+                return (
+                  <motion.div
+                    key={product._id}
+                    initial={{ opacity: 0, y: 12 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.3, delay: Math.min(i * 0.05, 0.3) }}
+                    className="flex flex-col rounded-xl border border-slate-200 bg-white p-4 transition-all duration-200 hover:-translate-y-0.5 hover:border-[#10B981]/40 hover:shadow-[0_12px_30px_rgba(15,23,42,0.06)]"
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <span
+                        className={`flex size-9 items-center justify-center rounded-[10px] ring-1 ring-inset ${meta.chip}`}
+                      >
+                        <Icon className={`size-4 ${meta.iconClass}`} />
+                      </span>
+                      <Badge className="gap-1 rounded-full bg-slate-100 text-slate-500 ring-1 ring-inset ring-slate-600/10 hover:bg-slate-100">
+                        <Sparkles className="size-3" />
+                        {views} คลิก
+                      </Badge>
+                    </div>
+                    <h3 className="mt-3 text-sm font-semibold leading-5 text-slate-900">
+                      {product.name}
+                    </h3>
+                    <p className="mt-1 line-clamp-2 text-xs leading-5 text-slate-400">
+                      {product.description || meta.label}
+                    </p>
+                    <div className="mt-3 flex items-end justify-between gap-2 border-t border-slate-100 pt-3">
+                      <p className="text-sm font-bold tabular-nums tracking-tight text-slate-900">
+                        {formatBaht(product.price ?? 0)}
+                        <span className="ml-1 text-[11px] font-normal text-slate-400">/ {product.unit}</span>
+                      </p>
+                      <Button
+                        size="sm"
+                        className="gap-1.5 bg-slate-900 text-white hover:bg-slate-800"
+                        onClick={() => handleAdd(product)}
+                      >
+                        <Plus className="size-3.5" />
+                        เพิ่มตะกร้า
                       </Button>
                     </div>
                   </motion.div>
@@ -275,20 +387,50 @@ export default function ShopHome() {
                         : `เหลือ ${product.currentStock} ${product.unit}`}
                   </p>
 
-                  <Button
-                    className="mt-3 w-full gap-1.5 bg-slate-900 text-white hover:bg-slate-800 disabled:bg-slate-100 disabled:text-slate-400"
-                    disabled={outOfStock || product.price === undefined}
-                    onClick={() => handleAdd(product)}
-                  >
-                    <Plus className="size-4" />
-                    ใส่ตะกร้า
-                  </Button>
+                  <div className="mt-3 flex items-center gap-2">
+                    <Button
+                      variant="outline"
+                      size="icon"
+                      className="size-9 shrink-0 border-slate-200 text-slate-500 hover:border-rose-300 hover:bg-rose-50 hover:text-rose-500"
+                      onClick={() => handleInterest(product)}
+                      aria-label={`สนใจ ${product.name}`}
+                    >
+                      <Heart className="size-4" />
+                    </Button>
+                    <Button
+                      className="flex-1 gap-1.5 bg-slate-900 text-white hover:bg-slate-800 disabled:bg-slate-100 disabled:text-slate-400"
+                      disabled={outOfStock || product.price === undefined}
+                      onClick={() => handleAdd(product)}
+                    >
+                      <Plus className="size-4" />
+                      ใส่ตะกร้า
+                    </Button>
+                  </div>
+
+                  {!outOfStock && product.price !== undefined && (
+                    <Button
+                      variant="ghost"
+                      className="mt-1.5 h-8 w-full gap-1.5 text-xs text-slate-500 hover:bg-[#ECFDF5] hover:text-emerald-700"
+                      onClick={() => setSubProduct(product)}
+                    >
+                      <CalendarClock className="size-3.5" />
+                      สั่งรายเดือนทุก X วัน
+                    </Button>
+                  )}
                 </motion.div>
               );
             })}
           </div>
         )}
       </main>
+
+      <SubscriptionDialog
+        product={subProduct}
+        open={subProduct !== null}
+        onOpenChange={(open) => {
+          if (!open) setSubProduct(null);
+        }}
+      />
     </div>
   );
 }

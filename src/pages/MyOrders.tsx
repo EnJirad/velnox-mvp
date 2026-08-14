@@ -2,18 +2,35 @@ import { ShopHeader } from "@/components/shop/ShopHeader";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { api } from "@/convex/_generated/api";
+import type { Id } from "@/convex/_generated/dataModel";
+import { formatThaiDate } from "@/lib/reorder";
 import {
   ORDER_STATUS_META,
   formatBaht,
   formatThaiDateTime,
   shortOrderId,
 } from "@/lib/shop";
-import { useQuery } from "convex/react";
-import { PackageSearch, ShoppingBag } from "lucide-react";
+import { useMutation, useQuery } from "convex/react";
+import { CalendarClock, PackageSearch, ShoppingBag, XCircle } from "lucide-react";
 import { Link } from "react-router";
+import { toast } from "sonner";
+
+const DAY_MS = 24 * 60 * 60 * 1000;
 
 export default function MyOrders() {
   const orders = useQuery(api.orders.myOrders);
+  const subscriptions = useQuery(api.subscriptions.mySubscriptions);
+  const cancelSubscription = useMutation(api.subscriptions.cancelSubscription);
+
+  const handleCancel = async (subscriptionId: Id<"subscriptions">) => {
+    try {
+      await cancelSubscription({ subscriptionId });
+      toast.success("ยกเลิกการสั่งรายเดือนแล้ว");
+    } catch (error) {
+      console.error("Cancel subscription error:", error);
+      toast.error("ยกเลิกไม่สำเร็จ กรุณาลองอีกครั้ง");
+    }
+  };
 
   return (
     <div className="min-h-screen bg-[#F8FAFC] text-slate-900">
@@ -29,9 +46,84 @@ export default function MyOrders() {
             ออเดอร์ของฉัน
           </h1>
           <p className="mt-1.5 text-sm text-slate-500">
-            ติดตามสถานะออเดอร์ของคุณ — ร้านค้าจะยืนยันและติดต่อกลับ
+            ติดตามสถานะออเดอร์และการสั่งรายเดือนของคุณ
           </p>
         </div>
+
+        {/* Monthly subscriptions */}
+        <section className="mt-8">
+          <div className="flex items-center gap-2">
+            <span className="flex size-8 items-center justify-center rounded-[10px] bg-[#ECFDF5]">
+              <CalendarClock className="size-4 text-[#10B981]" />
+            </span>
+            <h2 className="text-base font-semibold text-slate-900">การสั่งรายเดือนของฉัน</h2>
+          </div>
+
+          {subscriptions === undefined ? (
+            <div className="mt-3 h-20 animate-pulse rounded-xl border border-slate-200 bg-white" />
+          ) : subscriptions.length === 0 ? (
+            <div className="mt-3 flex items-center gap-3 rounded-xl border border-slate-200 bg-white p-5">
+              <CalendarClock className="size-5 text-slate-300" />
+              <p className="text-sm text-slate-500">
+                ยังไม่มีการสั่งรายเดือน — กด "สั่งรายเดือน" บนการ์ดสินค้าเพื่อให้ระบบสั่งให้คุณทุกเดือน
+              </p>
+            </div>
+          ) : (
+            <div className="mt-3 space-y-3">
+              {subscriptions.map(({ subscription, product }) => {
+                const daysLeft = Math.max(0, Math.round((subscription.nextOrderAt - Date.now()) / DAY_MS));
+                return (
+                  <div
+                    key={subscription._id}
+                    className="flex flex-col gap-3 rounded-xl border border-slate-200 bg-white p-5 sm:flex-row sm:items-center sm:justify-between"
+                  >
+                    <div>
+                      <p className="text-sm font-semibold text-slate-900">
+                        {product?.name ?? "สินค้าถูกลบ"}{" "}
+                        <span className="font-normal text-slate-400">× {subscription.quantity}</span>
+                      </p>
+                      <p className="mt-1 text-xs text-slate-400">
+                        ทุก {subscription.intervalDays} วัน · รอบถัดไป{" "}
+                        {formatThaiDate(subscription.nextOrderAt)} ({daysLeft} วัน)
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Badge
+                        className={`gap-1.5 rounded-full ring-1 ring-inset ${
+                          subscription.status === "active"
+                            ? "bg-emerald-50 text-emerald-700 ring-emerald-600/15"
+                            : "bg-slate-100 text-slate-500 ring-slate-600/10"
+                        }`}
+                      >
+                        <span
+                          className={`size-1.5 rounded-full ${
+                            subscription.status === "active" ? "bg-emerald-500" : "bg-slate-400"
+                          }`}
+                        />
+                        {subscription.status === "active" ? "ใช้งานอยู่" : "ยกเลิกแล้ว"}
+                      </Badge>
+                      {subscription.status === "active" && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="gap-1.5 border-slate-200 text-slate-600 hover:border-rose-200 hover:bg-rose-50 hover:text-rose-600"
+                          onClick={() => handleCancel(subscription._id)}
+                        >
+                          <XCircle className="size-3.5" />
+                          ยกเลิก
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </section>
+
+        {/* Order history */}
+        <section className="mt-8">
+          <h2 className="text-base font-semibold text-slate-900">ประวัติออเดอร์</h2>
 
         {orders === undefined ? (
           <div className="mt-8 space-y-4">
@@ -56,7 +148,7 @@ export default function MyOrders() {
             </Button>
           </div>
         ) : (
-          <div className="mt-8 space-y-4">
+          <div className="mt-3 space-y-4">
             {orders.map(({ order, items }) => {
               const meta = ORDER_STATUS_META[order.status];
               return (
@@ -109,6 +201,7 @@ export default function MyOrders() {
             })}
           </div>
         )}
+        </section>
       </main>
     </div>
   );
