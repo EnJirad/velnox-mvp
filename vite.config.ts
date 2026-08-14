@@ -21,6 +21,15 @@ export default defineConfig({
     sourcemap: false,
     // Optimize chunk splitting
     rollupOptions: {
+      // Multi-page build: the portal + the 3 independent site entries. Each
+      // entry is a SEPARATE deployable app (velshop / velseller / velcenter)
+      // sharing one Convex backend + database — deploy them to different hosts.
+      input: {
+        index: path.resolve(__dirname, "index.html"),
+        velshop: path.resolve(__dirname, "velshop.html"),
+        velseller: path.resolve(__dirname, "velseller.html"),
+        velcenter: path.resolve(__dirname, "velcenter.html"),
+      },
       output: {
         // Manual chunk splitting for better caching and lazy loading
         manualChunks: {

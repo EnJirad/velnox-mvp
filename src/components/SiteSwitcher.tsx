@@ -9,7 +9,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { SITE_URLS, type SiteId } from "@/lib/sites";
 import { Briefcase, ChevronDown, ShieldCheck, Store, type LucideIcon } from "lucide-react";
-import { Link, useLocation } from "react-router";
+import { useLocation } from "react-router";
 
 const SITES: {
   id: SiteId;
@@ -78,7 +78,9 @@ export function SiteSwitcher() {
               asChild
               className={`cursor-pointer ${active ? "bg-slate-50" : ""}`}
             >
-              <Link to={SITE_URLS[site.id]} className="flex items-center gap-3">
+              {/* Plain anchor: each site is a SEPARATE app (own entry + deploy),
+                  so switching sites is a full page load, not a client route. */}
+              <a href={SITE_URLS[site.id]} className="flex items-center gap-3">
                 <span className="flex size-8 items-center justify-center rounded-[10px] bg-slate-100">
                   <Icon className="size-4 text-slate-600" />
                 </span>
@@ -86,7 +88,7 @@ export function SiteSwitcher() {
                   <span className="text-sm font-semibold text-slate-900">{site.label}</span>
                   <span className="text-xs text-slate-400">{site.desc}</span>
                 </span>
-              </Link>
+              </a>
             </DropdownMenuItem>
           );
         })}

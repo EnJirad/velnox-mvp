@@ -15,15 +15,37 @@ import {
 } from "@/components/ui/input-otp";
 
 import { Logo } from "@/components/Logo";
+import { SITE_URLS } from "@/lib/sites";
 import { useAuth } from "@/hooks/use-auth";
 import { ArrowRight, Loader2, Mail, UserX } from "lucide-react";
 import { Suspense, useEffect, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router";
 
-/** Where to land after sign-in when no explicit returnTo was requested. */
+/** Which of the 3 SEPARATE apps this auth page is running inside. */
+function currentSite(): "velshop" | "velseller" | "velcenter" {
+  const path = window.location.pathname;
+  if (path.startsWith("/velseller")) return "velseller";
+  if (path.startsWith("/velcenter")) return "velcenter";
+  return "velshop"; // the portal and velshop both live under "/" paths
+}
+
+/**
+ * Where to land after sign-in when no explicit returnTo was requested.
+ * The 3 sites are separate apps, so cross-site homes are real entry URLs
+ * (full page load) while in-app homes stay client-side routes.
+ */
 function roleHome(role: string | undefined): string {
-  if (role === "owner" || role === "admin" || role === "staff") return "/center";
-  if (role === "seller") return "/seller/goals";
+  const isCenterRole = role === "owner" || role === "admin" || role === "staff";
+  const site = currentSite();
+
+  // velcenter: the company dashboard lives at the site root.
+  if (site === "velcenter") return "/";
+  // velseller: merchants land on their goals dashboard; company staff go to velcenter.
+  if (site === "velseller") return isCenterRole ? SITE_URLS.velcenter : "/seller/goals";
+  // velshop (and the portal): customers stay in the shop; send merchants and
+  // company staff to the site that matches their role.
+  if (isCenterRole) return SITE_URLS.velcenter;
+  if (role === "seller") return SITE_URLS.velseller;
   return "/shop";
 }
 
@@ -39,10 +61,16 @@ function Auth() {
 
   useEffect(() => {
     if (authLoading || !isAuthenticated) return;
-    if (returnTo?.startsWith("/") && !returnTo.startsWith("//")) {
-      navigate(returnTo);
+    const target =
+      returnTo?.startsWith("/") && !returnTo.startsWith("//")
+        ? returnTo
+        : roleHome(user?.role);
+    // Entry URLs (e.g. /velseller.html) belong to a different app — a
+    // client-side navigate would render 404 inside this router instead.
+    if (target.startsWith("/vel")) {
+      window.location.assign(target);
     } else {
-      navigate(roleHome(user?.role));
+      navigate(target);
     }
   }, [authLoading, isAuthenticated, navigate, returnTo, user?.role]);
   const handleEmailSubmit = async (event: React.FormEvent<HTMLFormElement>) => {

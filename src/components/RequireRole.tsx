@@ -5,7 +5,7 @@ import { SITE_URLS } from "@/lib/sites";
 import { useMutation, useQuery } from "convex/react";
 import { ArrowRight, Loader2, Lock, ShieldCheck, Store } from "lucide-react";
 import { useState, type ReactNode } from "react";
-import { Link, Navigate, useLocation } from "react-router";
+import { Navigate, useLocation } from "react-router";
 import { toast } from "sonner";
 
 interface RequireRoleProps {
@@ -112,7 +112,7 @@ export function RequireRole({ role, children }: RequireRoleProps) {
             : "เปิดร้านได้ทันทีในเวอร์ชันแรก ไม่มีค่าใช้จ่าย"}
         </p>
         <Button variant="ghost" className="mt-2 w-full text-slate-500" asChild>
-          <Link to={SITE_URLS.velshop}>← กลับไปหน้าร้าน</Link>
+          <a href={SITE_URLS.velshop}>← กลับไปหน้าร้าน</a>
         </Button>
       </div>
     </div>

@@ -9,9 +9,9 @@ import {
   SiteSuspense,
 } from "@/lib/app-shell";
 import { SITE_URLS } from "@/lib/sites";
-import React, { lazy } from "react";
+import React, { lazy, useEffect } from "react";
 import { createRoot } from "react-dom/client";
-import { BrowserRouter, Navigate, Route, Routes } from "react-router";
+import { BrowserRouter, Route, Routes } from "react-router";
 import "./index.css";
 
 const Landing = lazy(() => import("./pages/Landing.tsx"));
@@ -38,6 +38,18 @@ class ToolbarErrorBoundary extends React.Component<
 
 const convex = new ConvexReactClient(import.meta.env.VITE_CONVEX_URL as string);
 
+/**
+ * The 3 sites are SEPARATE apps (velshop.html / velseller.html / velcenter.html).
+ * Client-side <Navigate> can't switch apps — it would just re-render this router
+ * against a path it doesn't know. These redirects must load the other document.
+ */
+function HardRedirect({ to }: { to: string }) {
+  useEffect(() => {
+    window.location.replace(to);
+  }, [to]);
+  return null;
+}
+
 createRoot(document.getElementById("root")!).render(
   <RootErrorBoundary>
     <ToolbarErrorBoundary>
@@ -53,12 +65,12 @@ createRoot(document.getElementById("root")!).render(
 
             {/* The 3 sites are SEPARATE deployable entries (velshop.html,
                 velseller.html, velcenter.html) sharing one Convex backend.
-                Old single-app paths redirect to the right site entry. */}
-            <Route path="/shop/*" element={<Navigate to={SITE_URLS.velshop} replace />} />
-            <Route path="/seller/*" element={<Navigate to={SITE_URLS.velseller} replace />} />
-            <Route path="/center/*" element={<Navigate to={SITE_URLS.velcenter} replace />} />
-            <Route path="/dashboard/*" element={<Navigate to={SITE_URLS.velseller} replace />} />
-            <Route path="/reorder/*" element={<Navigate to={SITE_URLS.velseller} replace />} />
+                Old single-app paths hard-redirect to the right site entry. */}
+            <Route path="/shop/*" element={<HardRedirect to={SITE_URLS.velshop} />} />
+            <Route path="/seller/*" element={<HardRedirect to={SITE_URLS.velseller} />} />
+            <Route path="/center/*" element={<HardRedirect to={SITE_URLS.velcenter} />} />
+            <Route path="/dashboard/*" element={<HardRedirect to={SITE_URLS.velseller} />} />
+            <Route path="/reorder/*" element={<HardRedirect to={SITE_URLS.velseller} />} />
 
             <Route path="*" element={<NotFound />} />
           </Routes>
