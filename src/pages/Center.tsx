@@ -37,7 +37,13 @@ import {
   reorderInfo,
   type Product,
 } from "@/lib/reorder";
-import { formatBaht, ROLE_META } from "@/lib/shop";
+import {
+  ORDER_STATUS_META,
+  ROLE_META,
+  formatBaht,
+  shortOrderId,
+  type OrderStatus,
+} from "@/lib/shop";
 import { useMutation, useQuery } from "convex/react";
 import {
   AlertTriangle,
@@ -61,7 +67,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router";
 import { toast } from "sonner";
 
-type Tab = "overview" | "intel" | "users" | "products" | "settings";
+type Tab = "overview" | "orders" | "intel" | "users" | "products" | "settings";
 
 export default function Center() {
   const navigate = useNavigate();
@@ -70,9 +76,11 @@ export default function Center() {
   const products = useQuery(api.products.listAll);
   const users = useQuery(api.users.listUsers);
   const settings = useQuery(api.center.getSettings);
+  const orders = useQuery(api.orders.allOrders);
   const setRole = useMutation(api.users.setRole);
   const togglePublished = useMutation(api.products.togglePublished);
   const updateSettings = useMutation(api.center.updateSettings);
+  const updateOrderStatus = useMutation(api.orders.updateStatus);
 
   // ---- Intelligence rows (computed from learned cycles) ----
   const intelRows = useMemo(() => {
@@ -93,6 +101,17 @@ export default function Center() {
   }, [products]);
 
   const dueCount = intelRows.filter((r) => r.info.status === "due").length;
+  const pendingOrders = (orders ?? []).filter((o) => o.order.status === "pending").length;
+
+  const handleOrderStatus = async (orderId: Id<"orders">, status: OrderStatus) => {
+    try {
+      await updateOrderStatus({ orderId, status });
+      toast.success("อัปเดตสถานะออเดอร์แล้ว");
+    } catch (error) {
+      console.error("Update order status error:", error);
+      toast.error("อัปเดตไม่สำเร็จ กรุณาลองอีกครั้ง");
+    }
+  };
 
   // ---- Settings form ----
   const [form, setForm] = useState({
@@ -196,7 +215,7 @@ export default function Center() {
             ศูนย์ควบคุม Velnox
           </h1>
           <p className="mt-1.5 text-sm text-slate-500">
-            ภาพรวมทั้งธุรกิจ ระบบอัจฉริยะ และการจัดการผู้ใช้ในที่เดียว
+            ภาพรวมทั้งธุรกิจ ออเดอร์ ระบบอัจฉริยะ และการจัดการผู้ใช้ในที่เดียว
           </p>
         </div>
 
@@ -204,6 +223,14 @@ export default function Center() {
           <TabsList className="w-full justify-start overflow-x-auto rounded-[12px] border border-slate-200 bg-white p-1 sm:w-auto">
             <TabsTrigger value="overview" className="gap-1.5 rounded-[10px]">
               <TrendingUp className="size-4" /> ภาพรวม
+            </TabsTrigger>
+            <TabsTrigger value="orders" className="gap-1.5 rounded-[10px]">
+              <ShoppingBag className="size-4" /> ออเดอร์
+              {pendingOrders > 0 && (
+                <span className="rounded-full bg-rose-500 px-1.5 text-[10px] font-bold text-white">
+                  {pendingOrders}
+                </span>
+              )}
             </TabsTrigger>
             <TabsTrigger value="intel" className="gap-1.5 rounded-[10px]">
               <BrainCircuit className="size-4" /> Intelligence
@@ -272,11 +299,110 @@ export default function Center() {
                     <p className="mt-1 text-2xl font-bold tabular-nums text-sky-700">
                       {overview?.pendingOrders ?? 0} ออเดอร์
                     </p>
-                    <p className="mt-0.5 text-xs text-sky-600/70">ไปที่ velseller → ออเดอร์</p>
+                    <p className="mt-0.5 text-xs text-sky-600/70">จัดการได้ที่แท็บ ออเดอร์</p>
                   </div>
                 </div>
               </CardContent>
             </Card>
+          </TabsContent>
+
+          {/* ============ Orders ============ */}
+          <TabsContent value="orders" className="mt-6">
+            {orders === undefined ? (
+              <div className="space-y-4">
+                {Array.from({ length: 3 }).map((_, i) => (
+                  <div
+                    key={i}
+                    className="h-16 animate-pulse rounded-xl border border-slate-200 bg-white"
+                  />
+                ))}
+              </div>
+            ) : orders.length === 0 ? (
+              <div className="flex flex-col items-center rounded-2xl border border-dashed border-slate-300 bg-white px-6 py-16 text-center">
+                <span className="flex size-14 items-center justify-center rounded-2xl bg-[#ECFDF5]">
+                  <ShoppingBag className="size-7 text-[#10B981]" />
+                </span>
+                <h2 className="mt-5 text-lg font-semibold text-slate-900">ยังไม่มีออเดอร์</h2>
+                <p className="mt-1.5 max-w-sm text-sm leading-6 text-slate-500">
+                  เมื่อลูกค้าสั่งซื้อจาก velshop ออเดอร์ทั้งหมดจะถูกรวมอยู่ที่นี่
+                </p>
+              </div>
+            ) : (
+              <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
+                <Table>
+                  <TableHeader>
+                    <TableRow className="hover:bg-transparent">
+                      <TableHead className="pl-5 text-slate-400">ออเดอร์ / ลูกค้า</TableHead>
+                      <TableHead className="text-slate-400">วันที่</TableHead>
+                      <TableHead className="text-slate-400">รายการ</TableHead>
+                      <TableHead className="text-right text-slate-400">ยอดรวม</TableHead>
+                      <TableHead className="pr-5 text-right text-slate-400">สถานะ</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {orders.map(({ order, items }) => {
+                      const meta = ORDER_STATUS_META[order.status];
+                      return (
+                        <TableRow key={order._id} className="hover:bg-slate-50/60">
+                          <TableCell className="pl-5">
+                            <p className="font-medium text-slate-900">{shortOrderId(order._id)}</p>
+                            <p className="text-xs text-slate-400">
+                              {order.customerName} · {order.customerPhone}
+                            </p>
+                          </TableCell>
+                          <TableCell>
+                            <p className="text-sm text-slate-600">{formatThaiDate(order.createdAt)}</p>
+                            <p className="text-xs text-slate-400">{order.itemCount} ชิ้น</p>
+                          </TableCell>
+                          <TableCell>
+                            <div className="max-w-56 space-y-0.5">
+                              {items.slice(0, 2).map((item) => (
+                                <p key={item._id} className="truncate text-sm text-slate-600">
+                                  {item.productName} × {item.quantity} {item.unit}
+                                </p>
+                              ))}
+                              {items.length > 2 && (
+                                <p className="text-xs text-slate-400">+{items.length - 2} รายการ</p>
+                              )}
+                            </div>
+                          </TableCell>
+                          <TableCell className="text-right">
+                            <p className="font-semibold tabular-nums text-slate-900">
+                              {formatBaht(order.total)}
+                            </p>
+                          </TableCell>
+                          <TableCell className="pr-5 text-right">
+                            <Select
+                              value={order.status}
+                              onValueChange={(v) =>
+                                handleOrderStatus(order._id, v as OrderStatus)
+                              }
+                            >
+                              <SelectTrigger className="ml-auto h-9 w-36 rounded-[10px] border-slate-200 text-sm">
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {(
+                                  ["pending", "confirmed", "completed", "cancelled"] as OrderStatus[]
+                                ).map((s) => (
+                                  <SelectItem key={s} value={s}>
+                                    {ORDER_STATUS_META[s].label}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
+                  </TableBody>
+                </Table>
+              </div>
+            )}
+            <p className="mt-4 flex items-center gap-1.5 text-xs text-slate-400">
+              <ShoppingBag className="size-3.5 text-[#10B981]" />
+              ออเดอร์จาก velshop มาที่นี่ — เปลี่ยนสถานะได้ทันที และสต็อกจะถูกคืนอัตโนมัติเมื่อยกเลิก
+            </p>
           </TabsContent>
 
           {/* ============ Intelligence ============ */}
