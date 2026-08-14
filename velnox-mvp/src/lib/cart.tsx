@@ -1,4 +1,3 @@
-import type { Doc, Id } from "@/convex/_generated/dataModel";
 import {
   createContext,
   useContext,
@@ -9,7 +8,7 @@ import {
 } from "react";
 
 export interface CartLine {
-  productId: Id<"products">;
+  productId: string;
   name: string;
   unit: string;
   price: number;
@@ -17,11 +16,20 @@ export interface CartLine {
   stock: number;
 }
 
+/** Minimal product shape the cart needs (works with both Convex & Neon docs). */
+export interface AddToCartProduct {
+  id: string;
+  name: string;
+  unit: string;
+  price?: number | null;
+  stock: number;
+}
+
 interface CartContextValue {
   lines: CartLine[];
   count: number;
   total: number;
-  add: (product: Doc<"products">, qty?: number) => void;
+  add: (product: AddToCartProduct, qty?: number) => void;
   setQty: (productId: string, qty: number) => void;
   remove: (productId: string) => void;
   clear: () => void;
@@ -49,14 +57,14 @@ export function CartProvider({ children }: { children: ReactNode }) {
     }
   }, [lines]);
 
-  const add = (product: Doc<"products">, qty = 1) => {
+  const add = (product: AddToCartProduct, qty = 1) => {
     const price = product.price ?? 0;
-    if (price <= 0 || product.currentStock <= 0) return;
+    if (price <= 0 || product.stock <= 0) return;
     setLines((prev) => {
-      const existing = prev.find((l) => l.productId === product._id);
+      const existing = prev.find((l) => l.productId === product.id);
       if (existing) {
         return prev.map((l) =>
-          l.productId === product._id
+          l.productId === product.id
             ? { ...l, qty: Math.min(l.stock, l.qty + qty) }
             : l,
         );
@@ -64,12 +72,12 @@ export function CartProvider({ children }: { children: ReactNode }) {
       return [
         ...prev,
         {
-          productId: product._id,
+          productId: product.id,
           name: product.name,
           unit: product.unit,
           price,
-          qty: Math.min(product.currentStock, qty),
-          stock: product.currentStock,
+          qty: Math.min(product.stock, qty),
+          stock: product.stock,
         },
       ];
     });

@@ -2,21 +2,41 @@ import { authTables } from "@convex-dev/auth/server";
 import { defineSchema, defineTable } from "convex/server";
 import { Infer, v } from "convex/values";
 
-// default user roles. can add / remove based on the project as needed
-// Velnox has 3 sites sharing one backend: velshop (customer), velseller
-// (seller/owner tools), velcenter (admin/control center).
+// Velnox has 3 sites sharing one backend + database:
+// - velshop  (customer / shopper)
+// - velseller (seller / merchant who opened a shop with us)
+// - velcenter (company-only: owner / admin / staff with scoped permissions)
 export const ROLES = {
+  // velcenter: company owner — everything, including managing employees
+  OWNER: "owner",
+  // velcenter: department-scoped admin (e.g. marketing) — business data but no employee management
   ADMIN: "admin",
+  // velcenter: employee with view access to business numbers
+  STAFF: "staff",
+  // velseller: merchant who opened a shop
   SELLER: "seller",
+  // velshop: shopper (default)
   CUSTOMER: "customer",
 } as const;
 
 export const roleValidator = v.union(
+  v.literal(ROLES.OWNER),
   v.literal(ROLES.ADMIN),
+  v.literal(ROLES.STAFF),
   v.literal(ROLES.SELLER),
   v.literal(ROLES.CUSTOMER),
 );
 export type Role = Infer<typeof roleValidator>;
+
+// Department scoping for velcenter employees (owner manages who sees what).
+export const departmentValidator = v.union(
+  v.literal("marketing"),
+  v.literal("sales"),
+  v.literal("operations"),
+  v.literal("finance"),
+  v.literal("general"),
+);
+export type Department = Infer<typeof departmentValidator>;
 
 // Business goal categories for the owner dashboard
 export const goalCategoryValidator = v.union(
@@ -69,6 +89,7 @@ const schema = defineSchema(
       isAnonymous: v.optional(v.boolean()), // is the user anonymous. do not remove
 
       role: v.optional(roleValidator), // role of the user. do not remove
+      department: v.optional(departmentValidator), // velcenter department scope
     }).index("email", ["email"]), // index for the email. do not remove or modify
 
     // business goals / targets for the owner goals dashboard
@@ -146,6 +167,60 @@ const schema = defineSchema(
       price: v.number(), // unit price snapshot (THB)
       subtotal: v.number(),
     }).index("by_order", ["orderId"]),
+
+    // VelRepeat analytics: every "สนใจ / view" click a shopper makes on velshop.
+    // Data is kept per customer so Velnox can learn who is interested in what
+    // and recommend the right products to the right person.
+    // NOTE: productId is the NEON product id (Commerce Core lives in Neon).
+    productViews: defineTable({
+      userId: v.optional(v.id("users")), // null = signed-out visitor
+      productId: v.id("products"),
+      viewedAt: v.number(),
+    })
+      .index("by_product", ["productId"])
+      .index("by_user", ["userId"]),
+
+    // VelRepeat interests for the Neon storefront (legacy productViews above
+    // are kept for the legacy Convex storefront; this table tracks clicks on
+    // products whose source of truth lives in Neon).
+    interests: defineTable({
+      userId: v.optional(v.id("users")), // null = signed-out visitor
+      productId: v.string(), // Neon product id
+      viewedAt: v.number(),
+    })
+      .index("by_product", ["productId"])
+      .index("by_user", ["userId"]),
+
+    // Neon -> Convex business event bridge (realtime/intelligence foundation).
+    // The commerce layer writes an event here whenever a business fact changes
+    // in Neon (OrderCreated, PaymentConfirmed, OrderStatusChanged, ...).
+    businessEvents: defineTable({
+      type: v.string(),
+      entityId: v.string(), // Neon entity id (order id, product id, ...)
+      payload: v.any(),
+      createdAt: v.number(),
+    })
+      .index("by_entity", ["entityId"])
+      .index("by_type", ["type"]),
+
+    // Monthly subscription purchases (velshop "สั่งรายเดือน"): the shop
+    // auto-places a new order every intervalDays for the customer.
+    subscriptions: defineTable({
+      userId: v.id("users"),
+      productId: v.id("products"),
+      quantity: v.number(),
+      intervalDays: v.number(),
+      status: v.union(
+        v.literal("active"),
+        v.literal("paused"),
+        v.literal("cancelled"),
+      ),
+      nextOrderAt: v.number(),
+      createdAt: v.number(),
+      updatedAt: v.number(),
+    })
+      .index("by_user", ["userId"])
+      .index("by_product", ["productId"]),
 
     // single store settings doc (shopName, contact info, announcement)
     storeSettings: defineTable({

@@ -47,6 +47,8 @@ import {
   Boxes,
   CalendarClock,
   CheckCircle2,
+  Eye,
+  EyeOff,
   MinusCircle,
   MoreHorizontal,
   Package,
@@ -62,6 +64,7 @@ export default function Reorder() {
   const products = useQuery(api.products.list);
   const purchases = useQuery(api.products.listPurchases, { limit: 10 });
   const removeProduct = useMutation(api.products.remove);
+  const togglePublished = useMutation(api.products.togglePublished);
 
   const [formOpen, setFormOpen] = useState(false);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
@@ -114,6 +117,19 @@ export default function Reorder() {
       .map((p) => ({ purchase: p, product: byId.get(p.productId)! }))
       .slice(0, 6);
   }, [purchases, byId]);
+
+  const handleTogglePublish = async (product: Product) => {
+    try {
+      await togglePublished({
+        productId: product._id,
+        published: !product.published,
+      });
+      toast.success(product.published ? "ปิดการขายหน้าร้านแล้ว" : "ประกาศขายหน้าร้านแล้ว 🛍️");
+    } catch (error) {
+      console.error("Toggle publish error:", error);
+      toast.error(error instanceof Error ? error.message : "ไม่สำเร็จ กรุณาลองอีกครั้ง");
+    }
+  };
 
   const handleDelete = async () => {
     if (!deleteProduct) return;
@@ -474,6 +490,19 @@ export default function Reorder() {
                                 >
                                   <MinusCircle className="size-4" />
                                   บันทึกการขาย / ใช้ไป
+                                </DropdownMenuItem>
+                                <DropdownMenuItem
+                                  className="cursor-pointer"
+                                  onClick={() => handleTogglePublish(product)}
+                                >
+                                  {product.published ? (
+                                    <EyeOff className="size-4" />
+                                  ) : (
+                                    <Eye className="size-4" />
+                                  )}
+                                  {product.published
+                                    ? "ปิดการขายหน้าร้าน"
+                                    : "ประกาศขายหน้าร้าน"}
                                 </DropdownMenuItem>
                                 <DropdownMenuSeparator />
                                 <DropdownMenuItem

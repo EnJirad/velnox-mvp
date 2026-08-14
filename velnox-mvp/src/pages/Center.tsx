@@ -13,7 +13,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Table,
@@ -26,6 +25,7 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import { api } from "@/convex/_generated/api";
 import type { Id } from "@/convex/_generated/dataModel";
+import { useAuth } from "@/hooks/use-auth";
 import {
   PRODUCT_CATEGORY_META,
   STATUS_META,
@@ -37,13 +37,20 @@ import {
   reorderInfo,
   type Product,
 } from "@/lib/reorder";
-import { formatBaht, ROLE_META } from "@/lib/shop";
+import {
+  ORDER_STATUS_META,
+  ROLE_META,
+  formatBaht,
+  shortOrderId,
+  type OrderStatus,
+} from "@/lib/shop";
 import { useMutation, useQuery } from "convex/react";
 import {
   AlertTriangle,
   BadgeCheck,
   Boxes,
   BrainCircuit,
+  Crown,
   Loader2,
   Megaphone,
   Package,
@@ -61,18 +68,66 @@ import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router";
 import { toast } from "sonner";
 
-type Tab = "overview" | "intel" | "users" | "products" | "settings";
+type Tab = "overview" | "orders" | "intel" | "products" | "staff" | "settings";
+
+const DEPARTMENTS: { id: string; label: string }[] = [
+  { id: "general", label: "ทั่วไป" },
+  { id: "marketing", label: "การตลาด" },
+  { id: "sales", label: "ฝ่ายขาย" },
+  { id: "operations", label: "ปฏิบัติการ" },
+  { id: "finance", label: "การเงิน" },
+];
+
+const DEPARTMENT_LABEL: Record<string, string> = {
+  general: "ทั่วไป",
+  marketing: "การตลาด",
+  sales: "ฝ่ายขาย",
+  operations: "ปฏิบัติการ",
+  finance: "การเงิน",
+};
+
+/**
+ * velcenter permission model (company-only):
+ * - owner:  everything, including managing employees
+ * - admin:  business data + manage orders, but NO employee management
+ *           (department-scoped in production; e.g. marketing admin)
+ * - staff:  view business numbers only (overview / orders / intel / products)
+ */
+function canSeeTab(tab: Tab, role?: string, department?: string): boolean {
+  switch (tab) {
+    case "overview":
+    case "orders":
+    case "intel":
+    case "products":
+      return true;
+    case "staff":
+      return role === "owner";
+    case "settings":
+      return role === "owner" || (role === "admin" && department === "general");
+  }
+}
 
 export default function Center() {
   const navigate = useNavigate();
+  const { user } = useAuth();
+  const userRole = user?.role;
+  const userDepartment = user?.department;
+
+  const isOwner = userRole === "owner";
+  const canManageOrders = userRole !== "staff";
+
   const [tab, setTab] = useState<Tab>("overview");
+  const activeTab: Tab = canSeeTab(tab, userRole, userDepartment) ? tab : "overview";
+
   const overview = useQuery(api.center.overview);
   const products = useQuery(api.products.listAll);
+  // Employee list returns [] for non-owners (the staff tab is owner-only anyway).
   const users = useQuery(api.users.listUsers);
   const settings = useQuery(api.center.getSettings);
-  const setRole = useMutation(api.users.setRole);
-  const togglePublished = useMutation(api.products.togglePublished);
+  const orders = useQuery(api.orders.allOrders);
+  const setUserAccess = useMutation(api.users.setUserAccess);
   const updateSettings = useMutation(api.center.updateSettings);
+  const updateOrderStatus = useMutation(api.orders.updateStatus);
 
   // ---- Intelligence rows (computed from learned cycles) ----
   const intelRows = useMemo(() => {
@@ -93,6 +148,42 @@ export default function Center() {
   }, [products]);
 
   const dueCount = intelRows.filter((r) => r.info.status === "due").length;
+  const pendingOrders = (orders ?? []).filter((o) => o.order.status === "pending").length;
+
+  const handleOrderStatus = async (orderId: Id<"orders">, status: OrderStatus) => {
+    if (!canManageOrders) return;
+    try {
+      await updateOrderStatus({ orderId, status });
+      toast.success("อัปเดตสถานะออเดอร์แล้ว");
+    } catch (error) {
+      console.error("Update order status error:", error);
+      toast.error("อัปเดตไม่สำเร็จ กรุณาลองอีกครั้ง");
+    }
+  };
+
+  const handleSetUserAccess = async (
+    userId: Id<"users">,
+    role: "customer" | "seller" | "admin" | "owner" | "staff",
+    department?: string,
+  ) => {
+    try {
+      await setUserAccess({
+        userId,
+        role,
+        department: department as
+          | "general"
+          | "marketing"
+          | "sales"
+          | "operations"
+          | "finance"
+          | undefined,
+      });
+      toast.success("อัปเดตสิทธิ์แล้ว");
+    } catch (error) {
+      console.error("Set access error:", error);
+      toast.error(error instanceof Error ? error.message : "อัปเดตไม่สำเร็จ");
+    }
+  };
 
   // ---- Settings form ----
   const [form, setForm] = useState({
@@ -138,26 +229,6 @@ export default function Center() {
     }
   };
 
-  const handleTogglePublished = async (product: Product, published: boolean) => {
-    try {
-      await togglePublished({ productId: product._id, published });
-      toast.success(published ? "ประกาศขายแล้ว" : "ปิดการขายแล้ว");
-    } catch (error) {
-      console.error("Toggle publish error:", error);
-      toast.error(error instanceof Error ? error.message : "ไม่สำเร็จ กรุณาลองอีกครั้ง");
-    }
-  };
-
-  const handleSetRole = async (userId: Id<"users">, role: "customer" | "seller" | "admin") => {
-    try {
-      await setRole({ userId, role });
-      toast.success("อัปเดตบทบาทแล้ว");
-    } catch (error) {
-      console.error("Set role error:", error);
-      toast.error("อัปเดตไม่สำเร็จ กรุณาลองอีกครั้ง");
-    }
-  };
-
   const stats = useMemo(() => {
     const o = overview;
     return [
@@ -190,20 +261,41 @@ export default function Center() {
         <div>
           <p className="flex items-center gap-1.5 text-sm font-medium text-slate-400">
             <ShieldCheck className="size-4 text-[#10B981]" />
-            velcenter · ศูนย์กลางธุรกิจ
+            velcenter · ศูนย์กลางบริษัท
+            {userRole && (
+              <Badge className="ml-1 gap-1 rounded-full bg-sky-50 text-sky-700 ring-1 ring-inset ring-sky-600/15">
+                {userRole === "owner" ? (
+                  <>
+                    <Crown className="size-3" />
+                    เจ้าของบริษัท
+                  </>
+                ) : (
+                  ROLE_META[userRole as keyof typeof ROLE_META]?.label ?? userRole
+                )}
+                {userDepartment && ` · ${DEPARTMENT_LABEL[userDepartment] ?? userDepartment}`}
+              </Badge>
+            )}
           </p>
           <h1 className="mt-1 text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl">
             ศูนย์ควบคุม Velnox
           </h1>
           <p className="mt-1.5 text-sm text-slate-500">
-            ภาพรวมทั้งธุรกิจ ระบบอัจฉริยะ และการจัดการผู้ใช้ในที่เดียว
+            ภาพรวมทั้งบริษัท ออเดอร์ ระบบอัจฉริยะ และสิทธิ์การเข้าถึงตามยศ
           </p>
         </div>
 
-        <Tabs value={tab} onValueChange={(v) => setTab(v as Tab)} className="mt-7">
+        <Tabs value={activeTab} onValueChange={(v) => setTab(v as Tab)} className="mt-7">
           <TabsList className="w-full justify-start overflow-x-auto rounded-[12px] border border-slate-200 bg-white p-1 sm:w-auto">
             <TabsTrigger value="overview" className="gap-1.5 rounded-[10px]">
               <TrendingUp className="size-4" /> ภาพรวม
+            </TabsTrigger>
+            <TabsTrigger value="orders" className="gap-1.5 rounded-[10px]">
+              <ShoppingBag className="size-4" /> ออเดอร์
+              {pendingOrders > 0 && (
+                <span className="rounded-full bg-rose-500 px-1.5 text-[10px] font-bold text-white">
+                  {pendingOrders}
+                </span>
+              )}
             </TabsTrigger>
             <TabsTrigger value="intel" className="gap-1.5 rounded-[10px]">
               <BrainCircuit className="size-4" /> Intelligence
@@ -213,15 +305,19 @@ export default function Center() {
                 </span>
               )}
             </TabsTrigger>
-            <TabsTrigger value="users" className="gap-1.5 rounded-[10px]">
-              <Users className="size-4" /> ผู้ใช้
-            </TabsTrigger>
             <TabsTrigger value="products" className="gap-1.5 rounded-[10px]">
               <Package className="size-4" /> สินค้า
             </TabsTrigger>
-            <TabsTrigger value="settings" className="gap-1.5 rounded-[10px]">
-              <Settings className="size-4" /> ตั้งค่าร้าน
-            </TabsTrigger>
+            {isOwner && (
+              <TabsTrigger value="staff" className="gap-1.5 rounded-[10px]">
+                <Users className="size-4" /> พนักงาน
+              </TabsTrigger>
+            )}
+            {canSeeTab("settings", userRole, userDepartment) && (
+              <TabsTrigger value="settings" className="gap-1.5 rounded-[10px]">
+                <Settings className="size-4" /> ตั้งค่าร้าน
+              </TabsTrigger>
+            )}
           </TabsList>
 
           {/* ============ Overview ============ */}
@@ -272,11 +368,118 @@ export default function Center() {
                     <p className="mt-1 text-2xl font-bold tabular-nums text-sky-700">
                       {overview?.pendingOrders ?? 0} ออเดอร์
                     </p>
-                    <p className="mt-0.5 text-xs text-sky-600/70">ไปที่ velseller → ออเดอร์</p>
+                    <p className="mt-0.5 text-xs text-sky-600/70">จัดการได้ที่แท็บ ออเดอร์</p>
                   </div>
                 </div>
               </CardContent>
             </Card>
+          </TabsContent>
+
+          {/* ============ Orders ============ */}
+          <TabsContent value="orders" className="mt-6">
+            {orders === undefined ? (
+              <div className="space-y-4">
+                {Array.from({ length: 3 }).map((_, i) => (
+                  <div
+                    key={i}
+                    className="h-16 animate-pulse rounded-xl border border-slate-200 bg-white"
+                  />
+                ))}
+              </div>
+            ) : orders.length === 0 ? (
+              <div className="flex flex-col items-center rounded-2xl border border-dashed border-slate-300 bg-white px-6 py-16 text-center">
+                <span className="flex size-14 items-center justify-center rounded-2xl bg-[#ECFDF5]">
+                  <ShoppingBag className="size-7 text-[#10B981]" />
+                </span>
+                <h2 className="mt-5 text-lg font-semibold text-slate-900">ยังไม่มีออเดอร์</h2>
+                <p className="mt-1.5 max-w-sm text-sm leading-6 text-slate-500">
+                  เมื่อลูกค้าสั่งซื้อจาก velshop ออเดอร์ทั้งหมดจะถูกรวมอยู่ที่นี่
+                </p>
+              </div>
+            ) : (
+              <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
+                <Table>
+                  <TableHeader>
+                    <TableRow className="hover:bg-transparent">
+                      <TableHead className="pl-5 text-slate-400">ออเดอร์ / ลูกค้า</TableHead>
+                      <TableHead className="text-slate-400">วันที่</TableHead>
+                      <TableHead className="text-slate-400">รายการ</TableHead>
+                      <TableHead className="text-right text-slate-400">ยอดรวม</TableHead>
+                      <TableHead className="pr-5 text-right text-slate-400">สถานะ</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {orders.map(({ order, items }) => {
+                      const meta = ORDER_STATUS_META[order.status];
+                      return (
+                        <TableRow key={order._id} className="hover:bg-slate-50/60">
+                          <TableCell className="pl-5">
+                            <p className="font-medium text-slate-900">{shortOrderId(order._id)}</p>
+                            <p className="text-xs text-slate-400">
+                              {order.customerName} · {order.customerPhone}
+                            </p>
+                          </TableCell>
+                          <TableCell>
+                            <p className="text-sm text-slate-600">{formatThaiDate(order.createdAt)}</p>
+                            <p className="text-xs text-slate-400">{order.itemCount} ชิ้น</p>
+                          </TableCell>
+                          <TableCell>
+                            <div className="max-w-56 space-y-0.5">
+                              {items.slice(0, 2).map((item) => (
+                                <p key={item._id} className="truncate text-sm text-slate-600">
+                                  {item.productName} × {item.quantity} {item.unit}
+                                </p>
+                              ))}
+                              {items.length > 2 && (
+                                <p className="text-xs text-slate-400">+{items.length - 2} รายการ</p>
+                              )}
+                            </div>
+                          </TableCell>
+                          <TableCell className="text-right">
+                            <p className="font-semibold tabular-nums text-slate-900">
+                              {formatBaht(order.total)}
+                            </p>
+                          </TableCell>
+                          <TableCell className="pr-5 text-right">
+                            {canManageOrders ? (
+                              <Select
+                                value={order.status}
+                                onValueChange={(v) =>
+                                  handleOrderStatus(order._id, v as OrderStatus)
+                                }
+                              >
+                                <SelectTrigger className="ml-auto h-9 w-36 rounded-[10px] border-slate-200 text-sm">
+                                  <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  {(
+                                    ["pending", "confirmed", "completed", "cancelled"] as OrderStatus[]
+                                  ).map((s) => (
+                                    <SelectItem key={s} value={s}>
+                                      {ORDER_STATUS_META[s].label}
+                                    </SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                            ) : (
+                              <Badge className={`gap-1.5 rounded-full ring-1 ring-inset ${meta.badge}`}>
+                                <span className={`size-1.5 rounded-full ${meta.dot}`} />
+                                {meta.label}
+                              </Badge>
+                            )}
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
+                  </TableBody>
+                </Table>
+              </div>
+            )}
+            {!canManageOrders && (
+              <p className="mt-4 text-xs text-slate-400">
+                โหมดพนักงาน: ดูข้อมูลได้ แต่เปลี่ยนสถานะออเดอร์ได้เฉพาะผู้ดูแลและเจ้าของบริษัท
+              </p>
+            )}
           </TabsContent>
 
           {/* ============ Intelligence ============ */}
@@ -382,68 +585,17 @@ export default function Center() {
             </p>
           </TabsContent>
 
-          {/* ============ Users ============ */}
-          <TabsContent value="users" className="mt-6">
-            <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
-              <Table>
-                <TableHeader>
-                  <TableRow className="hover:bg-transparent">
-                    <TableHead className="pl-5 text-slate-400">ผู้ใช้</TableHead>
-                    <TableHead className="text-slate-400">บทบาท</TableHead>
-                    <TableHead className="pr-5 text-right text-slate-400">เปลี่ยนบทบาท</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {(users ?? []).map((u) => {
-                    const role = u.role ?? "customer";
-                    const meta = ROLE_META[role as keyof typeof ROLE_META] ?? ROLE_META.customer;
-                    return (
-                      <TableRow key={u._id} className="hover:bg-slate-50/60">
-                        <TableCell className="pl-5">
-                          <p className="font-medium text-slate-900">{u.name || "ผู้ใช้ที่ยังไม่ตั้งชื่อ"}</p>
-                          <p className="text-xs text-slate-400">{u.email ?? "บัญชีผู้เยี่ยมชม"}</p>
-                        </TableCell>
-                        <TableCell>
-                          <Badge className={`gap-1 rounded-full ring-1 ring-inset ${meta.badge}`}>
-                            {role === "admin" && <BadgeCheck className="size-3" />}
-                            {meta.label}
-                          </Badge>
-                        </TableCell>
-                        <TableCell className="pr-5 text-right">
-                          <Select
-                            value={role}
-                            onValueChange={(v) =>
-                              handleSetRole(u._id, v as "customer" | "seller" | "admin")
-                            }
-                          >
-                            <SelectTrigger className="ml-auto h-9 w-40 rounded-[10px] border-slate-200 text-sm">
-                              <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="customer">ลูกค้า</SelectItem>
-                              <SelectItem value="seller">เจ้าของร้าน</SelectItem>
-                              <SelectItem value="admin">ผู้ดูแลศูนย์กลาง</SelectItem>
-                            </SelectContent>
-                          </Select>
-                        </TableCell>
-                      </TableRow>
-                    );
-                  })}
-                </TableBody>
-              </Table>
-            </div>
-          </TabsContent>
-
-          {/* ============ Products ============ */}
+          {/* ============ Products (view-only registry) ============ */}
           <TabsContent value="products" className="mt-6">
             <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
               <Table>
                 <TableHeader>
                   <TableRow className="hover:bg-transparent">
                     <TableHead className="pl-5 text-slate-400">สินค้า</TableHead>
+                    <TableHead className="text-slate-400">เจ้าของร้าน</TableHead>
                     <TableHead className="text-slate-400">ราคา</TableHead>
                     <TableHead className="text-slate-400">สต็อก</TableHead>
-                    <TableHead className="pr-5 text-right text-slate-400">ประกาศขาย</TableHead>
+                    <TableHead className="pr-5 text-right text-slate-400">สถานะ</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -464,6 +616,9 @@ export default function Center() {
                           </div>
                         </TableCell>
                         <TableCell>
+                          <p className="text-sm text-slate-600">{p.userId}</p>
+                        </TableCell>
+                        <TableCell>
                           <p className="font-medium tabular-nums text-slate-900">
                             {p.price !== undefined ? formatBaht(p.price) : "—"}
                           </p>
@@ -475,11 +630,15 @@ export default function Center() {
                           </p>
                         </TableCell>
                         <TableCell className="pr-5 text-right">
-                          <Switch
-                            checked={p.published ?? false}
-                            onCheckedChange={(v) => handleTogglePublished(p, v)}
-                            aria-label={`ประกาศขาย ${p.name}`}
-                          />
+                          {p.published ? (
+                            <Badge className="gap-1 rounded-full bg-emerald-50 text-emerald-700 ring-1 ring-inset ring-emerald-600/15">
+                              ประกาศขาย
+                            </Badge>
+                          ) : (
+                            <Badge className="gap-1 rounded-full bg-slate-100 text-slate-500 ring-1 ring-inset ring-slate-600/10">
+                              ยังไม่ประกาศ
+                            </Badge>
+                          )}
                         </TableCell>
                       </TableRow>
                     );
@@ -487,92 +646,207 @@ export default function Center() {
                 </TableBody>
               </Table>
             </div>
-            {products !== undefined && products.length === 0 && (
-              <p className="mt-4 text-center text-sm text-slate-400">
-                ยังไม่มีสินค้า — เพิ่มสินค้าได้ที่ velseller → Smart Reorder
-              </p>
-            )}
+            <p className="mt-4 flex items-center gap-1.5 text-xs text-slate-400">
+              <Package className="size-3.5 text-[#10B981]" />
+              เปิด-ปิดประกาศขายสินค้า: เจ้าของร้านจัดการได้ที่ velseller → Smart Reorder
+            </p>
           </TabsContent>
 
+          {/* ============ Staff (owner only) ============ */}
+          {isOwner && (
+            <TabsContent value="staff" className="mt-6">
+              <Card className="mb-4 max-w-2xl border-slate-200 shadow-none">
+                <CardContent className="pt-5">
+                  <p className="flex items-center gap-2 text-sm text-slate-600">
+                    <Crown className="size-4 text-amber-500" />
+                    เฉพาะเจ้าของบริษัทเท่านั้นที่จัดการสิทธิ์พนักงาน — admin/พนักงานดูข้อมูลได้แต่แตะตรงนี้ไม่ได้
+                  </p>
+                </CardContent>
+              </Card>
+              <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
+                <Table>
+                  <TableHeader>
+                    <TableRow className="hover:bg-transparent">
+                      <TableHead className="pl-5 text-slate-400">พนักงาน</TableHead>
+                      <TableHead className="text-slate-400">บทบาท</TableHead>
+                      <TableHead className="text-slate-400">ฝ่าย</TableHead>
+                      <TableHead className="pr-5 text-right text-slate-400">สิทธิ์</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {(users ?? []).map((u) => {
+                      const role = u.role ?? "customer";
+                      const meta =
+                        ROLE_META[role as keyof typeof ROLE_META] ?? ROLE_META.customer;
+                      const isSelf = u._id === user?._id;
+                      return (
+                        <TableRow key={u._id} className="hover:bg-slate-50/60">
+                          <TableCell className="pl-5">
+                            <p className="font-medium text-slate-900">
+                              {u.name || "ผู้ใช้ที่ยังไม่ตั้งชื่อ"}
+                              {isSelf && <span className="ml-1.5 text-xs text-slate-400">(คุณ)</span>}
+                            </p>
+                            <p className="text-xs text-slate-400">{u.email ?? "บัญชีผู้เยี่ยมชม"}</p>
+                          </TableCell>
+                          <TableCell>
+                            {isSelf ? (
+                              <Badge className={`gap-1 rounded-full ring-1 ring-inset ${meta.badge}`}>
+                                {role === "owner" && <Crown className="size-3" />}
+                                {role === "admin" && <BadgeCheck className="size-3" />}
+                                {meta.label}
+                              </Badge>
+                            ) : (
+                              <Select
+                                value={role}
+                                onValueChange={(v) =>
+                                  handleSetUserAccess(
+                                    u._id,
+                                    v as "customer" | "seller" | "admin" | "owner" | "staff",
+                                    u.department,
+                                  )
+                                }
+                              >
+                                <SelectTrigger className="h-9 w-40 rounded-[10px] border-slate-200 text-sm">
+                                  <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="customer">ลูกค้า</SelectItem>
+                                  <SelectItem value="seller">พ่อค้า / ร้านค้า</SelectItem>
+                                  <SelectItem value="staff">พนักงาน (ดูข้อมูล)</SelectItem>
+                                  <SelectItem value="admin">ผู้ดูแลฝ่าย</SelectItem>
+                                  <SelectItem value="owner">เจ้าของบริษัท</SelectItem>
+                                </SelectContent>
+                              </Select>
+                            )}
+                          </TableCell>
+                          <TableCell>
+                            {isSelf ? (
+                              <span className="text-sm text-slate-400">
+                                {u.department
+                                  ? DEPARTMENT_LABEL[u.department] ?? u.department
+                                  : "—"}
+                              </span>
+                            ) : (
+                              <Select
+                                value={u.department ?? "general"}
+                                onValueChange={(v) =>
+                                  handleSetUserAccess(u._id, role, v)
+                                }
+                              >
+                                <SelectTrigger className="h-9 w-40 rounded-[10px] border-slate-200 text-sm">
+                                  <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  {DEPARTMENTS.map((d) => (
+                                    <SelectItem key={d.id} value={d.id}>
+                                      {d.label}
+                                    </SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                            )}
+                          </TableCell>
+                          <TableCell className="pr-5 text-right">
+                            <Badge
+                              className={`gap-1 rounded-full ring-1 ring-inset ${meta.badge}`}
+                            >
+                              {meta.label}
+                            </Badge>
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
+                  </TableBody>
+                </Table>
+              </div>
+              <p className="mt-4 flex items-center gap-1.5 text-xs text-slate-400">
+                <Users className="size-3.5 text-[#10B981]" />
+                พนักงาน (staff) ดูตัวเลขธุรกิจได้แต่แตะข้อมูลไม่ได้ · ผู้ดูแลฝ่าย (admin) จัดการข้อมูลได้แต่จัดการพนักงานไม่ได้
+              </p>
+            </TabsContent>
+          )}
+
           {/* ============ Settings ============ */}
-          <TabsContent value="settings" className="mt-6">
-            <Card className="max-w-2xl border-slate-200 shadow-none">
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2 text-base">
-                  <Store className="size-4 text-[#10B981]" />
-                  ข้อมูลหน้าร้าน (velshop)
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <form onSubmit={handleSaveSettings} className="grid gap-4">
-                  <div className="grid gap-2">
-                    <Label htmlFor="settings-name">ชื่อร้าน</Label>
-                    <Input
-                      id="settings-name"
-                      value={form.shopName}
-                      onChange={(e) => setForm((f) => ({ ...f, shopName: e.target.value }))}
-                      placeholder="เช่น ร้านบ้านสวนของฝาก"
-                    />
-                  </div>
-                  <div className="grid gap-2">
-                    <Label htmlFor="settings-tagline">คำโปรย / tagline</Label>
-                    <Input
-                      id="settings-tagline"
-                      value={form.tagline}
-                      onChange={(e) => setForm((f) => ({ ...f, tagline: e.target.value }))}
-                      placeholder="Commerce that remembers you · จำแทนคุณ"
-                    />
-                  </div>
-                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          {canSeeTab("settings", userRole, userDepartment) && (
+            <TabsContent value="settings" className="mt-6">
+              <Card className="max-w-2xl border-slate-200 shadow-none">
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2 text-base">
+                    <Store className="size-4 text-[#10B981]" />
+                    ข้อมูลหน้าร้าน (velshop)
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <form onSubmit={handleSaveSettings} className="grid gap-4">
                     <div className="grid gap-2">
-                      <Label htmlFor="settings-phone">เบอร์โทรติดต่อ</Label>
+                      <Label htmlFor="settings-name">ชื่อร้าน</Label>
                       <Input
-                        id="settings-phone"
-                        value={form.phone}
-                        onChange={(e) => setForm((f) => ({ ...f, phone: e.target.value }))}
-                        placeholder="081-234-5678"
+                        id="settings-name"
+                        value={form.shopName}
+                        onChange={(e) => setForm((f) => ({ ...f, shopName: e.target.value }))}
+                        placeholder="เช่น Velnox Marketplace"
                       />
                     </div>
                     <div className="grid gap-2">
-                      <Label htmlFor="settings-announcement">ประกาศ / แบนเนอร์</Label>
+                      <Label htmlFor="settings-tagline">คำโปรย / tagline</Label>
                       <Input
-                        id="settings-announcement"
-                        value={form.announcement}
-                        onChange={(e) => setForm((f) => ({ ...f, announcement: e.target.value }))}
-                        placeholder="เช่น สินค้าใหม่เข้าคลังแล้ว!"
+                        id="settings-tagline"
+                        value={form.tagline}
+                        onChange={(e) => setForm((f) => ({ ...f, tagline: e.target.value }))}
+                        placeholder="Commerce that remembers you · จำแทนคุณ"
                       />
                     </div>
-                  </div>
-                  <div className="grid gap-2">
-                    <Label htmlFor="settings-address">ที่อยู่ร้าน</Label>
-                    <Textarea
-                      id="settings-address"
-                      value={form.address}
-                      onChange={(e) => setForm((f) => ({ ...f, address: e.target.value }))}
-                      placeholder="ที่อยู่สำหรับรับสินค้า / นัดรับ"
-                      rows={2}
-                    />
-                  </div>
-                  <Button
-                    type="submit"
-                    className="w-fit gap-1.5 bg-slate-900 text-white hover:bg-slate-800"
-                    disabled={savingSettings}
-                  >
-                    {savingSettings ? (
-                      <Loader2 className="size-4 animate-spin" />
-                    ) : (
-                      <Save className="size-4" />
-                    )}
-                    บันทึกตั้งค่า
-                  </Button>
-                </form>
-                <p className="mt-4 flex items-center gap-1.5 text-xs text-slate-400">
-                  <Megaphone className="size-3.5 text-[#10B981]" />
-                  ข้อมูลนี้แสดงบนหน้าร้าน velshop ทันทีหลังบันทึก
-                </p>
-              </CardContent>
-            </Card>
-          </TabsContent>
+                    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                      <div className="grid gap-2">
+                        <Label htmlFor="settings-phone">เบอร์โทรติดต่อ</Label>
+                        <Input
+                          id="settings-phone"
+                          value={form.phone}
+                          onChange={(e) => setForm((f) => ({ ...f, phone: e.target.value }))}
+                          placeholder="081-234-5678"
+                        />
+                      </div>
+                      <div className="grid gap-2">
+                        <Label htmlFor="settings-announcement">ประกาศ / แบนเนอร์</Label>
+                        <Input
+                          id="settings-announcement"
+                          value={form.announcement}
+                          onChange={(e) => setForm((f) => ({ ...f, announcement: e.target.value }))}
+                          placeholder="เช่น สินค้าใหม่เข้าคลังแล้ว!"
+                        />
+                      </div>
+                    </div>
+                    <div className="grid gap-2">
+                      <Label htmlFor="settings-address">ที่อยู่ร้าน</Label>
+                      <Textarea
+                        id="settings-address"
+                        value={form.address}
+                        onChange={(e) => setForm((f) => ({ ...f, address: e.target.value }))}
+                        placeholder="ที่อยู่สำหรับรับสินค้า / นัดรับ"
+                        rows={2}
+                      />
+                    </div>
+                    <Button
+                      type="submit"
+                      className="w-fit gap-1.5 bg-slate-900 text-white hover:bg-slate-800"
+                      disabled={savingSettings}
+                    >
+                      {savingSettings ? (
+                        <Loader2 className="size-4 animate-spin" />
+                      ) : (
+                        <Save className="size-4" />
+                      )}
+                      บันทึกตั้งค่า
+                    </Button>
+                  </form>
+                  <p className="mt-4 flex items-center gap-1.5 text-xs text-slate-400">
+                    <Megaphone className="size-3.5 text-[#10B981]" />
+                    ข้อมูลนี้แสดงบนหน้าร้าน velshop ทันทีหลังบันทึก
+                  </p>
+                </CardContent>
+              </Card>
+            </TabsContent>
+          )}
         </Tabs>
       </main>
     </div>

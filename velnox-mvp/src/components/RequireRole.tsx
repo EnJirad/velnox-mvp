@@ -1,30 +1,35 @@
 import { api } from "@/convex/_generated/api";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/hooks/use-auth";
-import { useMutation } from "convex/react";
-import { ArrowRight, Loader2, ShieldCheck, Store } from "lucide-react";
+import { SITE_URLS } from "@/lib/sites";
+import { useMutation, useQuery } from "convex/react";
+import { ArrowRight, Loader2, Lock, ShieldCheck, Store } from "lucide-react";
 import { useState, type ReactNode } from "react";
-import { Link, Navigate, useLocation } from "react-router";
+import { Navigate, useLocation } from "react-router";
 import { toast } from "sonner";
 
 interface RequireRoleProps {
-  role: "seller" | "admin";
+  role: "seller" | "center";
   children: ReactNode;
 }
 
 /**
- * Route guard for the seller / admin areas of the 3-site ecosystem.
- * - seller: any signed-in user may self-serve "open your shop" (MVP).
- * - admin:  any signed-in user may self-serve "become admin" (MVP demo).
+ * Route guards for the 3-site ecosystem.
+ * - seller: any signed-in user may self-serve "เปิดร้าน" (merchants who open a
+ *   shop with us). owner/admin also pass.
+ * - center: company-only — owner / admin / staff. No self-serve promotion;
+ *   the very first user may claim the company as owner, after that access is
+ *   granted exclusively by the owner.
  */
 export function RequireRole({ role, children }: RequireRoleProps) {
   const { isLoading, isAuthenticated, user } = useAuth();
   const location = useLocation();
   const becomeSeller = useMutation(api.users.becomeSeller);
-  const becomeAdmin = useMutation(api.users.becomeAdmin);
+  const becomeOwner = useMutation(api.users.becomeOwner);
+  const ownerExists = useQuery(api.users.ownerExists);
   const [pending, setPending] = useState(false);
 
-  if (isLoading) {
+  if (isLoading || ownerExists === undefined) {
     return (
       <main className="flex min-h-screen items-center justify-center bg-background">
         <Loader2 className="size-6 animate-spin text-muted-foreground" />
@@ -40,28 +45,43 @@ export function RequireRole({ role, children }: RequireRoleProps) {
   }
 
   const userRole = user?.role;
-  const allowed =
-    role === "admin" ? userRole === "admin" : userRole === "seller" || userRole === "admin";
+  const canSell =
+    userRole === "seller" || userRole === "admin" || userRole === "owner";
+  const canCenter =
+    userRole === "owner" || userRole === "admin" || userRole === "staff";
 
-  if (allowed) return children;
+  if (role === "center" ? canCenter : canSell) return children;
 
-  const isAdminGate = role === "admin";
-  const action = isAdminGate ? becomeAdmin : becomeSeller;
+  const isOwnerGate = role === "center";
+  const open = isOwnerGate ? !ownerExists : true;
 
   const handlePromote = async () => {
     setPending(true);
     try {
-      await action();
-      toast.success(isAdminGate ? "คุณเป็นผู้ดูแลศูนย์กลางแล้ว" : "เปิดร้านค้าแล้ว 🎉");
+      if (isOwnerGate) {
+        await becomeOwner();
+        toast.success("คุณคือเจ้าของบริษัท Velnox แล้ว 🏆");
+      } else {
+        await becomeSeller();
+        toast.success("เปิดร้านค้าแล้ว 🎉");
+      }
     } catch (error) {
       console.error("Role promotion error:", error);
-      toast.error("ไม่สำเร็จ กรุณาลองอีกครั้ง");
+      toast.error(
+        error instanceof Error ? error.message : "ไม่สำเร็จ กรุณาลองอีกครั้ง",
+      );
     } finally {
       setPending(false);
     }
   };
 
-  const GateIcon = isAdminGate ? ShieldCheck : Store;
+  const GateIcon = isOwnerGate ? (ownerExists ? Lock : ShieldCheck) : Store;
+  const title = isOwnerGate ? "พื้นที่ velcenter" : "พื้นที่ velseller";
+  const desc = isOwnerGate
+    ? ownerExists
+      ? "velcenter เป็นพื้นที่เฉพาะบริษัท — เฉพาะผู้ที่เจ้าของบริษัทกำหนดสิทธิ์ให้เท่านั้นที่เข้าได้"
+      : "velcenter ยังไม่มีเจ้าของบริษัท — คนแรกที่สมัครจะได้เป็นเจ้าของ และบริหารสิทธิ์ของพนักงานทั้งหมด"
+    : "velseller เป็นเครื่องมือสำหรับพ่อค้าที่เปิดร้านกับ Velnox — จัดการสินค้า รายได้ และออเดอร์ของตัวเอง";
 
   return (
     <div className="flex min-h-screen flex-col items-center justify-center bg-[#F8FAFC] px-4 text-center">
@@ -70,29 +90,29 @@ export function RequireRole({ role, children }: RequireRoleProps) {
           <GateIcon className="size-7 text-[#10B981]" />
         </span>
         <h1 className="mt-5 text-xl font-bold tracking-tight text-slate-900">
-          {isAdminGate ? "พื้นที่ velcenter" : "พื้นที่ velseller"}
+          {title}
         </h1>
-        <p className="mt-2 text-sm leading-6 text-slate-500">
-          {isAdminGate
-            ? "velcenter เป็นศูนย์กลางจัดการธุรกิจและ Velnox Intelligence สำหรับผู้ดูแลเท่านั้น"
-            : "velseller เป็นเครื่องมือสำหรับเจ้าของร้าน — ตั้งเป้าหมาย จัดการสต็อก และรับออเดอร์จากหน้าร้าน"}
-        </p>
-        <Button
-          className="mt-6 w-full gap-1.5 bg-slate-900 text-white hover:bg-slate-800"
-          onClick={handlePromote}
-          disabled={pending}
-        >
-          {pending && <Loader2 className="size-4 animate-spin" />}
-          {isAdminGate ? "สมัครเป็นผู้ดูแลศูนย์กลาง" : "เปิดร้านค้าของฉัน"}
-          {!pending && <ArrowRight className="size-4" />}
-        </Button>
+        <p className="mt-2 text-sm leading-6 text-slate-500">{desc}</p>
+        {open && (
+          <Button
+            className="mt-6 w-full gap-1.5 bg-slate-900 text-white hover:bg-slate-800"
+            onClick={handlePromote}
+            disabled={pending}
+          >
+            {pending && <Loader2 className="size-4 animate-spin" />}
+            {isOwnerGate ? "สมัครเป็นเจ้าของบริษัท" : "เปิดร้านค้าของฉัน"}
+            {!pending && <ArrowRight className="size-4" />}
+          </Button>
+        )}
         <p className="mt-3 text-xs text-slate-400">
-          {isAdminGate
-            ? "เวอร์ชันแรกเปิดสมัครได้ทันที — เวอร์ชันเต็มจะมีการอนุมัติโดยผู้ดูแล"
+          {isOwnerGate
+            ? ownerExists
+              ? "ติดต่อเจ้าของบริษัทเพื่อขอสิทธิ์เข้าถึง"
+              : "เวอร์ชันแรก: คนแรกที่สมัครได้เป็นเจ้าของ"
             : "เปิดร้านได้ทันทีในเวอร์ชันแรก ไม่มีค่าใช้จ่าย"}
         </p>
         <Button variant="ghost" className="mt-2 w-full text-slate-500" asChild>
-          <Link to="/shop">← กลับไปหน้าร้าน</Link>
+          <a href={SITE_URLS.velshop}>← กลับไปหน้าร้าน</a>
         </Button>
       </div>
     </div>

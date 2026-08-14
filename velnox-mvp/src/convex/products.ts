@@ -1,6 +1,7 @@
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
-import { canAdmin, getCurrentUser } from "./users";
+import { Doc, Id } from "./_generated/dataModel";
+import { canAccessCenter, canSell, getCurrentUser } from "./users";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -40,13 +41,103 @@ export const listPublished = query({
   },
 });
 
-/** All products across the shop (velcenter, admin only). */
+/** All products across the marketplace (velcenter view — owner/admin/staff). */
 export const listAll = query({
   args: {},
   handler: async (ctx) => {
     const user = await getCurrentUser(ctx);
-    if (user === null || !canAdmin(user.role)) throw new Error("Admin only");
+    if (user === null || !canAccessCenter(user.role)) throw new Error("Center only");
     return await ctx.db.query("products").order("desc").collect();
+  },
+});
+
+/**
+ * VelRepeat: record that a shopper showed interest in a product (click / "สนใจ").
+ * Kept per customer so Velnox can learn each person's interests over time.
+ */
+export const recordView = mutation({
+  args: { productId: v.id("products") },
+  handler: async (ctx, { productId }) => {
+    const user = await getCurrentUser(ctx);
+    await ctx.db.insert("productViews", {
+      userId: user?._id,
+      productId,
+      viewedAt: Date.now(),
+    });
+  },
+});
+
+/** Most-interested products across all shoppers, last 30 days (public). */
+export const popularProducts = query({
+  args: {},
+  handler: async (ctx) => {
+    const since = Date.now() - 30 * DAY_MS;
+    const views = await ctx.db.query("productViews").order("desc").take(500);
+    const counts = new Map<
+      string,
+      { views: number; lastViewedAt: number }
+    >();
+    for (const view of views) {
+      if (view.viewedAt < since) continue;
+      const agg = counts.get(view.productId) ?? { views: 0, lastViewedAt: 0 };
+      agg.views += 1;
+      agg.lastViewedAt = Math.max(agg.lastViewedAt, view.viewedAt);
+      counts.set(view.productId, agg);
+    }
+
+    const rows: {
+      product: Doc<"products">;
+      views: number;
+      lastViewedAt: number;
+    }[] = [];
+    for (const [productId, agg] of counts) {
+      const product = await ctx.db.get(productId as Id<"products">);
+      if (!product || !product.published || product.price === undefined) continue;
+      rows.push({ product, ...agg });
+    }
+    rows.sort((a, b) => b.views - a.views || b.lastViewedAt - a.lastViewedAt);
+    return rows.slice(0, 8);
+  },
+});
+
+/**
+ * VelRepeat personalization: which products THIS customer is most interested in,
+ * learned from their own clicks on velshop. Empty for signed-out visitors.
+ */
+export const customerInterests = query({
+  args: {},
+  handler: async (ctx) => {
+    const user = await getCurrentUser(ctx);
+    if (user === null) return [];
+    const views = await ctx.db
+      .query("productViews")
+      .withIndex("by_user", (q) => q.eq("userId", user._id))
+      .order("desc")
+      .take(300);
+
+    const counts = new Map<
+      string,
+      { views: number; lastViewedAt: number }
+    >();
+    for (const view of views) {
+      const agg = counts.get(view.productId) ?? { views: 0, lastViewedAt: 0 };
+      agg.views += 1;
+      agg.lastViewedAt = Math.max(agg.lastViewedAt, view.viewedAt);
+      counts.set(view.productId, agg);
+    }
+
+    const rows: {
+      product: Doc<"products">;
+      views: number;
+      lastViewedAt: number;
+    }[] = [];
+    for (const [productId, agg] of counts) {
+      const product = await ctx.db.get(productId as Id<"products">);
+      if (!product || !product.published || product.price === undefined) continue;
+      rows.push({ product, ...agg });
+    }
+    rows.sort((a, b) => b.views - a.views || b.lastViewedAt - a.lastViewedAt);
+    return rows.slice(0, 8);
   },
 });
 
@@ -150,7 +241,7 @@ export const update = mutation({
   },
 });
 
-/** Publish / unpublish a product for the velshop storefront (owner only). */
+/** Publish / unpublish a product for the velshop storefront (the merchant who owns it). */
 export const togglePublished = mutation({
   args: {
     productId: v.id("products"),
@@ -158,7 +249,7 @@ export const togglePublished = mutation({
   },
   handler: async (ctx, { productId, published }) => {
     const user = await getCurrentUser(ctx);
-    if (user === null) throw new Error("Not authenticated");
+    if (user === null || !canSell(user.role)) throw new Error("Seller only");
     const product = await ctx.db.get(productId);
     if (!product || product.userId !== user._id) throw new Error("Product not found");
     if (published && !product.price) throw new Error("ต้องตั้งราคาก่อนจึงจะประกาศขายได้");

@@ -7,18 +7,20 @@ import { Textarea } from "@/components/ui/textarea";
 import { api } from "@/convex/_generated/api";
 import { useAuth } from "@/hooks/use-auth";
 import { useCart } from "@/lib/cart";
-import { formatBaht } from "@/lib/shop";
-import { useMutation } from "convex/react";
+import { formatBaht } from "@/lib/commerce";
+import { useAction } from "convex/react";
 import { ArrowLeft, Loader2, ShieldCheck, ShoppingBag } from "lucide-react";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { Link, useNavigate } from "react-router";
 import { toast } from "sonner";
 
 export default function ShopCheckout() {
   const { user } = useAuth();
   const { lines, total, clear } = useCart();
-  const placeOrder = useMutation(api.orders.placeOrder);
+  const placeOrder = useAction(api.commerce.placeOrder);
   const navigate = useNavigate();
+  // one idempotency key per checkout page visit — retries can never double-order
+  const idempotencyKeyRef = useRef<string | null>(null);
 
   const [name, setName] = useState(user?.name ?? "");
   const [phone, setPhone] = useState("");
@@ -33,17 +35,29 @@ export default function ShopCheckout() {
       toast.error("กรุณากรอกชื่อและเบอร์โทรติดต่อ");
       return;
     }
+    if (!idempotencyKeyRef.current) {
+      idempotencyKeyRef.current =
+        typeof crypto !== "undefined" && "randomUUID" in crypto
+          ? crypto.randomUUID()
+          : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    }
     setSubmitting(true);
     try {
       await placeOrder({
         items: lines.map((l) => ({ productId: l.productId, quantity: l.qty })),
-        customerName: name.trim(),
-        customerPhone: phone.trim(),
-        customerAddress: address.trim() || undefined,
+        address: {
+          recipientName: name.trim(),
+          phone: phone.trim(),
+          line1: address.trim(),
+          city: "",
+          country: "TH",
+        },
+        idempotencyKey: idempotencyKeyRef.current,
         note: note.trim() || undefined,
+        paymentMethod: "cod",
       });
       clear();
-      toast.success("สั่งซื้อสำเร็จ! ร้านค้าจะติดต่อกลับเร็ว ๆ นี้ 🎉");
+      toast.success("สั่งซื้อสำเร็จ! ร้านค้าจะยืนยันและจัดส่งให้เร็ว ๆ นี้ 🎉");
       navigate("/shop/orders");
     } catch (error) {
       console.error("Place order error:", error);

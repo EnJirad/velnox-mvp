@@ -7,38 +7,35 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { SITE_URLS, type SiteId } from "@/lib/sites";
 import { Briefcase, ChevronDown, ShieldCheck, Store, type LucideIcon } from "lucide-react";
-import { Link, useLocation } from "react-router";
+import { useLocation } from "react-router";
 
 const SITES: {
-  id: string;
+  id: SiteId;
   label: string;
   th: string;
-  to: string;
   icon: LucideIcon;
   desc: string;
 }[] = [
   {
-    id: "shop",
+    id: "velshop",
     label: "velshop",
     th: "ร้านค้า",
-    to: "/shop",
     icon: Store,
     desc: "หน้าร้านสำหรับลูกค้า",
   },
   {
-    id: "seller",
+    id: "velseller",
     label: "velseller",
-    th: "เจ้าของร้าน",
-    to: "/seller/goals",
+    th: "พ่อค้า",
     icon: Briefcase,
-    desc: "เครื่องมือเจ้าของร้าน",
+    desc: "เครื่องมือพ่อค้า",
   },
   {
-    id: "center",
+    id: "velcenter",
     label: "velcenter",
-    th: "ศูนย์กลาง",
-    to: "/center",
+    th: "ศูนย์กลางบริษัท",
     icon: ShieldCheck,
     desc: "จัดการระบบ + Intelligence",
   },
@@ -47,13 +44,11 @@ const SITES: {
 export function SiteSwitcher() {
   const location = useLocation();
   const current =
-    SITES.find((s) =>
-      s.id === "shop"
-        ? location.pathname.startsWith("/shop")
-        : s.id === "seller"
-          ? location.pathname.startsWith("/seller")
-          : location.pathname.startsWith("/center"),
-    ) ?? SITES[0];
+    SITES.find((s) => {
+      if (s.id === "velshop") return location.pathname.startsWith("/shop");
+      if (s.id === "velseller") return location.pathname.startsWith("/seller");
+      return location.pathname.startsWith("/center");
+    }) ?? SITES[0];
   const CurrentIcon = current.icon;
 
   return (
@@ -83,7 +78,9 @@ export function SiteSwitcher() {
               asChild
               className={`cursor-pointer ${active ? "bg-slate-50" : ""}`}
             >
-              <Link to={site.to} className="flex items-center gap-3">
+              {/* Plain anchor: each site is a SEPARATE app (own entry + deploy),
+                  so switching sites is a full page load, not a client route. */}
+              <a href={SITE_URLS[site.id]} className="flex items-center gap-3">
                 <span className="flex size-8 items-center justify-center rounded-[10px] bg-slate-100">
                   <Icon className="size-4 text-slate-600" />
                 </span>
@@ -91,7 +88,7 @@ export function SiteSwitcher() {
                   <span className="text-sm font-semibold text-slate-900">{site.label}</span>
                   <span className="text-xs text-slate-400">{site.desc}</span>
                 </span>
-              </Link>
+              </a>
             </DropdownMenuItem>
           );
         })}

@@ -8,12 +8,15 @@
     "build": "tsc -b && vite build",
     "lint": "eslint .",
     "format": "prettier --write .",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "db:migrate": "bun run db/migrate.ts",
+    "db:smoke": "bun run db/smoke.ts"
   },
   "dependencies": {
     "@convex-dev/auth": "^0.0.90",
     "@hookform/resolvers": "^5.2.2",
     "@jridgewell/trace-mapping": "^0.3.31",
+    "@neondatabase/serverless": "^1.1.0",
     "@oslojs/crypto": "^1.0.1",
     "@radix-ui/react-accordion": "^1.2.12",
     "@radix-ui/react-alert-dialog": "^1.1.15",
@@ -68,6 +71,7 @@
     "tailwind-merge": "^3.4.0",
     "tailwindcss": "^4.1.17",
     "vaul": "^1.1.2",
+    "ws": "^8.21.3",
     "zod": "^4.1.13"
   },
   "devDependencies": {
@@ -75,6 +79,7 @@
     "@types/node": "^24.10.1",
     "@types/react": "^19.2.7",
     "@types/react-dom": "^19.2.3",
+    "@types/ws": "^8.18.1",
     "@vitejs/plugin-react": "^5.1.1",
     "eslint": "^9.39.1",
     "eslint-config-prettier": "^10.1.8",

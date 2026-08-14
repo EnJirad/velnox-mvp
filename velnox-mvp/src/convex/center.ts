@@ -1,6 +1,6 @@
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
-import { canAdmin, getCurrentUser } from "./users";
+import { canAccessCenter, canSell, getCurrentUser } from "./users";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -23,7 +23,7 @@ export const overview = query({
   args: {},
   handler: async (ctx) => {
     const user = await getCurrentUser(ctx);
-    if (user === null || !canAdmin(user.role)) throw new Error("Admin only");
+    if (user === null || !canAccessCenter(user.role)) throw new Error("Center only");
 
     const [orders, products, goals, users] = await Promise.all([
       ctx.db.query("orders").collect(),
@@ -87,7 +87,7 @@ export const updateSettings = mutation({
   handler: async (ctx, args) => {
     const user = await getCurrentUser(ctx);
     if (user === null) throw new Error("Not authenticated");
-    if (user.role !== "seller" && user.role !== "admin") throw new Error("Seller only");
+    if (!canSell(user.role)) throw new Error("Seller only");
 
     const existing = await ctx.db
       .query("storeSettings")

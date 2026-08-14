@@ -1,5 +1,6 @@
 import { Logo } from "@/components/Logo";
 import { Button } from "@/components/ui/button";
+import { SITE_URLS } from "@/lib/sites";
 import { motion } from "framer-motion";
 import {
   ArrowRight,
@@ -37,12 +38,12 @@ function NavBar() {
           <Logo />
         </Link>
         <nav className="hidden items-center gap-8 md:flex">
-          <Link
-            to="/shop"
+          <a
+            href={SITE_URLS.velshop}
             className="text-sm font-medium text-slate-600 transition-colors hover:text-slate-900"
           >
             velshop
-          </Link>
+          </a>
           <a
             href="#sites"
             className="text-sm font-medium text-slate-600 transition-colors hover:text-slate-900"
@@ -194,7 +195,7 @@ function Hero() {
               </Link>
             </Button>
             <Button size="lg" variant="outline" className="border-slate-200 text-slate-700" asChild>
-              <Link to="/shop">เยี่ยมชมร้านค้า velshop</Link>
+              <a href={SITE_URLS.velshop}>เยี่ยมชมร้านค้า velshop</a>
             </Button>
           </div>
           <div className="mt-8 flex flex-wrap items-center gap-x-6 gap-y-2 text-sm text-slate-400">
@@ -293,7 +294,7 @@ function Ecosystem() {
       icon: Store,
       name: "velshop",
       th: "หน้าร้านสำหรับลูกค้า",
-      to: "/shop",
+      href: SITE_URLS.velshop,
       desc: "ร้านค้าออนไลน์ของธุรกิจคุณ — ลูกค้าเลือกสินค้า สั่งซื้อ และติดตามออเดอร์",
       cta: "เยี่ยมชมร้านค้า",
       points: ["ดูสินค้าที่ประกาศขาย", "สั่งซื้อ + ใส่ตะกร้า", "ติดตามสถานะออเดอร์"],
@@ -302,7 +303,7 @@ function Ecosystem() {
       icon: Briefcase,
       name: "velseller",
       th: "เครื่องมือเจ้าของร้าน",
-      to: "/seller/goals",
+      href: SITE_URLS.velseller,
       desc: "แดชบอร์ดเป้าหมาย, Smart Reorder ที่จำรอบการสั่ง และรับออเดอร์จากหน้าร้าน",
       cta: "เปิดเครื่องมือเจ้าของร้าน",
       points: ["ตั้งเป้าหมายธุรกิจ", "เตือนสั่งซื้อซ้ำอัตโนมัติ", "จัดการออเดอร์ลูกค้า"],
@@ -311,7 +312,7 @@ function Ecosystem() {
       icon: ShieldCheck,
       name: "velcenter",
       th: "ศูนย์กลางธุรกิจ",
-      to: "/center",
+      href: SITE_URLS.velcenter,
       desc: "ภาพรวมทั้งธุรกิจ Velnox Intelligence และการจัดการผู้ใช้ สินค้า ตั้งค่าร้าน",
       cta: "เปิดศูนย์ควบคุม",
       points: ["ยอดขาย + KPI รวม", "คาดการณ์รอบถัดไป", "จัดการบทบาทผู้ใช้"],
@@ -365,10 +366,10 @@ function Ecosystem() {
                 className="mt-6 w-full gap-1.5 border-slate-200 bg-white text-slate-700 hover:border-[#10B981] hover:bg-[#ECFDF5] hover:text-emerald-700"
                 asChild
               >
-                <Link to={site.to}>
+                <a href={site.href}>
                   {site.cta}
                   <ArrowRight className="size-4" />
-                </Link>
+                </a>
               </Button>
             </motion.div>
           ))}
@@ -506,7 +507,7 @@ function CtaSection() {
             </Link>
           </Button>
           <Button size="lg" variant="outline" className="border-slate-200 text-slate-700" asChild>
-            <Link to="/shop">เยี่ยมชม velshop</Link>
+            <a href={SITE_URLS.velshop}>เยี่ยมชม velshop</a>
           </Button>
         </motion.div>
       </div>
@@ -532,19 +533,19 @@ function Footer() {
               <p className="font-semibold text-white">เว็บไซต์ทั้ง 3</p>
               <ul className="mt-4 space-y-3">
                 <li>
-                  <Link to="/shop" className="text-slate-400 transition-colors hover:text-white">
+                  <a href={SITE_URLS.velshop} className="text-slate-400 transition-colors hover:text-white">
                     velshop · หน้าร้าน
-                  </Link>
+                  </a>
                 </li>
                 <li>
-                  <Link to="/seller/goals" className="text-slate-400 transition-colors hover:text-white">
+                  <a href={SITE_URLS.velseller} className="text-slate-400 transition-colors hover:text-white">
                     velseller · เจ้าของร้าน
-                  </Link>
+                  </a>
                 </li>
                 <li>
-                  <Link to="/center" className="text-slate-400 transition-colors hover:text-white">
+                  <a href={SITE_URLS.velcenter} className="text-slate-400 transition-colors hover:text-white">
                     velcenter · ศูนย์กลาง
-                  </Link>
+                  </a>
                 </li>
               </ul>
             </div>
