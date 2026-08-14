@@ -13,7 +13,7 @@
 3. [การติดตั้งทีละขั้นตอน](#3-การติดตั้งทีละขั้นตอน)
 4. [Environment Variables (ตัวแปรสภาพแวดล้อม)](#4-environment-variables)
 5. [การใช้งาน](#5-การใช้งาน)
-6. [การ Deploy แยก 3 เว็บ](#6-การ-deploy-แยก-3-เว็บ)
+6. [การ Deploy ขึ้น Vercel (แยก 3 เว็บ)](#6-การ-deploy-ขึ้น-vercel-แยก-3-เว็บ)
 7. [ปัญหาที่พบบ่อย (Troubleshooting)](#7-ปัญหาที่พบบ่อย)
 8. [การ push ขึ้น GitHub](#8-การ-push-ขึ้น-github)
 
@@ -61,6 +61,7 @@
 | บัญชี Neon (PostgreSQL) | ฟรี | https://neon.tech — **Commerce Core / Source of Truth** (สินค้า ออเดอร์ เงิน สต็อก) |
 | บัญชี Cloudinary | ฟรี | https://cloudinary.com — เก็บรูปสินค้า (upload ตรงจากเบราว์เซอร์ ไม่ผ่าน server) |
 | บัญชี GitHub | — | เฉพาะตอน push ขึ้น git |
+| บัญชี Vercel | ฟรี | https://vercel.com — ใช้ deploy หน้าเว็บ 3 อัน (ดูหัวข้อ 6) |
 
 ---
 
@@ -244,52 +245,145 @@ bun run build           # build production (ได้ไฟล์แยก 4 ent
 
 ---
 
-## 6. การ Deploy แยก 3 เว็บ
+## 6. การ Deploy ขึ้น Vercel (แยก 3 เว็บ)
 
-**หลักการ:** ทั้ง 3 เว็บเป็นคนละ app (คนละ entry) แต่ชี้ไป **Convex deployment ตัวเดียวกัน** → ข้อมูลเดียวกันทั้งระบบ
+### 6.0 สรุป: เอาไปรันที่ไหน
 
-### ขั้นที่ 1 — Build
+| ส่วน | ไปรันที่ไหน | ต้อง deploy เองไหม |
+|---|---|---|
+| **Frontend 3 เว็บ** (velshop / velseller / velcenter) | **Vercel** — ฟรี, auto-deploy จาก GitHub push, custom domain ฟรี | สร้าง 3 โปรเจกต์คนละอัน (ด้านล่าง) |
+| **Backend + Realtime** (Convex) | **Convex (managed)** — push ผ่าน `npx convex deploy` ตอน build | ไม่ต้องรัน server เอง |
+| **ฐานข้อมูล Commerce** (Neon PostgreSQL) | **Neon (managed)** — ตั้งค่าใน Convex deployment env | ไม่ต้อง deploy |
+| **รูปสินค้า** (Cloudinary) | **Cloudinary (managed)** | ไม่ต้อง deploy |
+
+> Vercel คือตัวเลือกหลักที่แนะนำ เพราะฟรี tier ครอบคลุมและ build command เดียว deploy ทั้ง Convex functions + หน้าเว็บ ทางเลือกอื่น (Netlify / Cloudflare Pages) ดูหัวข้อ **6.8**
+
+### 6.1 โครงสร้างหลัง deploy
+
+```
+GitHub: EnJirad/velnox-mvp (repo เดียว)
+   ├── Vercel Project "velshop"    → velshop.vercel.app   (ตลาด/ลูกค้า)
+   ├── Vercel Project "velseller"  → velseller.vercel.app (หลังบ้านพ่อค้า)
+   └── Vercel Project "velcenter"  → velcenter.vercel.app (หลังบ้านบริษัท)
+              └── ทั้ง 3 ชี้ Convex production deployment ตัวเดียวกัน
+                    └── Neon (Commerce Core) + Cloudinary (รูปสินค้า)
+```
+
+---
+
+### 6.2 ขั้นที่ 1 — เตรียมฝั่ง Convex (ทำครั้งเดียว)
+
+1. เปิด https://dashboard.convex.dev → เลือกโปรเจกต์ Velnox
+2. สร้าง **production deployment** ถ้ายังไม่มี (Deployments → Create Production Deployment)
+3. สร้าง **Production Deploy Key** เพื่อให้ Vercel push โค้ดขึ้น production ได้:
+   - Deployment Settings → General → **Generate Production Deploy Key**
+   - เปิดสิทธิ์ `deployment:deploy` → กด copy คีย์ไว้ (เอาไปใส่ Vercel ในขั้น 6.4)
+4. ตั้ง env ให้ **production deployment** (Dashboard → deployment นั้น → Environment Variables หรือใช้คำสั่ง):
 
 ```bash
-bun convex dev --once   # ให้แน่ใจว่า schema อยู่บน production deployment ด้วย
-bun run build
+bunx convex env set DATABASE_URL "postgresql://<user>:<pass>@<host>.neon.tech/<db>?sslmode=require"
+bunx convex env set CLOUDINARY_CLOUD_NAME "<cloud-name>"
+bunx convex env set CLOUDINARY_API_KEY "<api-key>"
+bunx convex env set CLOUDINARY_API_SECRET "<api-secret>"
+bunx convex env set SITE_URL "https://velshop.vercel.app"   # ใช้สร้างลิงก์ในอีเมล
 ```
 
-ได้ผลลัพธ์ใน `dist/`:
-
-```
-dist/
-├── index.html        → portal (landing)
-├── velshop.html      → เว็บ velshop
-├── velseller.html    → เว็บ velseller
-├── velcenter.html    → เว็บ velcenter
-└── assets/           → JS/CSS แยกตาม entry
-```
-
-### ขั้นที่ 2 — Deploy ไป 3 โฮสต์
-
-| Host | ไฟล์ที่ deploy |
-|---|---|
-| `velshop.com` | `dist/velshop.html` + assets |
-| `velseller.com` | `dist/velseller.html` + assets |
-| `velcenter.com` | `dist/velcenter.html` + assets |
-
-> แต่ละโฮสต์ deploy แค่ entry ของตัวเองได้ (โหลดเฉพาะไฟล์ที่เว็บนั้นใช้)
-> ตั้งค่า SPA fallback ให้ทุก route ชี้กลับไปที่ entry ของเว็บนั้น
-
-### ขั้นที่ 3 — ตั้ง Env ตอน build (ตามโฮสต์)
+5. สร้างตาราง Neon (รันครั้งเดียว — รันซ้ำได้ idempotent):
 
 ```bash
-# build สำหรับ velshop
-VITE_VELSHOP_URL=https://velshop.com \
-VITE_VELSELLER_URL=https://velseller.com \
-VITE_VELCENTER_URL=https://velcenter.com \
-VITE_SITE_BASENAME= \
-VITE_CONVEX_URL=https://<deployment>.convex.cloud \
-bun run build
+DATABASE_URL="postgresql://<user>:<pass>@<host>.neon.tech/<db>?sslmode=require" bun run db:migrate
 ```
 
-ใช้ค่า env ชุดเดียวกัน build ทั้ง 3 (เว้นแต่จะอยากฝัง URL ต่างกันตามโฮสต์) — **สำคัญคือ `VITE_SITE_BASENAME` ต้องว่าง** เมื่ออยู่ที่ root โดเมน และ `VITE_CONVEX_URL` ต้องชี้ deployment เดียวกัน
+---
+
+### 6.3 ขั้นที่ 2 — สร้าง 3 โปรเจกต์ใน Vercel
+
+ไปที่ https://vercel.com/new → import repo `EnJirad/velnox-mvp` → ตั้งค่าตามตารางนี้ **3 ครั้ง** (ครั้งละ 1 โปรเจกต์):
+
+| ตั้งค่า (Project Settings → General / Build & Development) | velshop | velseller | velcenter |
+|---|---|---|---|
+| Project Name | `velshop` | `velseller` | `velcenter` |
+| Framework Preset | **Vite** | **Vite** | **Vite** |
+| Root Directory | `./` | `./` | `./` |
+| **Build Command** | `npx convex deploy --cmd-url-env-var-name VITE_CONVEX_URL --cmd 'bun run build'` | (เหมือนกัน) | (เหมือนกัน) |
+| **Output Directory** | `dist` | `dist` | `dist` |
+| Install Command | `bun install` | `bun install` | `bun install` |
+
+> **Build command นี้ทำงาน 4 อย่าง**: ① สร้าง codegen `src/convex/_generated` ② push functions + schema ไป Convex production ③ ใส่ `VITE_CONVEX_URL` ให้อัตโนมัติตอน build ④ build หน้าเว็บลง `dist/`
+> Vercel รองรับ `bun.lock` แบบ zero-config อยู่แล้ว แต่ตั้ง Install Command ไว้ชัดเจนปลอดภัยกว่า
+> ถ้า Vercel หา `bun` ไม่เจอ ให้เปลี่ยน Build Command เป็น `npx convex deploy --cmd-url-env-var-name VITE_CONVEX_URL --cmd 'npm run build'`
+
+---
+
+### 6.4 ขั้นที่ 3 — Environment Variables (ตั้งเหมือนกันทั้ง 3 โปรเจกต์)
+
+Vercel → Project → **Settings → Environment Variables**:
+
+| ตัวแปร | ค่า | หมายเหตุ |
+|---|---|---|
+| `CONVEX_DEPLOY_KEY` | `<production deploy key จาก 6.2>` | ⚠️ ติ๊กเฉพาะ **Production** (uncheck Preview / Development) |
+| `VITE_SITE_BASENAME` | *(ค่าว่าง)* | ให้ route ของทุกเว็บอยู่ที่ root โดเมน |
+| `VITE_VELSHOP_URL` | `https://velshop.vercel.app` | ลิงก์ข้ามเว็บ (เปลี่ยนเป็น domain จริงหลังตั้ง custom domain) |
+| `VITE_VELSELLER_URL` | `https://velseller.vercel.app` | |
+| `VITE_VELCENTER_URL` | `https://velcenter.vercel.app` | |
+
+> ✅ **ไม่ต้องตั้ง `VITE_CONVEX_URL`** — `convex deploy` inject ให้เองตอน build ผ่าน `--cmd-url-env-var-name VITE_CONVEX_URL`
+> ❌ **ไม่ต้องตั้งใน Vercel**: `DATABASE_URL`, `CLOUDINARY_*`, `SITE_URL` — อยู่ใน Convex deployment env แล้ว (ขั้น 6.2)
+
+---
+
+### 6.5 ขั้นที่ 4 — ให้ root URL เปิดหน้าเว็บที่ถูกต้อง (ต่อโปรเจกต์)
+
+`dist/` มี 4 entries (`index.html` = portal, `velshop.html`, `velseller.html`, `velcenter.html`) — ถ้าไม่ตั้งอะไร Vercel จะเสิร์ฟ `index.html` (landing) ที่ `/` ดังนั้น **ต่อโปรเจกต์** ต้องเพิ่ม **Rewrite** ให้ `/` และทุก route ของเว็บนั้นชี้ไปที่ entry ของตัวเอง:
+
+Vercel → Project → **Settings → Rewrites & Redirects** → Rewrites → **Add**:
+
+| โปรเจกต์ | Source | Destination |
+|---|---|---|
+| velshop | `/(.*)` | `/velshop.html` |
+| velseller | `/(.*)` | `/velseller.html` |
+| velcenter | `/(.*)` | `/velcenter.html` |
+
+> Vercel **ตรวจไฟล์จริงก่อน rewrite** → asset (JS/CSS/รูป) โหลดปกติ ส่วน route ของ SPA (`/shop`, `/auth`, `/shop/checkout`, ...) fallback ไปที่ entry ของเว็บนั้น
+> **ข้ามขั้นนี้ได้ (MVP):** เข้าผ่าน `https://velshop.vercel.app/velshop.html` ก็ใช้งานได้ครบ — ระบบหา basename ให้อัตโนมัติ (แค่ URL ไม่สวย)
+
+---
+
+### 6.6 ขั้นที่ 5 — Deploy และตรวจสอบ
+
+1. กด **Deploy** → Vercel รัน: `bun install` → `npx convex deploy ...` (codegen + push functions/schema ไป Convex production) → `bun run build` → วาง `dist/` ขึ้น edge
+2. หลังจากนี้ **push ขึ้น GitHub ทุกครั้ง → ทั้ง 3 เว็บ + Convex functions อัปเดตอัตโนมัติ** (ไม่ต้อง deploy มือ)
+3. ตรวจ:
+   - `https://velshop.vercel.app` → หน้าตลาด (ดูสินค้า/สั่งซื้อ)
+   - `https://velseller.vercel.app` → หลังบ้านพ่อค้า (เปิดร้าน/สินค้า/รายได้)
+   - `https://velcenter.vercel.app` → หลังบ้านบริษัท (ล็อกอิน → รับสิทธิ์ owner คนแรก)
+4. (optional) **Custom domain**: Project → Settings → Domains → เพิ่ม `velshop.com` → ตั้ง DNS ตามที่ Vercel ให้ (A record `76.76.21.21` หรือ CNAME) แล้วแก้ `VITE_VEL*_URL` ใน Vercel env ให้เป็น domain จริง
+
+---
+
+### 6.7 ตารางสรุป: ตัวแปรต้องตั้งที่ไหน
+
+| ตัวแปร | Vercel (frontend) | Convex deployment env (backend) |
+|---|---|---|
+| `CONVEX_DEPLOY_KEY` | ✅ (Production เท่านั้น) | — |
+| `VITE_CONVEX_URL` | อัตโนมัติจาก build command | — |
+| `VITE_SITE_BASENAME` / `VITE_VEL*_URL` | ✅ | — |
+| `DATABASE_URL` (Neon) | — | ✅ |
+| `CLOUDINARY_CLOUD_NAME` / `_API_KEY` / `_API_SECRET` | — | ✅ |
+| `SITE_URL` | — | ✅ |
+
+---
+
+### 6.8 ทางเลือกอื่น (Netlify / Cloudflare Pages)
+
+หลักการเดียวกัน: deploy `dist/` ทั้งโฟลเดอร์ + rewrite ทุก route ไป entry ของเว็บนั้น + env เหมือนเดิม (ต้องตั้ง `CONVEX_DEPLOY_KEY` ใน env ของแพลตฟอร์มด้วย — `convex deploy` ทำงานได้ทุกที่):
+
+| Platform | Build command | Output | Rewrite (ต่อเว็บ — ตัวอย่าง velshop) |
+|---|---|---|---|
+| **Netlify** | `npx convex deploy --cmd-url-env-var-name VITE_CONVEX_URL --cmd 'bun run build'` | `dist` | ไฟล์ `_redirects`: `/* /velshop.html 200` |
+| **Cloudflare Pages** | เหมือนกัน | `dist` | ไฟล์ `_redirects`: `/* /velshop.html 200` |
+
+> Vercel ยังคงเป็นตัวเลือกที่แนะนำสุด เพราะ `convex deploy` inject `VITE_CONVEX_URL` ให้อัตโนมัติ และมี Convex Preview Deployments ให้ทดสอบก่อน merge
 
 ---
 
@@ -304,6 +398,10 @@ bun run build
 | ล็อกอินแล้วพาไปผิดที่ / ตก 404 | ตรวจ `VITE_*_URL` — การข้ามเว็บใช้การโหลดหน้าใหม่ทั้งหน้า (ต้องเป็น URL จริง) |
 | คลิกไปเว็บอื่นแล้ว 404 | กำลัง preview ใน repo เดียวกันต้องใช้ path default (`/velshop.html` ฯลฯ) — deploy จริงต้องตั้ง `VITE_*_URL` |
 | กดส่ง OTP แล้วไม่ได้รับอีเมล | ตรวจ backend env `SITE_URL` + ตั้งค่า email provider ของ Convex Auth (ดู `src/convex/auth/emailOtp.ts` — ห้ามแก้ไฟล์นี้) |
+| เปิด root โดเมนแล้วเจอหน้า portal (landing) แทนเว็บของตัวเอง | ยังไม่ได้ตั้ง Rewrite ใน 6.5 — ให้ `/(.*)` → `/velshop.html` (หรือ entry ของเว็บนั้น) |
+| route ลึก (เช่น `/shop`) 404 หลัง deploy | Rewrite `/(.*)` ยังไม่ได้ตั้ง หรือตั้งผิด entry |
+| Build บน Vercel fail ตอน codegen / push Convex | ตรวจ `CONVEX_DEPLOY_KEY` ตั้งครบ และ Environment ต้องติ๊ก **Production** (uncheck Preview/Development) |
+| ล็อกอิน / OTP ผิดปกติหลังย้ายโดเมน | ตรวจ Convex dashboard → CORS / Allowed Origins ให้เพิ่ม domain ใหม่ + `SITE_URL` ใน deployment env |
 | อยากเริ่มฐานข้อมูลใหม่ | สร้าง Convex deployment ใหม่แล้วเปลี่ยน `VITE_CONVEX_URL` |
 
 ---
