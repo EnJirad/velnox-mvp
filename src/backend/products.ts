@@ -8,11 +8,21 @@
  * metadata (url, storage key, alt, sort order, primary flag, dimensions).
  */
 import type { Db } from "./db";
+import { AppError } from "./errors";
+import { priceSchema } from "./validation";
 import { getStorage, isStorageConfigured } from "./storage";
 import type { Category, Product, ProductCategory, ProductImage, ProductStatus } from "./types";
 import { ensureInventory, getInventory, setStock } from "./inventory";
 
 const round2 = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100;
+
+/** price must be a finite non-negative number — never trust the client (spec §9). */
+function validatePrice(price: number): void {
+  const parsed = priceSchema.safeParse(price);
+  if (!parsed.success) {
+    throw new AppError("INVALID_INPUT", "ราคาสินค้าต้องเป็นตัวเลขที่ไม่ติดลบ");
+  }
+}
 
 // ---------------------------------------------------------------------------
 // mappers
@@ -89,6 +99,7 @@ export interface CreateProductInput {
 }
 
 export async function createProduct(db: Db, input: CreateProductInput): Promise<Product> {
+  validatePrice(input.price);
   const rows = await db(
     `INSERT INTO products (shop_id, name, description, category, unit, price, status, supplier)
      VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
@@ -143,6 +154,7 @@ export async function updateProduct(
   productId: string,
   patch: Partial<Pick<Product, "name" | "description" | "category" | "unit" | "price" | "status" | "supplier">>,
 ): Promise<Product | null> {
+  if (patch.price !== undefined) validatePrice(patch.price);
   const sets: string[] = [];
   const values: unknown[] = [];
   const allowed: Record<string, string> = {

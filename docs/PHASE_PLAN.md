@@ -258,6 +258,16 @@ Phase 12 Production — staging/prod env, deploy pipeline, monitoring, backup
 
 ---
 
+## Phase 13 (spec "PHASE 13") — Production Hardening, Security, Reliability & Final Integration ✅
+
+- ✅ **Fix: percentage 0–100** — `platformSettings.ts` clamp commission/shipping/threshold/tax (ก่อนนี้ยอมรับ 150% → เงินพัง) + export `validateValue`
+- ✅ **Fix: product price ติดลบ** — `products.ts` `validatePrice` (priceSchema ≥ 0) ก่อน INSERT/UPDATE (DB ไม่มี CHECK) → AppError
+- ✅ **Rate limit เพิ่ม**: `product_create` 30/h + `image_upload` 60/h ต่อ seller
+- ✅ **Tests**: +3 (percentage bounds, price guard) → **58 ผ่าน** · typecheck + build ผ่าน
+- ✅ **Report**: `docs/PHASE-13-REPORT.md` (10 sections ตาม DELIVERABLES) — Remaining: payment/carrier จริง (BLOCKED external), deploy จริง, E2E browser, legacy Center.tsx → Phase 14
+
+---
+
 ## Phase 11 — Testing
 
 - ✅ Unit test: `tests/*` 48 ตัว (commission calc, penalty, state machine, GPS, IDOR/security, providers, velrepeat)

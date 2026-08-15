@@ -345,6 +345,7 @@ export const createProductAction = action({
   },
   handler: async (ctx, args) => {
     const { seller, user } = await requireSeller(ctx);
+    await enforceRateLimit(ctx, { name: "product_create", key: user.id, max: 30, windowMs: 3_600_000 });
     const db = getDb();
     const shops = await listShopsBySeller(db, seller.id);
     if (!shops.some((s) => s.id === args.shopId)) throw new AppError("FORBIDDEN", "ร้านนี้ไม่ใช่ของคุณ");
@@ -496,7 +497,8 @@ export const getProductImageUploadSignature = action({
           "CLOUDINARY_API_SECRET in the project Keys/API keys UI.",
       );
     }
-    const { product } = await requireSellerProduct(ctx, args.productId);
+    const { product, user } = await requireSellerProduct(ctx, args.productId);
+    await enforceRateLimit(ctx, { name: "image_upload", key: user.id, max: 60, windowMs: 3_600_000 });
     const storage = getStorage();
     const folder = `velnox/products/${product.shopId}`;
     const publicId = `${product.id.slice(0, 8)}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;

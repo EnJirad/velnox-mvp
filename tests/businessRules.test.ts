@@ -15,6 +15,8 @@ import {
   calcSellerReturnCost,
   round2,
 } from "../src/backend/rules";
+import { validateValue } from "../src/backend/platformSettings";
+import { priceSchema } from "../src/backend/validation";
 
 describe("§60 — platform commission (default 3%)", () => {
   it("1000 THB × 3% → platform fee 30 THB", () => {
@@ -101,5 +103,33 @@ describe("§39.10 — commission SNAPSHOT is frozen at order time", () => {
     const snapshotRate = 0.03;
     const fee = round2(orderAmount * snapshotRate);
     expect(calcSellerNet(orderAmount, fee, 0, 0)).toBe(970);
+  });
+});
+
+describe("§13 — platform settings percentage validation (0–100)", () => {
+  it("rejects commission/shipping/threshold values above 100%", () => {
+    // validateValue lives in src/backend/platformSettings.ts and is applied
+    // to every VelCenter settings write — a 500% commission would break
+    // financial math, so it must be rejected at the boundary.
+    expect(() => validateValue("platform_commission_percent", 150)).toThrow();
+    expect(() => validateValue("shipping_company_percent", 100.01)).toThrow();
+    expect(() => validateValue("return_rate_threshold", -1)).toThrow();
+    expect(() => validateValue("tax_percent", 101)).toThrow();
+  });
+
+  it("accepts in-range percentages and non-percentage keys", () => {
+    expect(() => validateValue("platform_commission_percent", 3)).not.toThrow();
+    expect(() => validateValue("return_rate_threshold", 10)).not.toThrow();
+    expect(() => validateValue("auto_approve_sellers", true)).not.toThrow();
+    expect(() => validateValue("platform_name", "Velnox")).not.toThrow();
+  });
+
+  it("product price must be non-negative (createProduct/updateProduct guard)", () => {
+    // priceSchema is the guard used by createProduct/updateProduct — a
+    // negative price must never reach the DB (no CHECK exists on the column)
+    expect(priceSchema.safeParse(-1).success).toBe(false);
+    expect(priceSchema.safeParse(-0.01).success).toBe(false);
+    expect(priceSchema.safeParse(0).success).toBe(true);
+    expect(priceSchema.safeParse(499.99).success).toBe(true);
   });
 });

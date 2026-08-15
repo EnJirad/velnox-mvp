@@ -64,13 +64,24 @@ export async function updateSetting(db: Db, key: string, value: unknown, updated
   return { key: rows[0].key, value: JSON.parse(rows[0].value) };
 }
 
-function validateValue(key: string, value: unknown): void {
-  const numKeys: readonly string[] = [
-    "platform_commission_percent",
-    "shipping_company_percent",
-    "return_rate_threshold",
-    "tax_percent",
-  ];
+/**
+ * Percentage keys that must stay within 0–100 (spec §13: commission,
+ * shipping share, return threshold, tax). Exported for tests.
+ */
+export const PERCENT_KEYS: readonly string[] = [
+  "platform_commission_percent",
+  "shipping_company_percent",
+  "return_rate_threshold",
+  "tax_percent",
+];
+
+export function validateValue(key: string, value: unknown): void {
+  if (PERCENT_KEYS.includes(key)) {
+    if (typeof value !== "number" || !Number.isFinite(value) || value < 0 || value > 100) {
+      throw new AppError("INVALID_INPUT", `Setting ${key} ต้องเป็นตัวเลข 0–100`);
+    }
+    return;
+  }
   const boolKeys: readonly string[] = [
     "auto_approve_sellers",
     "auto_approve_products",
@@ -81,11 +92,7 @@ function validateValue(key: string, value: unknown): void {
     "payment_bank_transfer",
     "payment_cod",
   ];
-  if (numKeys.includes(key)) {
-    if (typeof value !== "number" || !Number.isFinite(value) || value < 0) {
-      throw new AppError("INVALID_INPUT", `Setting ${key} ต้องเป็นตัวเลข >= 0`);
-    }
-  } else if (boolKeys.includes(key)) {
+  if (boolKeys.includes(key)) {
     if (typeof value !== "boolean") throw new AppError("INVALID_INPUT", `Setting ${key} ต้องเป็น true/false`);
   } else if (key === "platform_name" || key === "currency") {
     if (typeof value !== "string" || value.trim().length === 0) {
