@@ -205,6 +205,19 @@ Phase 12 Production — staging/prod env, deploy pipeline, monitoring, backup
 
 ---
 
+## Phase 8 (spec "PHASE 8") — Production Hardening, Security & Final Integration ✅
+
+> spec ที่เจ้าของส่งมาระบุ PHASE 8 = Hardening/Security/Integration — งานส่วนใหญ่ทับซ้อนกับ Phase 7 ที่ทำไป (ตรวจสอบก่อน ไม่สร้างของซ้ำ §76) สิ่งที่ขาดจริงและทำในเฟสนี้:
+
+- ✅ **Error contract ใช้จริงทั้ง action layer** (§28): แปลง `new Error()` ทั้งหมดใน `src/convex/commerce.ts` (23 จุด) · `customer.ts` (4) · `centerAdmin.ts` (6) → `AppError` (AUTH_REQUIRED/FORBIDDEN/ORDER_NOT_FOUND/PRODUCT_NOT_FOUND/INVALID_INPUT/NOT_FOUND/SHOP_NOT_FOUND/INVALID_STATUS_TRANSITION) — message เดิมไม่เปลี่ยน (UX คงเดิม) แต่ตอนนี้มี stable code ให้ frontend branch ได้
+- ✅ **`typecheck` script** (§73): `package.json` + `bun run typecheck` (tsc -b --noEmit)
+- ✅ **ลบ deps ไม่ได้ใช้** (§72): hono · react-intersection-observer · date-fns · @jridgewell/trace-mapping (keep: ws — ใช้ใน db.ts, recharts — ใช้ใน chart.tsx)
+- ✅ **Tests**: +5 (`tests/errors.test.ts` — AppError contract: ทุก code มี safe Thai message, helper constructors, ownership failures มี code ไม่ใช่ raw message) → **53 ผ่าน**
+- ✅ **Report**: `docs/PHASE-8-REPORT.md` (Completed / Files / DB / Env / Tests / Build / Remaining Issues ตาม §75)
+- ⚠️ IDOR/ownership/SQL-scoped access ตรวจแล้วครอบครบตั้งแต่ Phase 5–7 (orderDetail/requireSellerProduct/sellerOwnsOrder/address/wishlist/cart/notification) — อยู่ใน `docs/SECURITY.md` §2
+
+---
+
 ## Phase 11 — Testing
 
 - ✅ Unit test: `tests/*` 48 ตัว (commission calc, penalty, state machine, GPS, IDOR/security, providers, velrepeat)

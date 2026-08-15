@@ -35,6 +35,7 @@ import { listReturnsForCustomer, requestReturn } from "../backend/returns";
 import { categoryStats, listProducts } from "../backend/products";
 import { listReviewsByShop } from "../backend/reviews";
 import { audit } from "../backend/audit";
+import { AppError } from "../backend/errors";
 import { enforceRateLimit } from "./rateLimit";
 import type { Shop } from "../backend/types";
 
@@ -115,7 +116,7 @@ export const shopDetail = action({
        LIMIT 1`,
       [args.shopId],
     );
-    if (!rows[0]) throw new Error("ร้านค้าไม่พบ");
+    if (!rows[0]) throw new AppError("SHOP_NOT_FOUND", "ร้านค้าไม่พบ");
     const products = await listProducts(db, { shopId: args.shopId, status: "published", limit: 100 });
     return { shop: mapShop(rows[0]), products };
   },
@@ -295,7 +296,7 @@ export const orderDetail = action({
   handler: async (ctx, args) => {
     const { user } = await requireIdentity(ctx);
     const order = await getOrder(getDb(), args.orderId);
-    if (!order || order.customerUserId !== user.id) throw new Error("ออเดอร์นี้ไม่ใช่ของคุณ");
+    if (!order || order.customerUserId !== user.id) throw new AppError("ORDER_NOT_FOUND", "ออเดอร์นี้ไม่ใช่ของคุณ");
     const db = getDb();
     const shipmentRows = await listShipmentsForOrder(db, order.id);
     const shipments = [];
@@ -415,8 +416,8 @@ export const reorderAction = action({
     const { user } = await requireIdentity(ctx);
     const db = getDb();
     const order = await db("SELECT id, customer_user_id, status FROM orders WHERE id = $1", [args.orderId]);
-    if (!order[0] || order[0].customer_user_id !== user.id) throw new Error("ออเดอร์นี้ไม่ใช่ของคุณ");
-    if (order[0].status === "cancelled") throw new Error("ไม่สามารถสั่งซื้อซ้ำจากออเดอร์ที่ยกเลิกได้");
+    if (!order[0] || order[0].customer_user_id !== user.id) throw new AppError("ORDER_NOT_FOUND", "ออเดอร์นี้ไม่ใช่ของคุณ");
+    if (order[0].status === "cancelled") throw new AppError("INVALID_STATUS_TRANSITION", "ไม่สามารถสั่งซื้อซ้ำจากออเดอร์ที่ยกเลิกได้");
 
     const items = await db(
       "SELECT oi.product_id, oi.quantity, oi.product_name FROM order_items oi WHERE oi.order_id = $1",

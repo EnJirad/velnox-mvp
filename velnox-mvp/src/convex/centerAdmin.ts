@@ -14,6 +14,7 @@ import { getDb } from "../backend/db";
 import { clientMeta, requireCenter, requireIdentity, requirePermission } from "../backend/identity";
 import { listSettings, updateSetting, PLATFORM_SETTING_KEYS } from "../backend/platformSettings";
 import { listAuditLogs, audit } from "../backend/audit";
+import { AppError } from "../backend/errors";
 import { listPayouts, platformRevenueReport, processPayout, recomputeSellerBalance } from "../backend/finance";
 import { PERMISSION_CATALOG, upsertStaffProfile } from "../backend/permissions";
 import { resolveRules } from "../backend/rules";
@@ -160,13 +161,13 @@ export const setSellerStatusAction = action({
     const identity = await requireCenter(ctx);
     const db = getDb();
     const status = args.status as SellerStatus;
-    if (!["pending", "approved", "rejected", "suspended"].includes(status)) throw new Error("Invalid seller status");
+    if (!["pending", "approved", "rejected", "suspended"].includes(status)) throw new AppError("INVALID_INPUT", "Invalid seller status");
 
     const need: Permission = status === "approved" || status === "rejected" ? "APPROVE_SELLERS" : "SUSPEND_SELLERS";
     if (identity.user.role === "staff") await requirePermission(ctx, need);
 
     const rows = await db("SELECT * FROM sellers WHERE id = $1", [args.sellerId]);
-    if (!rows[0]) throw new Error("Seller not found");
+    if (!rows[0]) throw new AppError("NOT_FOUND", "Seller not found");
     const before = { status: rows[0].status };
 
     await db(
@@ -238,7 +239,7 @@ export const setProductModerationStatus = action({
     if (identity.user.role === "staff") await requirePermission(ctx, need);
 
     const rows = await db("SELECT id, status, shop_id FROM products WHERE id = $1", [args.productId]);
-    if (!rows[0]) throw new Error("Product not found");
+    if (!rows[0]) throw new AppError("PRODUCT_NOT_FOUND", "Product not found");
     const before = { status: rows[0].status };
     await db("UPDATE products SET status = $2 WHERE id = $1", [args.productId, status]);
     await audit(db, {
@@ -276,10 +277,10 @@ export const setStaffProfileAction = action({
   },
   handler: async (ctx, args) => {
     const identity = await requirePermission(ctx, "MANAGE_PLATFORM_SETTINGS");
-    if (identity.user.role !== "owner") throw new Error("เจ้าของบริษัทเท่านั้นที่ตั้งสิทธิ์พนักงานได้");
+    if (identity.user.role !== "owner") throw new AppError("FORBIDDEN", "เจ้าของบริษัทเท่านั้นที่ตั้งสิทธิ์พนักงานได้");
     const db = getDb();
     const user = await db("SELECT id, role FROM users WHERE id = $1", [args.userId]);
-    if (!user[0]) throw new Error("User not found");
+    if (!user[0]) throw new AppError("NOT_FOUND", "User not found");
 
     await upsertStaffProfile(db, {
       userId: args.userId,
@@ -309,7 +310,7 @@ export const recomputeBalances = action({
   args: { sellerId: v.string() },
   handler: async (ctx, args) => {
     const identity = await requireIdentity(ctx);
-    if (identity.user.role !== "owner") throw new Error("Owner only");
+    if (identity.user.role !== "owner") throw new AppError("FORBIDDEN", "Owner only");
     await recomputeSellerBalance(getDb(), args.sellerId);
     return { ok: true };
   },

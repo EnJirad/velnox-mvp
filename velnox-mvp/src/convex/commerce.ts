@@ -54,6 +54,7 @@ import {
 } from "../backend/orders";
 import { recordPayment, refundPayment } from "../backend/payments";
 import { audit } from "../backend/audit";
+import { AppError } from "../backend/errors";
 import { gpsSchema } from "../backend/validation";
 import { enforceRateLimit } from "./rateLimit";
 import {
@@ -80,7 +81,7 @@ import type { Product, Seller } from "../backend/types";
 // ---------------------------------------------------------------------------
 async function requireIdentity(ctx: ActionCtx) {
   const identity = await ctx.auth.getUserIdentity();
-  if (!identity) throw new Error("Unauthorized — please sign in first");
+  if (!identity) throw new AppError("AUTH_REQUIRED", "Unauthorized — please sign in first");
   const user = await findOrCreateUser(getDb(), {
     convexId: identity.subject,
     email: identity.email ?? null,
@@ -92,7 +93,7 @@ async function requireIdentity(ctx: ActionCtx) {
 async function requireSeller(ctx: ActionCtx) {
   const { identity, user } = await requireIdentity(ctx);
   const seller = await getSellerByOwner(getDb(), user.id);
-  if (!seller) throw new Error("ไม่พบร้านค้าของคุณ — กรุณาเปิดร้านก่อน");
+  if (!seller) throw new AppError("FORBIDDEN", "ไม่พบร้านค้าของคุณ — กรุณาเปิดร้านก่อน");
   return { identity, user, seller };
 }
 
@@ -101,10 +102,10 @@ async function requireSellerProduct(ctx: ActionCtx, productId: string): Promise<
   const { seller } = await requireSeller(ctx);
   const db = getDb();
   const product = await getProduct(db, productId);
-  if (!product) throw new Error("Product not found");
+  if (!product) throw new AppError("PRODUCT_NOT_FOUND", "Product not found");
   const shop = await getShopById(db, product.shopId);
   if (!shop || shop.sellerId !== seller.id) {
-    throw new Error("สินค้านี้ไม่ใช่ของคุณ");
+    throw new AppError("FORBIDDEN", "สินค้านี้ไม่ใช่ของคุณ");
   }
   return { seller, product };
 }
@@ -116,7 +117,7 @@ async function sellerOwnsOrder(ctx: ActionCtx, orderId: string): Promise<Seller>
     "SELECT 1 FROM order_items WHERE order_id = $1 AND seller_id = $2 LIMIT 1",
     [orderId, seller.id],
   );
-  if (!rows[0]) throw new Error("ออเดอร์นี้ไม่ใช่ของคุณ");
+  if (!rows[0]) throw new AppError("ORDER_NOT_FOUND", "ออเดอร์นี้ไม่ใช่ของคุณ");
   return seller;
 }
 
@@ -200,7 +201,7 @@ export const updateShopInfo = action({
     const { seller, user } = await requireSeller(ctx);
     const db = getDb();
     const shops = await listShopsBySeller(db, seller.id);
-    if (!shops.some((s) => s.id === args.shopId)) throw new Error("ร้านนี้ไม่ใช่ของคุณ");
+    if (!shops.some((s) => s.id === args.shopId)) throw new AppError("FORBIDDEN", "ร้านนี้ไม่ใช่ของคุณ");
     const updated = await updateShop(db, args.shopId, {
       name: args.name,
       description: args.description,
@@ -228,7 +229,7 @@ export const updateShopLocationAction = action({
     const { seller, user } = await requireSeller(ctx);
     const db = getDb();
     const shops = await listShopsBySeller(db, seller.id);
-    if (!shops.some((s) => s.id === args.shopId)) throw new Error("ร้านนี้ไม่ใช่ของคุณ");
+    if (!shops.some((s) => s.id === args.shopId)) throw new AppError("FORBIDDEN", "ร้านนี้ไม่ใช่ของคุณ");
     const gps = gpsSchema.parse({ latitude: args.latitude, longitude: args.longitude });
     const updated = await updateShopLocation(db, args.shopId, {
       latitude: gps.latitude ?? null,
@@ -343,7 +344,7 @@ export const createProductAction = action({
     const { seller } = await requireSeller(ctx);
     const db = getDb();
     const shops = await listShopsBySeller(db, seller.id);
-    if (!shops.some((s) => s.id === args.shopId)) throw new Error("ร้านนี้ไม่ใช่ของคุณ");
+    if (!shops.some((s) => s.id === args.shopId)) throw new AppError("FORBIDDEN", "ร้านนี้ไม่ใช่ของคุณ");
     const product = await createProduct(db, {
       shopId: args.shopId,
       name: args.name,
@@ -393,11 +394,11 @@ export const setProductStatusAction = action({
   handler: async (ctx, args) => {
     const { product } = await requireSellerProduct(ctx, args.productId);
     const status = args.status as "draft" | "published" | "archived";
-    if (!["draft", "published", "archived"].includes(status)) throw new Error("Invalid product status");
+    if (!["draft", "published", "archived"].includes(status)) throw new AppError("INVALID_INPUT", "Invalid product status");
     if (status === "published") {
       const full = await getProduct(getDb(), product.id);
-      if (!full?.inventory) throw new Error("ต้องตั้งสต็อกก่อนจึงจะประกาศขายได้");
-      if (full.price <= 0) throw new Error("ต้องตั้งราคาก่อนจึงจะประกาศขายได้");
+      if (!full?.inventory) throw new AppError("INVALID_INPUT", "ต้องตั้งสต็อกก่อนจึงจะประกาศขายได้");
+      if (full.price <= 0) throw new AppError("INVALID_INPUT", "ต้องตั้งราคาก่อนจึงจะประกาศขายได้");
     }
     await updateProduct(getDb(), product.id, { status });
     await recordEvent(ctx, "ProductUpdated", product.id, { status });
@@ -483,10 +484,10 @@ export const saveProductImage = action({
     const format = (args.format ?? "").toLowerCase();
     const allowed = ALLOWED_IMAGE_FORMATS.split(",");
     if (!allowed.includes(format)) {
-      throw new Error(`ไฟล์รูปประเภท .${format || "?"} ไม่ได้รับอนุญาต (รองรับ: ${ALLOWED_IMAGE_FORMATS})`);
+      throw new AppError("INVALID_INPUT", `ไฟล์รูปประเภท .${format || "?"} ไม่ได้รับอนุญาต (รองรับ: ${ALLOWED_IMAGE_FORMATS})`);
     }
     if ((args.bytes ?? MAX_IMAGE_BYTES + 1) > MAX_IMAGE_BYTES) {
-      throw new Error("ไฟล์รูปใหญ่เกิน 5 MB");
+      throw new AppError("INVALID_INPUT", "ไฟล์รูปใหญ่เกิน 5 MB");
     }
 
     const storage = getStorage();
@@ -509,16 +510,16 @@ export const deleteProductImageAction = action({
     const db = getDb();
     // load the row to verify ownership before deleting anything
     const images = await db("SELECT * FROM product_images WHERE id = $1", [args.imageId]);
-    if (!images[0]) throw new Error("Image not found");
+    if (!images[0]) throw new AppError("NOT_FOUND", "Image not found");
     const product = await getProduct(db, images[0].product_id);
-    if (!product) throw new Error("Product not found");
+    if (!product) throw new AppError("PRODUCT_NOT_FOUND", "Product not found");
     const shop = await getShopById(db, product.shopId);
-    if (!shop) throw new Error("Shop not found");
+    if (!shop) throw new AppError("SHOP_NOT_FOUND", "Shop not found");
     const { seller } = await requireSeller(ctx);
-    if (shop.sellerId !== seller.id) throw new Error("รูปนี้ไม่ใช่ของคุณ");
+    if (shop.sellerId !== seller.id) throw new AppError("FORBIDDEN", "รูปนี้ไม่ใช่ของคุณ");
 
     const removed = await deleteProductImage(db, args.imageId);
-    if (!removed) throw new Error("Image not found");
+    if (!removed) throw new AppError("NOT_FOUND", "Image not found");
 
     // best-effort binary cleanup in object storage
     if (removed.image.storageKey && isStorageConfigured()) {
@@ -549,7 +550,7 @@ export const reorderProductImagesAction = action({
     const images = await db("SELECT id FROM product_images WHERE product_id = $1", [product.id]);
     const current = new Set(images.map((r) => r.id));
     if (args.orderedIds.length !== current.size || args.orderedIds.some((id) => !current.has(id))) {
-      throw new Error("Invalid image ordering");
+      throw new AppError("INVALID_INPUT", "Invalid image ordering");
     }
     await reorderProductImages(db, product.id, args.orderedIds);
     return getProduct(db, product.id);
@@ -755,7 +756,7 @@ export const pauseSubscription = action({
     const { user } = await requireIdentity(ctx);
     const db = getDb();
     const sub = await getSubscription(db, args.subscriptionId);
-    if (!sub || sub.customerUserId !== user.id) throw new Error("Subscription not found");
+    if (!sub || sub.customerUserId !== user.id) throw new AppError("NOT_FOUND", "Subscription not found");
     const status = args.status as "active" | "paused" | "cancelled";
     const updated = await updateSubscriptionStatus(db, args.subscriptionId, status);
     await recordEvent(ctx, "SubscriptionUpdated", args.subscriptionId, { status });
@@ -779,7 +780,7 @@ export const updateSubscriptionAction = action({
     const { user } = await requireIdentity(ctx);
     const db = getDb();
     const sub = await getSubscription(db, args.subscriptionId);
-    if (!sub || sub.customerUserId !== user.id) throw new Error("Subscription not found");
+    if (!sub || sub.customerUserId !== user.id) throw new AppError("NOT_FOUND", "Subscription not found");
     const updated = await updateSubscriptionSettings(db, args.subscriptionId, {
       quantity: args.quantity ?? undefined,
       frequency: args.frequency as "daily" | "weekly" | "monthly" | "custom" | undefined,
