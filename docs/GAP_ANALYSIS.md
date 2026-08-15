@@ -124,9 +124,28 @@
 | Map system | ไม่มี | ❌ | Phase 5 |
 | Env แยก dev/staging/prod | `.env.local` + Keys/API keys + docs | 🟡 | สร้าง deployment แยกได้ใน Convex — Phase 11/12 |
 | Secret ไม่เข้า git | `.gitignore` ครอบ `.env*`, `_generated` | ✅ | |
-| Responsive desktop/tablet/mobile | shadcn/ui + Tailwind responsive | ✅ | |
-| Tests | ยังไม่มี test suite | ❌ | Phase 11 |
+| Responsive desktop/tablet/mobile | shadcn/ui + Tailwind responsive + mobile tab bar + การ์ดแบบแอปทุกหน้า | ✅ | |
+| Tests | vitest: business rules · state machine · IDOR/security · providers · velrepeat · **customer memory core** — 79 ผ่าน | ✅ | `src/lib/customer-memory-core.test.ts` + `tests/*` |
 | CI/CD | docs Vercel ครบ (build command inject Convex URL + rewrite 3 เว็บ) | 🟡 | ยังไม่มี test ใน pipeline — Phase 11/12 |
+
+---
+
+## 9. Customer Memory & Personal Intelligence (CPNS) — สถานะปัจจุบัน ✅
+
+> เอกสารฉบับเต็ม: **`docs/CUSTOMER_MEMORY.md`** · วิสัยทัศน์: **`docs/Velnox-CPNS.md`**
+
+| Spec | สถานะปัจจุบัน | สถานะ | หมายเหตุ |
+|---|---|---|---|
+| ทุก Interaction คือข้อมูล — event vocabulary ครบ (spec §3) | `customerEvents` (Convex) + 16 event types (PRODUCT_VIEW…RECOMMENDATION_CLICK) | ✅ | `src/convex/memoryEvents.ts` |
+| ของใคร ของมัน — data isolation ต่อคน (spec §4) | ทุก read ส่วนบุคคล scoped ด้วย userId จาก session + index ครอบ | ✅ | `myMemory`/`recommendForCustomer` เริ่มจาก `getUserIdentity()` |
+| Guest → account identity merge (spec §5) | `mergeAnonymousToUser` + `<IdentityMerge />` — idempotent + dedup | ✅ | ใหม่ใน Phase 14 |
+| Interest vs Purchase Intent แยกกัน (spec §9–10) | `interestScore` (weight×decay) แยกจาก `estimateIntent` (low/medium/high) | ✅ | `src/lib/customer-memory-core.ts` |
+| Time decay — RECENT > OLD (spec §11) | exponential half-life ต่อ event type | ✅ | มี unit test ครึ่งชีวิต |
+| Personalization + cold start (spec §13–14) | ShopHome: แนะนำสำหรับคุณ (พร้อมเหตุผล) / หมวดที่สนใจ / ซื้ออีกครั้ง / สินค้ายอดนิยมสำหรับแขก | ✅ | `src/pages/ShopHome.tsx` |
+| Smart Reorder + Proactive (spec §16) | `dueReorderReminders` — “ถึงเวลาสั่งซื้อซ้ำแล้ว” เรียนรอบจากออเดอร์จริง | ✅ | |
+| VelRepeat lifecycle (spec §17) | start/cancel events + subscriptions (pause/resume/cancel/แก้ไขรอบ) | ✅ | `VELREPEAT_CANCEL` ใหม่ใน Phase 14 |
+| Privacy: ไม่เปิด raw behavior ใน admin UI | velcenter เห็น aggregate เท่านั้น (`marketInsights`) | ✅ | |
+| Test ระบบ memory (spec §51) | +21 tests (weights/decay/intent/merge) → 79 ผ่านรวม | ✅ | |
 
 ---
 

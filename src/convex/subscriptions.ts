@@ -1,6 +1,7 @@
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
 import { Doc, Id } from "./_generated/dataModel";
+import { api } from "./_generated/api";
 import { canSell, getCurrentUser } from "./users";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -68,6 +69,20 @@ export const cancelSubscription = mutation({
     const sub = await ctx.db.get(subscriptionId as Id<"subscriptions">);
     if (!sub || sub.userId !== user._id) throw new Error("Subscription not found");
     await ctx.db.patch(subscriptionId as Id<"subscriptions">, { status: "cancelled", updatedAt: Date.now() });
+
+    // CPNS §3/§17 — cancelling a VelRepeat is a meaningful transaction event.
+    // The identity comes from the session (never the client), so it cannot be spoofed.
+    try {
+      await ctx.runMutation(api.memoryEvents.trackForUser, {
+        userId: user._id,
+        type: "VELREPEAT_CANCEL",
+        entityId: sub.productId,
+        value: undefined,
+        context: { intervalDays: sub.intervalDays, quantity: sub.quantity },
+      });
+    } catch {
+      // tracking is fire-and-forget — cancelling must never fail because of it
+    }
   },
 });
 

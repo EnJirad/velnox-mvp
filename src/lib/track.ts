@@ -10,8 +10,9 @@
  * Tracking must never break the shopper's flow: every call is fire-and-forget.
  */
 import { api } from "@/convex/_generated/api";
+import { useConvexAuth } from "@convex-dev/auth/react";
 import { useMutation } from "convex/react";
-import { useCallback, useMemo } from "react";
+import { useCallback, useEffect, useMemo, useRef } from "react";
 
 /** Keep in sync with src/convex/memoryEvents.ts EVENT_TYPES. */
 export type CustomerEventType =
@@ -28,7 +29,9 @@ export type CustomerEventType =
   | "CHECKOUT_START"
   | "PURCHASE"
   | "REORDER"
-  | "VELREPEAT_START";
+  | "VELREPEAT_START"
+  | "VELREPEAT_CANCEL"
+  | "RECOMMENDATION_CLICK";
 
 const ANON_KEY = "velnox_anon_id";
 
@@ -82,4 +85,42 @@ export function useTracking(): Tracking {
   );
 
   return useMemo(() => ({ track }), [track]);
+}
+
+/**
+ * Guest → account identity merge (CPNS §5).
+ *
+ * Mount inside the ConvexAuthProvider (once per site). When the browser
+ * transitions from signed-out to signed-in, this claims the guest's anonymous
+ * behavioural history (localStorage anonymousId) for the account so Velnox
+ * does not lose what the guest browsed before signing up. Fire-and-forget:
+ * a failure here must never block the authenticated experience.
+ */
+export function IdentityMerge() {
+  const { isAuthenticated } = useConvexAuth();
+  const merge = useMutation(api.memoryEvents.mergeAnonymousToUser);
+  const attempts = useRef(0);
+
+  useEffect(() => {
+    if (!isAuthenticated || attempts.current >= 3) return;
+    const anonId = getAnonymousId();
+    if (!anonId) {
+      attempts.current = 3;
+      return;
+    }
+    attempts.current += 1;
+    merge({ anonymousId: anonId })
+      .then(() => {
+        try {
+          window.localStorage.removeItem(ANON_KEY); // claim happened — drop the guest id
+        } catch {
+          /* ignore */
+        }
+      })
+      .catch(() => {
+        // retried on the next effect run (up to 3 attempts); never throws upward
+      });
+  }, [isAuthenticated, merge]);
+
+  return null;
 }

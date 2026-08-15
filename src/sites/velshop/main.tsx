@@ -13,6 +13,7 @@ import { initMonitoring } from "@/lib/monitoring";
 
 initMonitoring();
 import { MobileTabBar, type MobileTabItem } from "@/components/MobileTabBar";
+import { IdentityMerge } from "@/lib/track";
 import { useCart } from "@/lib/cart";
 import { Home, Package, ReceiptText, ShoppingCart, User } from "lucide-react";
 import { lazy } from "react";
@@ -67,6 +68,7 @@ const convex = new ConvexReactClient(import.meta.env.VITE_CONVEX_URL as string);
 createRoot(document.getElementById("root")!).render(
   <RootErrorBoundary>
     <ConvexAuthProvider client={convex}>
+      <IdentityMerge />
       <BrowserRouter basename={siteBasename("velshop")}>
         <RouteSyncer />
         <CartProvider>

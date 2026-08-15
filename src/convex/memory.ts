@@ -34,36 +34,9 @@ import { getProduct, listProducts } from "../backend/products";
 import { getShopById } from "../backend/sellers";
 import { listOrdersForCustomer } from "../backend/orders";
 import type { Product } from "../backend/types";
-
-/** Behavioural value of each event type when building Customer Memory. */
-const TYPE_WEIGHTS: Record<string, number> = {
-  PURCHASE: 12,
-  VELREPEAT_START: 8,
-  CART_ADD: 6,
-  WISHLIST_ADD: 5,
-  INTEREST: 4,
-  PRODUCT_VIEW: 2,
-  PRODUCT_CLICK: 1.5,
-  SEARCH: 0.4, // applied via keyword match against product names
-  SHOP_VIEW: 0.3, // applied via shop affinity
-  CATEGORY_VIEW: 0.25, // applied via category affinity
-};
-
-/** Recency half-life (days): strong signals fade slower than light ones. */
-const HALF_LIFE: Record<string, number> = {
-  PURCHASE: 120,
-  VELREPEAT_START: 120,
-  CART_ADD: 90,
-  WISHLIST_ADD: 90,
-  INTEREST: 60,
-  PRODUCT_VIEW: 30,
-  PRODUCT_CLICK: 30,
-  SEARCH: 45,
-  SHOP_VIEW: 60,
-  CATEGORY_VIEW: 45,
-};
-
-const DAY_MS = 24 * 60 * 60 * 1000;
+// Scoring weights, half-lives, decay + intent live in the pure core module so
+// they can be unit-tested without a Convex runtime (src/lib/customer-memory-core.ts).
+import { DAY_MS, decay, estimateIntent, eventWeight } from "../lib/customer-memory-core";
 
 export const CATEGORY_LABELS: Record<string, string> = {
   general: "ทั่วไป",
@@ -93,11 +66,6 @@ type EventRow = {
   context?: unknown;
   createdAt: number;
 };
-
-function decay(type: string, createdAt: number, now: number): number {
-  const ageDays = Math.max(0, (now - createdAt) / DAY_MS);
-  return Math.pow(0.5, ageDays / (HALF_LIFE[type] ?? 45));
-}
 
 async function loadUserEvents(
   ctx: ActionCtx,
@@ -144,7 +112,7 @@ export const myMemory = action({
     const seenShops = new Set<string>();
 
     for (const e of events) {
-      const w = TYPE_WEIGHTS[e.type] ?? 0;
+      const w = eventWeight(e.type);
       const d = decay(e.type, e.createdAt, now);
       switch (e.type) {
         case "PRODUCT_VIEW":
@@ -255,12 +223,7 @@ export const myMemory = action({
       .slice(0, 3);
 
     // CPNS §10 — estimate intent carefully, never from a single event.
-    let intent: "low" | "medium" | "high" = "low";
-    if (purchaseCount >= 3 || (cartAddCount >= 5 && viewCount >= 10) || wishlistCount >= 3 || checkoutCount >= 2) {
-      intent = "high";
-    } else if (purchaseCount > 0 || cartAddCount > 0 || wishlistCount > 0 || checkoutCount > 0) {
-      intent = "medium";
-    }
+    const intent = estimateIntent({ purchaseCount, cartAddCount, viewCount, wishlistCount, checkoutCount });
 
     return {
       categories,
@@ -326,7 +289,7 @@ export const recommendForCustomer = action({
     const shopAffinity = new Map<string, number>();
 
     for (const e of events) {
-      const w = TYPE_WEIGHTS[e.type] ?? 0;
+      const w = eventWeight(e.type);
       const d = decay(e.type, e.createdAt, now);
       if (e.type === "SEARCH") {
         const q = e.value?.trim().slice(0, 60);

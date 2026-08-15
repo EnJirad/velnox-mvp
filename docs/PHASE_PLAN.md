@@ -268,6 +268,18 @@ Phase 12 Production — staging/prod env, deploy pipeline, monitoring, backup
 
 ---
 
+## Phase 14 (spec "MASTER IMPLEMENTATION & FINALIZATION") — Customer Memory Completion ✅
+
+> เป้าหมาย: “Commerce that remembers you · จำแทนคุณ” — ปิดช่องว่างสุดท้ายของระบบ Customer Memory (CPNS) ให้ครบวงจร ตาม `docs/CUSTOMER_MEMORY.md`
+
+- ✅ **Guest → Account identity merge** (spec §5): `mergeAnonymousToUser` mutation (idempotent + dedup ผ่าน `planAnonymousMerge` — ไม่นับ memory ซ้ำ) + `<IdentityMerge />` mount ในทั้ง 3 site entries — ลบ `velnox_anon_id` หลัง merge ครั้งเดียวต่อเครื่อง
+- ✅ **Pure CPNS core** (`src/lib/customer-memory-core.ts`): น้ำหนัก/decay/intent/merge plan แยกเป็น pure TS (testable, ไม่ต้อง Convex runtime) — `memory.ts` ใช้จากจุดเดียว (single source of truth)
+- ✅ **Event vocabulary ครบ**: + `VELREPEAT_CANCEL` (server-side ใน `cancelSubscription`) + `RECOMMENDATION_CLICK` (วัดผล recommendation ใน ShopHome)
+- ✅ **Tests**: `src/lib/customer-memory-core.test.ts` +21 (weights, decay ครึ่งชีวิต, intent, merge dedup/idempotent) → **79 ผ่าน** · `bun convex dev --once` + `bun tsc -b --noEmit` ผ่าน
+- ✅ **Docs**: `docs/CUSTOMER_MEMORY.md` (ใหม่ — เหตุการณ์/identity/scoring/decay/intent/merge/privacy/ownership/retention) + ข้อมูล CPNS ใน `docs/GAP_ANALYSIS.md`
+
+---
+
 ## Phase 11 — Testing
 
 - ✅ Unit test: `tests/*` 48 ตัว (commission calc, penalty, state machine, GPS, IDOR/security, providers, velrepeat)

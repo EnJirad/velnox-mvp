@@ -9,6 +9,7 @@ import {
 } from "@/lib/app-shell";
 import { siteBasename } from "@/lib/sites";
 import { MobileTabBar, type MobileTabItem } from "@/components/MobileTabBar";
+import { IdentityMerge } from "@/lib/track";
 import { RefreshCw, ShoppingBag, Store, Target, Wallet } from "lucide-react";
 import { lazy } from "react";
 import { createRoot } from "react-dom/client";
@@ -40,6 +41,7 @@ const convex = new ConvexReactClient(import.meta.env.VITE_CONVEX_URL as string);
 createRoot(document.getElementById("root")!).render(
   <RootErrorBoundary>
     <ConvexAuthProvider client={convex}>
+      <IdentityMerge />
       <BrowserRouter basename={siteBasename("velseller")}>
         <RouteSyncer />
         <div className="site-app">

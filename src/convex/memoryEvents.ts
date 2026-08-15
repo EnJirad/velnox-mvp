@@ -9,6 +9,8 @@ import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
 import { getAuthUserId } from "@convex-dev/auth/server";
 import { api } from "./_generated/api";
+import type { Id } from "./_generated/dataModel";
+import { planAnonymousMerge } from "../lib/customer-memory-core";
 
 /** Event vocabulary (CPNS §17) — keep in sync with src/lib/track.ts. */
 export const EVENT_TYPES = [
@@ -26,6 +28,8 @@ export const EVENT_TYPES = [
   "PURCHASE",
   "REORDER",
   "VELREPEAT_START",
+  "VELREPEAT_CANCEL",
+  "RECOMMENDATION_CLICK",
 ] as const;
 export type CustomerEventType = (typeof EVENT_TYPES)[number];
 
@@ -101,6 +105,62 @@ export const trackForUser = mutation({
       context: args.context,
       createdAt: Date.now(),
     });
+  },
+});
+
+/**
+ * Guest → account identity merge (CPNS §5 / §8).
+ *
+ * Called by the client right after a guest signs in: the anonymous browsing
+ * history kept under localStorage anonymousId is claimed by the account so no
+ * useful memory is lost. Safe + idempotent:
+ *   - events the account already has (same type + entity + value) are deleted
+ *     so memory is never double-counted;
+ *   - everything else is re-bound (userId set, anonymousId cleared);
+ *   - a second call finds no anonymous rows left and is a no-op.
+ * The client clears localStorage anonymousId after a successful merge, so the
+ * claim happens exactly once per device.
+ */
+export const mergeAnonymousToUser = mutation({
+  args: { anonymousId: v.string() },
+  handler: async (ctx, { anonymousId }) => {
+    const userId = await getAuthUserId(ctx);
+    if (!userId) throw new Error("Not authenticated");
+    const anonId = anonymousId.trim();
+    if (!anonId) return 0;
+
+    const anonEvents = await ctx.db
+      .query("customerEvents")
+      .withIndex("by_anonymous", (q) => q.eq("anonymousId", anonId))
+      .take(500);
+    if (anonEvents.length === 0) return 0;
+
+    const userEvents = await ctx.db
+      .query("customerEvents")
+      .withIndex("by_user_type", (q) => q.eq("userId", userId))
+      .order("desc")
+      .take(1000);
+
+    const { toMerge, toDrop } = planAnonymousMerge(
+      anonEvents.map((e) => ({
+        _id: e._id,
+        type: e.type,
+        entityId: e.entityId,
+        value: e.value,
+      })),
+      userEvents.map((e) => ({ _id: e._id, type: e.type, entityId: e.entityId, value: e.value })),
+    );
+
+    for (const event of toDrop) {
+      await ctx.db.delete(event._id as Id<"customerEvents">);
+    }
+    for (const event of toMerge) {
+      await ctx.db.patch(event._id as Id<"customerEvents">, {
+        userId,
+        anonymousId: undefined, // identity claimed — no longer anonymous
+      });
+    }
+    return toMerge.length;
   },
 });
 

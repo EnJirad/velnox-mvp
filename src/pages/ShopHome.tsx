@@ -509,6 +509,12 @@ export default function ShopHome() {
                     className="block aspect-[4/3] w-full cursor-pointer overflow-hidden bg-slate-50"
                     onClick={() => {
                       setDetailProduct(product);
+                      // CPNS §3 — measuring whether recommendations actually get clicked
+                      track("RECOMMENDATION_CLICK", {
+                        entityId: product.id,
+                        value: product.name,
+                        context: { category: product.category },
+                      });
                       track("PRODUCT_CLICK", {
                         entityId: product.id,
                         value: product.name,
