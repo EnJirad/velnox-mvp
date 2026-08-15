@@ -240,7 +240,11 @@ export async function catalogProducts(db: Db, opts: CatalogProductsOptions = {})
   };
 
   if (opts.q) {
-    push(`p.name ILIKE $x`, `%${opts.q}%`);
+    // spec §34 — search name + description (SKU lives on variants; a variant
+    // join is added later when variant-level search is needed)
+    const like = `%${opts.q}%`;
+    values.push(like);
+    where.push(`(p.name ILIKE $${values.length} OR p.description ILIKE $${values.length})`);
   }
   if (opts.category) {
     if (PRODUCT_CATEGORY_ENUM.has(opts.category)) {

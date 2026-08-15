@@ -118,9 +118,32 @@ Phase 12 Production — staging/prod env, deploy pipeline, monitoring, backup
 - Product: variants editor, product type (ONE_TIME/VELREPEAT/SERVICE/DIGITAL/PHYSICAL), weight/dimensions, SKU
 - Order fulfillment: accept/reject, pack, tracking number, ship (สถานะเต็มจาก Phase 2)
 - Return management: ดู request + evidence, approve/reject, กำหนดผู้รับผิดชอบ (seller/platform ตาม policy)
-- Store settings: banner, operating hours, policies, return address + **location GPS** (map picker เหมือนลูกค้า)
+- Store settings: banner, operating hours, policies, return address + **location GPS** — backend พร้อมแล้ว (`updateShopLocationAction` + `shops.latitude/longitude` + guard เจ้าของร้าน + audit) ยังเหลือ UI ฝั่ง VelSeller
 - Dashboard: เพิ่ม KPI ครบตามข้อ 17.1 (return rate, net income, pending payout, available balance)
 - Smart Reorder: ต่อเนื่อง (มีแล้ว) + เชื่อม inventory reserved_quantity
+
+---
+
+## Phase 6 (spec "PHASE 6") — Integration, Business Rules & Production Readiness ✅
+
+> spec ที่เจ้าของส่งมาระบุ PHASE 6 = Integration/Production Readiness (ไม่ใช่ VelSeller ซึ่งคือ Phase 7 ในแผนเดิม)
+
+- ✅ **ShippingProvider abstraction** (`src/backend/shipping.ts`): interface (calculateShipping/createShipment/cancelShipment/trackShipment/getTrackingStatus) + **manual provider** ใช้งานได้จริงวันนี้ (seller กรอก carrier + tracking, append events) + registry + TODO ชัดเจนสำหรับ Kerry/Flash/J&T/Thailand Post/DHL (Phase 10)
+- ✅ **PaymentProvider abstraction** (`src/backend/payment.ts`): interface (createPayment/verifyPayment/refundPayment) + **manual provider** (COD/โอน/PromptPay บันทึก PENDING — ไม่ fake success; ยืนยันเมื่อเงินถึงจริง) + registry + TODO สำหรับ Omise/Stripe (Phase 9)
+- ✅ **Shop GPS** (§11/§21): `updateShopLocation` + `updateShopLocationAction` (seller-owned, gpsSchema) + `Shop.latitude/longitude` ใน type/mapper
+- ✅ **Audit wiring** (§39): เพิ่ม audit ลง `SELLER_UPDATED_ORDER_STATUS`, `CUSTOMER_CANCELLED_ORDER`, `CUSTOMER_CREATED_ORDER`, `CUSTOMER_REQUESTED_RETURN`, `SELLER_UPDATED_SHOP` (มีอยู่แล้ว: seller approve/product approve/settings/refund/payout)
+- ✅ **Search** (§34): catalogProducts ค้น name + description (backend ILIKE)
+- ✅ **SEO** (§44): `src/lib/seo.ts` (title/description/canonical/OG/Twitter/JSON-LD) + ใส่ใน Home / Products / Product detail (Product schema) / Categories / Shop
+- ✅ **Tests** (§50): `tests/providers.test.ts` (shipping + payment contracts) — รวม 48 tests ผ่าน
+- ✅ **Build** (§65): `bun run build` ผ่าน (tsc -b && vite build — ไม่ต้อง login Convex CLI)
+- ✅ **Cleanup sweep** (§61): ไม่พบ mock/dummy/console.log หลงเหลือ — เหลือ TODO ที่ตั้งใจไว้ 2 จุด (carrier/gateway integration)
+
+**Decisions / deferred (บันทึกตาม §63 — ไม่ fake):**
+- **เงิน**: เก็บเป็น NUMERIC(12,2) ใน Neon + `round2()` server-side (ตามที่อนุมัติใน Phase 2–3) — ไม่ refactor เป็น satang integer; เงินทั้งหมดคำนวณใน backend เท่านั้น
+- **โครงสร้าง monorepo** (apps/ packages/): repo ปัจจุบันเป็น single app ที่มี 3 หน้าเว็บแยก entry (velshop/velseller/velcenter) + backend/convex ร่วมกัน — รักษาโครงสร้างที่อนุมัติแล้ว 3 เว็บ deploy แยกกันได้โดยใช้ base เดียวกัน
+- **Product variants**: ตาราง `product_variants` มีแล้ว (migration 003) แต่ยังไม่มี service/UI — เป็นงาน VelSeller (Phase 7)
+- **Category linkage**: สินค้ายังไม่ได้ set `category_id` (ใช้ enum) — หน้า /shop/categories แสดง tree + นับของจริง; ให้ seller form set category_id ใน Phase 7
+- **Carrier API + Payment gateway**: abstraction + manual provider พร้อม — รอ Phase 8/9 (พร้อมใช้ Gravity Index เลือก provider)
 
 ---
 
@@ -136,9 +159,9 @@ Phase 12 Production — staging/prod env, deploy pipeline, monitoring, backup
 
 ## Phase 8 — Shipping
 
-- `ShippingProvider` interface (ข้อ 55): createShipment / getShipment / trackShipment / cancelShipment / calculateRate
-- ตาราง `shipments` + `tracking_events` (มี `orders.tracking_number` เป็นฐาน — migration ต่อ)
-- Provider ตัวแรก: **Flash Express** หรือ **Kerry** (ถามเจ้าของ / ใช้ Gravity Index หา service) — MVP อาจ mock provider ไว้ก่อน แต่ interface จริง
+- ✅ `ShippingProvider` interface (ข้อ 22): calculateShipping / createShipment / cancelShipment / trackShipment / getTrackingStatus — **เสร็จใน Phase 6** (`src/backend/shipping.ts`, manual provider ใช้งานได้แล้ว)
+- ตาราง `shipments` + `tracking_events` มีแล้ว (migration 006)
+- Provider ตัวแรกจริง: **Flash Express** หรือ **Kerry** (ถามเจ้าของ / ใช้ Gravity Index หา service) — ต่อจาก registry ที่วางไว้
 - Return shipping flow: สร้าง shipment คืน, status RETURN_SHIPPING → RECEIVED
 - Shipping fee คำนวณใน backend (ไม่ hard-code frontend)
 
@@ -146,7 +169,7 @@ Phase 12 Production — staging/prod env, deploy pipeline, monitoring, backup
 
 ## Phase 9 — Payment
 
-- `PaymentProvider` interface (ข้อ 56): createPayment / verifyPayment / refundPayment
+- ✅ `PaymentProvider` interface (ข้อ 24): createPayment / verifyPayment / refundPayment — **เสร็จใน Phase 6** (`src/backend/payment.ts`, manual provider: COD/โอน/PromptPay บันทึก PENDING)
 - วิธีที่แนะนำสำหรับไทย: **PromptPay QR (Omise/Opn Payments)** หรือ **Stripe** — ใช้ Gravity Index ตอนเริ่ม Phase 9 เพื่อเลือก service
 - Webhook endpoint (Convex http action) ยืนยัน payment → อัปเดต `payments` + trigger business event → แจ้ง seller
 - Refund ผ่าน provider (refundPayment) + บันทึกใน `refunds` + กลับ ledger

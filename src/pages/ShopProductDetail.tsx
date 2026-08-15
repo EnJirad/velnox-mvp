@@ -12,6 +12,7 @@ import {
   formatIsoDate,
   type StoreProduct,
 } from "@/lib/commerce";
+import { setSeo } from "@/lib/seo";
 import { useAction } from "convex/react";
 import {
   ArrowLeft,
@@ -97,6 +98,35 @@ export default function ShopProductDetail() {
   const available = product?.inventory?.available ?? product?.inventory?.quantity ?? 0;
   const outOfStock = available <= 0;
   const lowStock = !outOfStock && available <= 5;
+
+  // SEO (spec §44) — product page gets Product structured data
+  useEffect(() => {
+    if (!product) return;
+    const rating =
+      reviews.length > 0
+        ? { ratingValue: (reviews.reduce((s, r) => s + r.rating, 0) / reviews.length).toFixed(1), ratingCount: reviews.length }
+        : undefined;
+    setSeo({
+      title: `${product.name} — VelShop`,
+      description: product.description ?? `${product.name} ราคา ${formatBaht(product.price)}/${product.unit} ที่ร้าน ${product.shopName ?? "Velnox"}`,
+      ogType: "product",
+      ogImage: images[0]?.displayUrl ?? undefined,
+      jsonLd: {
+        "@context": "https://schema.org",
+        "@type": "Product",
+        name: product.name,
+        description: product.description ?? undefined,
+        image: images[0]?.displayUrl ?? undefined,
+        ...(rating ? { aggregateRating: { "@type": "AggregateRating", ...rating } } : {}),
+        offers: {
+          "@type": "Offer",
+          priceCurrency: "THB",
+          price: product.price,
+          availability: outOfStock ? "https://schema.org/OutOfStock" : "https://schema.org/InStock",
+        },
+      },
+    });
+  }, [product, reviews, images, outOfStock]);
 
   const handleAdd = () => {
     if (!product) return;

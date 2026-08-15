@@ -48,6 +48,8 @@ function mapShop(r: Record<string, any>): Shop {
     status: r.status,
     commissionRate: Number(r.commission_rate),
     currency: r.currency,
+    latitude: r.latitude != null ? Number(r.latitude) : null,
+    longitude: r.longitude != null ? Number(r.longitude) : null,
     createdAt: r.created_at,
   };
 }
@@ -164,6 +166,24 @@ export async function createShop(
     ],
   );
   return mapShop(rows[0]);
+}
+
+export interface ShopLocationInput {
+  latitude: number | null;
+  longitude: number | null;
+}
+
+/**
+ * Set the shop's storefront location (lat/long) — used for pickup, return
+ * shipping and delivery-area validation (spec §11, §21). GPS must be a valid
+ * pair (validated by the caller through gpsSchema).
+ */
+export async function updateShopLocation(db: Db, shopId: string, input: ShopLocationInput): Promise<Shop | null> {
+  const rows = await db(
+    `UPDATE shops SET latitude = $2, longitude = $3 WHERE id = $1 RETURNING *`,
+    [shopId, input.latitude, input.longitude],
+  );
+  return rows[0] ? mapShop(rows[0]) : null;
 }
 
 export async function updateShop(

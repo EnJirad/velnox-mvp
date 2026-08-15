@@ -5,6 +5,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { api } from "@/convex/_generated/api";
 import { useCart } from "@/lib/cart";
 import { formatBaht, type StoreProduct } from "@/lib/commerce";
+import { setSeo } from "@/lib/seo";
 import { useAction } from "convex/react";
 import { ArrowLeft, Heart, ImageOff, Package, Plus, ShieldCheck, Star, Store } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
@@ -50,6 +51,15 @@ export default function ShopDetail() {
       setLoading(false);
     }
   }, [shopId, shopDetail]);
+
+  useEffect(() => {
+    if (!shop) return;
+    setSeo({
+      title: `${shop.name} — VelShop`,
+      description: shop.description ?? `ร้าน ${shop.name} ในตลาด Velnox — สินค้า ${shop.productCount} รายการ`,
+      ogType: "website",
+    });
+  }, [shop]);
 
   useEffect(() => {
     void load();

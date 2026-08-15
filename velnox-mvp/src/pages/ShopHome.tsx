@@ -13,6 +13,7 @@ import {
   type StoreProduct,
   type StoreProductCategory,
 } from "@/lib/commerce";
+import { setSeo } from "@/lib/seo";
 import { useAction } from "convex/react";
 import { motion } from "framer-motion";
 import {
@@ -157,6 +158,13 @@ export default function ShopHome() {
   const shopName = settings?.shopName || "Velnox Shop";
   const tagline =
     settings?.tagline || "Commerce that remembers you · จำแทนคุณ";
+
+  useEffect(() => {
+    setSeo({
+      title: `${shopName} — VelShop · ตลาดออนไลน์ Velnox`,
+      description: `${tagline} ค้นหาและสั่งซื้อสินค้าได้จริง พร้อมสั่งรายเดือนอัตโนมัติ (VelRepeat)`,
+    });
+  }, [shopName, tagline]);
 
   const stockOf = (p: StoreProduct) => p.inventory?.available ?? p.inventory?.quantity ?? 0;
 

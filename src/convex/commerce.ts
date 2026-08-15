@@ -29,6 +29,7 @@ import {
   createShop,
   listShopsBySeller,
   updateShop,
+  updateShopLocation,
 } from "../backend/sellers";
 import {
   catalogProducts,
@@ -52,6 +53,8 @@ import {
   updateOrderStatus,
 } from "../backend/orders";
 import { recordPayment, refundPayment } from "../backend/payments";
+import { audit } from "../backend/audit";
+import { gpsSchema } from "../backend/validation";
 import {
   advanceSubscription,
   computeNextOrderDate,
@@ -193,15 +196,52 @@ export const updateShopInfo = action({
     announcement: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
-    const { seller } = await requireSeller(ctx);
+    const { seller, user } = await requireSeller(ctx);
     const db = getDb();
     const shops = await listShopsBySeller(db, seller.id);
     if (!shops.some((s) => s.id === args.shopId)) throw new Error("ร้านนี้ไม่ใช่ของคุณ");
-    return updateShop(db, args.shopId, {
+    const updated = await updateShop(db, args.shopId, {
       name: args.name,
       description: args.description,
       announcement: args.announcement,
     });
+    await audit(db, {
+      actorId: user.id,
+      actorRole: "seller",
+      action: "SELLER_UPDATED_SHOP",
+      entityType: "shop",
+      entityId: args.shopId,
+      after: { name: args.name, description: args.description, announcement: args.announcement },
+    });
+    return updated;
+  },
+});
+
+/**
+ * velseller: set the shop's storefront GPS (pickup / return / delivery area).
+ * GPS must be a valid pair — validated server-side, never trusted from client.
+ */
+export const updateShopLocationAction = action({
+  args: { shopId: v.string(), latitude: v.number(), longitude: v.number() },
+  handler: async (ctx, args) => {
+    const { seller, user } = await requireSeller(ctx);
+    const db = getDb();
+    const shops = await listShopsBySeller(db, seller.id);
+    if (!shops.some((s) => s.id === args.shopId)) throw new Error("ร้านนี้ไม่ใช่ของคุณ");
+    const gps = gpsSchema.parse({ latitude: args.latitude, longitude: args.longitude });
+    const updated = await updateShopLocation(db, args.shopId, {
+      latitude: gps.latitude ?? null,
+      longitude: gps.longitude ?? null,
+    });
+    await audit(db, {
+      actorId: user.id,
+      actorRole: "seller",
+      action: "SELLER_UPDATED_SHOP_LOCATION",
+      entityType: "shop",
+      entityId: args.shopId,
+      after: { latitude: args.latitude, longitude: args.longitude },
+    });
+    return updated;
   },
 });
 
@@ -580,6 +620,14 @@ export const setOrderStatus = action({
       shippingStatus: args.shippingStatus as "not_shipped" | "processing" | "shipped" | "delivered" | "returned" | undefined,
       trackingNumber: args.trackingNumber,
     });
+    await audit(getDb(), {
+      actorId: seller.ownerUserId,
+      actorRole: "seller",
+      action: "SELLER_UPDATED_ORDER_STATUS",
+      entityType: "order",
+      entityId: order.id,
+      after: { status: order.status, paymentStatus: order.paymentStatus, shippingStatus: order.shippingStatus },
+    });
     await recordEvent(ctx, "OrderStatusChanged", order.id, {
       status: order.status,
       sellerId: seller.id,
@@ -598,6 +646,14 @@ export const cancelOrderAction = action({
       throw new Error("ออเดอร์นี้ไม่ใช่ของคุณ");
     }
     const cancelled = await cancelOrder(args.orderId);
+    await audit(db, {
+      actorId: user.id,
+      actorRole: user.role,
+      action: "CUSTOMER_CANCELLED_ORDER",
+      entityType: "order",
+      entityId: args.orderId,
+      after: { status: cancelled.status },
+    });
     await recordEvent(ctx, "OrderCancelled", args.orderId, {});
     return cancelled;
   },

@@ -20,6 +20,7 @@ import {
   type StoreProduct,
   type StoreProductCategory,
 } from "@/lib/commerce";
+import { setSeo } from "@/lib/seo";
 import { useAction } from "convex/react";
 import {
   ChevronLeft,
@@ -130,6 +131,19 @@ export default function ShopProducts() {
       setLoading(false);
     }
   }, [catalog, q, category, shopId, minPrice, maxPrice, inStock, sortBy, page]);
+
+  useEffect(() => {
+    const categoryLabel =
+      category !== "all" ? (PRODUCT_CATEGORY_META[category as StoreProductCategory]?.label ?? category) : null;
+    setSeo({
+      title: categoryLabel
+        ? `สินค้าหมวด ${categoryLabel} — VelShop`
+        : q
+          ? `ค้นหา "${q}" — VelShop`
+          : "สินค้าทั้งหมด — VelShop",
+      description: `สินค้าจากร้านค้าจริงทั่วตลาด Velnox${categoryLabel ? ` หมวด ${categoryLabel}` : ""} — ราคาและสต็อกอัปเดตจากร้านค้า`,
+    });
+  }, [q, category]);
 
   useEffect(() => {
     void load();

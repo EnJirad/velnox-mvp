@@ -2,6 +2,7 @@ import { ShopHeader } from "@/components/shop/ShopHeader";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { api } from "@/convex/_generated/api";
+import { setSeo } from "@/lib/seo";
 import { useAction } from "convex/react";
 import { ArrowRight, Boxes, ImageOff, LayoutGrid, Package } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
@@ -36,6 +37,13 @@ export default function ShopCategories() {
       setLoading(false);
     }
   }, [categoryStats]);
+
+  useEffect(() => {
+    setSeo({
+      title: "หมวดหมู่สินค้า — VelShop",
+      description: "เลือกหมวดหมู่เพื่อค้นหาสินค้าจากร้านค้าจริงทั่วตลาด Velnox",
+    });
+  }, []);
 
   useEffect(() => {
     void load();

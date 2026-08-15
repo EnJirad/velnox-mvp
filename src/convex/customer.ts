@@ -34,6 +34,7 @@ import { getShipment, listShipmentsForOrder } from "../backend/shipments";
 import { listReturnsForCustomer, requestReturn } from "../backend/returns";
 import { categoryStats, listProducts } from "../backend/products";
 import { listReviewsByShop } from "../backend/reviews";
+import { audit } from "../backend/audit";
 import type { Shop } from "../backend/types";
 
 /* eslint-disable @typescript-eslint/no-explicit-any -- DB row mappers */
@@ -51,6 +52,8 @@ function mapShop(r: Record<string, any>): Shop & { productCount: number; orderCo
     status: r.status,
     commissionRate: Number(r.commission_rate),
     currency: r.currency,
+    latitude: r.latitude != null ? Number(r.latitude) : null,
+    longitude: r.longitude != null ? Number(r.longitude) : null,
     createdAt: r.created_at,
     productCount: Number(r.product_count ?? 0),
     orderCount: Number(r.order_count ?? 0),
@@ -254,6 +257,14 @@ export const checkoutAction = action({
       shippingFee: args.shippingFee ?? 0,
       note: args.note ?? null,
     });
+    await audit(getDb(), {
+      actorId: user.id,
+      actorRole: user.role,
+      action: "CUSTOMER_CREATED_ORDER",
+      entityType: "order",
+      entityId: result.parentOrderId,
+      after: { orderNumber: result.parentOrderNumber, total: result.total, orderCount: result.orders.length },
+    });
     await recordEvent(ctx, "OrderCreated", result.parentOrderId, {
       orderNumber: result.parentOrderNumber,
       total: result.total,
@@ -311,6 +322,14 @@ export const requestReturnAction = action({
       reason: args.reason,
       description: args.description ?? null,
       evidenceUrls: args.evidenceUrls ?? [],
+    });
+    await audit(getDb(), {
+      actorId: user.id,
+      actorRole: user.role,
+      action: "CUSTOMER_REQUESTED_RETURN",
+      entityType: "return",
+      entityId: ret.id,
+      after: { orderId: args.orderId, reason: args.reason },
     });
     await recordEvent(ctx, "ReturnRequested", ret.id, { orderId: ret.orderId });
     return ret;

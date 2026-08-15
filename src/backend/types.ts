@@ -60,6 +60,9 @@ export interface Shop {
   /** 0.03 = 3% platform fee */
   commissionRate: number;
   currency: string;
+  /** storefront GPS — used for pickup / return shipping / delivery area */
+  latitude: number | null;
+  longitude: number | null;
   createdAt: string;
 }
 
