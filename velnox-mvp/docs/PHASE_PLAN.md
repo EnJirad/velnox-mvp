@@ -11,8 +11,8 @@
 Phase 1 ✅ Architecture (เอกสาร 3 ฉบับใน docs/)
 Phase 2 ✅ Database   — ขยาย Neon schema (categories/variants/cart/audit ฯลฯ) + migration
 Phase 3 ✅ Backend    — src/backend/* ต่อตารางใหม่ + validation + error mapping + tests
-Phase 4  Auth       — profile/email/phone management + RBAC guard ครบ
-Phase 5  VelShop    — catalog/category/search + cart + checkout multi-seller + GPS/address
+Phase 4  Auth       — profile/email/phone management + RBAC guard ครบ (ยังไม่เริ่ม — spec เจ้าของสลับลำดับเป็น VelShop ก่อน)
+Phase 5 ✅ VelShop   — catalog/category/search + cart + checkout multi-seller + GPS/address
 Phase 6  VelSeller  — variants/product type + order fulfillment + store settings + location
 Phase 7  VelCenter  — platform settings + seller approve/suspend + product moderation + reports
 Phase 8  Shipping   — ShippingProvider abstraction + tracking events + return flow เต็ม
@@ -91,16 +91,20 @@ Phase 12 Production — staging/prod env, deploy pipeline, monitoring, backup
 
 ---
 
-## Phase 5 — VelShop
+## Phase 5 — VelShop ✅ เสร็จแล้ว (spec "PHASE 4 — VELSHOP")
 
-- **Catalog**: categories (tree), search, filter (หมวด/ราคา/ร้าน), sort, related products
-- **Product detail**: images gallery, variants, stock, seller card + rating, review section, wishlist ❤️, "สั่งรายเดือน" (VelRepeat)
-- **Store page**: logo/banner/description/rating/สินค้า/รีวิว + follow
-- **Cart**: เพิ่ม/ลด/ลบ quantity, multiple sellers, stock validation, price snapshot (จาก `carts` ใหม่)
-- **Checkout**: เลือก address (+ GPS), split ตาม seller → สร้าง orders, validate อีกครั้งที่ backend (stock/price)
-- **GPS/Address (ข้อ 6–7)**: ฟอร์ม address + 3 วิธี: ใช้ตำแหน่งปัจจุบัน / เลือกบนแผนที่ / ลาก marker — ใช้ Leaflet (ฟรี ไม่ต้อง key) หรือ Google Maps (`VITE_MAP_API_KEY`) — ตัดสินใจใน Phase 5; บังคับ lat/long ก่อนบันทึก
-- **Order tracking**: สถานะ + timeline (จาก tracking events Phase 8)
-- **My Orders**: รายการ/สถานะ/ยกเลิก/สั่งซ้ำ/รีวิว
+> หมายเหตุ: spec ที่เจ้าของส่งมาระบุ "PHASE 4 = VelShop" — ในแผนฉบับนี้ตรงกับ **Phase 5 (VelShop)** ตามลำดับเดิม
+
+- ✅ **Backend cart แทน localStorage** (`src/lib/cart.tsx`): ตะกร้าอยู่ใน Neon จริง (ผ่าน `api.customer.*`) — spec §12 ห้าม localStorage เป็น source of truth; guest เห็น in-memory cart ชั่วคราวเท่านั้น
+- ✅ **Catalog/Home**: search + category filter + สินค้ายอดนิยม/แนะนำ (VelRepeat) + สินค้าประจำ (customer memory) + **ส่วนร้านค้าในตลาด** (`publicShops`)
+- ✅ **Product detail** (`/shop/products/:id`): gallery + zoom thumb, stock, qty, ใส่ตะกร้า/ซื้อเลย, wishlist ❤️, VelRepeat dialog, รีวิว + verified purchase
+- ✅ **Store page** (`/shop/shops/:id`): banner/logo/ชื่อ/rating/จำนวนสินค้า/ออเดอร์ + สินค้าของร้าน
+- ✅ **Cart** (`/shop/cart`): แยกตามร้าน (multi-seller), เพิ่ม/ลด/ลบ, stock สูงสุด, สรุปยอด
+- ✅ **Checkout** (`/shop/checkout`): เลือกที่อยู่ (default ก่อน, ตรวจ GPS) + วิธีชำระ (COD/PromptPay/โอน/บัตร) + review + **multi-shop order** ผ่าน `checkoutAction` (backend คำนวณราคา/stock ใหม่ §40–41) + หน้าสำเร็จ
+- ✅ **GPS/Address** (`/shop/addresses` + `MapPicker` Leaflet): ใช้ตำแหน่งปัจจุบัน / แตะแผนที่ / ลาก marker; default shipping address บังคับ lat/long (§62)
+- ✅ **Orders** (`/shop/orders` + `/shop/orders/:id`): รายการ + detail + timeline + tracking events จาก shipment
+- ✅ **Wishlist** (`/shop/wishlist`), **Profile** (`/shop/profile`), **Notifications** (`/shop/notifications` — mark read/all)
+- ✅ ทุกหน้า protected ผ่าน `RequireAuth` + returnTo กลับหน้าเดิม; frontend ไม่ trust price/stock/role (backend ตัดสิน)
 
 ---
 

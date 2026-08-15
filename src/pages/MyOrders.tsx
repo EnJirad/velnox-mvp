@@ -221,7 +221,11 @@ export default function MyOrders() {
                 const meta = ORDER_STATUS_META[order.status];
                 const items = order.items ?? [];
                 return (
-                  <div key={order.id} className="rounded-xl border border-slate-200 bg-white p-5">
+                  <Link
+                    key={order.id}
+                    to={`/shop/orders/${order.id}`}
+                    className="block rounded-xl border border-slate-200 bg-white p-5 transition-all duration-200 hover:-translate-y-0.5 hover:border-[#10B981]/40 hover:shadow-[0_12px_30px_rgba(15,23,42,0.06)]"
+                  >
                     <div className="flex flex-wrap items-center justify-between gap-3">
                       <div>
                         <p className="text-sm font-semibold text-slate-900">
@@ -261,8 +265,9 @@ export default function MyOrders() {
                       <span className="text-lg font-bold tabular-nums tracking-tight text-slate-900">
                         {formatBaht(order.total)}
                       </span>
+                      <span className="text-xs font-medium text-[#10B981]">ดูรายละเอียด →</span>
                     </div>
-                  </div>
+                  </Link>
                 );
               })}
             </div>

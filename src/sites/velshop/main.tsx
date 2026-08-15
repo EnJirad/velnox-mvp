@@ -15,8 +15,16 @@ import { BrowserRouter, Navigate, Route, Routes } from "react-router";
 import "../../index.css";
 
 const ShopHome = lazy(() => import("@/pages/ShopHome"));
+const ShopProductDetail = lazy(() => import("@/pages/ShopProductDetail"));
+const ShopDetail = lazy(() => import("@/pages/ShopDetail"));
+const ShopCart = lazy(() => import("@/pages/ShopCart"));
 const ShopCheckout = lazy(() => import("@/pages/ShopCheckout"));
 const MyOrders = lazy(() => import("@/pages/MyOrders"));
+const ShopOrderDetail = lazy(() => import("@/pages/ShopOrderDetail"));
+const ShopWishlist = lazy(() => import("@/pages/ShopWishlist"));
+const ShopAddresses = lazy(() => import("@/pages/ShopAddresses"));
+const ShopProfile = lazy(() => import("@/pages/ShopProfile"));
+const ShopNotifications = lazy(() => import("@/pages/ShopNotifications"));
 const AuthPage = lazy(() => import("@/pages/Auth"));
 const NotFound = lazy(() => import("@/pages/NotFound"));
 
@@ -32,6 +40,9 @@ createRoot(document.getElementById("root")!).render(
             <Routes>
               <Route path="/" element={<Navigate to="/shop" replace />} />
               <Route path="/shop" element={<ShopHome />} />
+              <Route path="/shop/products/:productId" element={<ShopProductDetail />} />
+              <Route path="/shop/shops/:shopId" element={<ShopDetail />} />
+              <Route path="/shop/cart" element={<ShopCart />} />
               <Route
                 path="/shop/checkout"
                 element={
@@ -45,6 +56,46 @@ createRoot(document.getElementById("root")!).render(
                 element={
                   <RequireAuth>
                     <MyOrders />
+                  </RequireAuth>
+                }
+              />
+              <Route
+                path="/shop/orders/:orderId"
+                element={
+                  <RequireAuth>
+                    <ShopOrderDetail />
+                  </RequireAuth>
+                }
+              />
+              <Route
+                path="/shop/wishlist"
+                element={
+                  <RequireAuth>
+                    <ShopWishlist />
+                  </RequireAuth>
+                }
+              />
+              <Route
+                path="/shop/addresses"
+                element={
+                  <RequireAuth>
+                    <ShopAddresses />
+                  </RequireAuth>
+                }
+              />
+              <Route
+                path="/shop/profile"
+                element={
+                  <RequireAuth>
+                    <ShopProfile />
+                  </RequireAuth>
+                }
+              />
+              <Route
+                path="/shop/notifications"
+                element={
+                  <RequireAuth>
+                    <ShopNotifications />
                   </RequireAuth>
                 }
               />

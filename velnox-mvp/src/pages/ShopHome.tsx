@@ -25,9 +25,11 @@ import {
   Search,
   ShoppingBag,
   Sparkles,
+  Star,
   Store,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { Link } from "react-router";
 import { toast } from "sonner";
 
 const CATEGORIES: { id: StoreProductCategory | "all"; label: string }[] = [
@@ -73,12 +75,16 @@ export default function ShopHome() {
   const popularAction = useAction(api.commerce.popularProducts);
   const interestsAction = useAction(api.commerce.customerInterests);
   const regularsAction = useAction(api.commerce.customerRegulars);
+  const publicShops = useAction(api.customer.publicShops);
   const recordInterest = useAction(api.commerce.recordInterest);
   const settings = useQueryLegacySettings();
   const { add } = useCart();
 
   const productsData = useCommerceData(
     useCallback(() => listProducts({ status: "published", limit: 100 }), [listProducts]),
+  );
+  const shopsData = useCommerceData(
+    useCallback(() => publicShops(), [publicShops]),
   );
   const popularData = useCommerceData(
     useCallback(() => popularAction(), [popularAction]),
@@ -99,6 +105,7 @@ export default function ShopHome() {
   const popular = useMemo(() => popularData.data ?? [], [popularData.data]);
   const interests = useMemo(() => interestsData.data ?? [], [interestsData.data]);
   const regulars = useMemo(() => regularsData.data ?? [], [regularsData.data]);
+  const shops = useMemo(() => shopsData.data ?? [], [shopsData.data]);
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -376,6 +383,53 @@ export default function ShopHome() {
         </section>
       )}
 
+      {/* Shops — marketplace storefronts */}
+      {!shopsData.loading && shops.length > 0 && (
+        <section className="border-b border-slate-100 bg-white">
+          <div className="mx-auto w-full max-w-6xl px-4 py-8 sm:px-6">
+            <div className="flex items-center gap-2.5">
+              <span className="flex size-9 items-center justify-center rounded-[10px] bg-[#ECFDF5]">
+                <Store className="size-4 text-[#10B981]" />
+              </span>
+              <div>
+                <h2 className="text-base font-bold tracking-tight text-slate-900">ร้านค้าในตลาด</h2>
+                <p className="text-xs text-slate-400">เลือกซื้อตรงจากร้านค้าที่ตรวจสอบแล้ว</p>
+              </div>
+            </div>
+
+            <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+              {shops.slice(0, 8).map((shop, i) => (
+                <Link
+                  key={shop.id}
+                  to={`/shop/shops/${shop.id}`}
+                  className="flex items-center gap-3 rounded-xl border border-slate-200 bg-white p-4 transition-all duration-200 hover:-translate-y-0.5 hover:border-[#10B981]/40 hover:shadow-[0_12px_30px_rgba(15,23,42,0.06)]"
+                >
+                  <span className="flex size-12 shrink-0 items-center justify-center overflow-hidden rounded-[12px] bg-[#ECFDF5]">
+                    {shop.imageUrl ? (
+                      <img src={shop.imageUrl} alt={shop.name} className="size-full object-cover" loading="lazy" />
+                    ) : (
+                      <Store className="size-5 text-[#10B981]" />
+                    )}
+                  </span>
+                  <span className="min-w-0">
+                    <span className="block truncate text-sm font-semibold text-slate-900">{shop.name}</span>
+                    <span className="mt-0.5 flex items-center gap-1 text-xs text-slate-400">
+                      {shop.rating != null && (
+                        <span className="flex items-center gap-0.5 text-amber-500">
+                          <Star className="size-3 fill-amber-400 text-amber-400" />
+                          {shop.rating.toFixed(1)}
+                        </span>
+                      )}
+                      <span>{shop.productCount} สินค้า</span>
+                    </span>
+                  </span>
+                </Link>
+              ))}
+            </div>
+          </div>
+        </section>
+      )}
+
       {/* Product grid */}
       <main className="mx-auto w-full max-w-6xl px-4 py-10 sm:px-6">
         {productsData.loading ? (
@@ -413,10 +467,9 @@ export default function ShopHome() {
                   transition={{ duration: 0.3, delay: Math.min(i * 0.03, 0.3) }}
                   className="flex flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white transition-all duration-200 hover:-translate-y-0.5 hover:shadow-[0_12px_30px_rgba(15,23,42,0.07)]"
                 >
-                  <button
-                    type="button"
-                    className="block aspect-square w-full cursor-pointer overflow-hidden bg-slate-50"
-                    onClick={() => setDetailProduct(product)}
+                  <Link
+                    to={`/shop/products/${product.id}`}
+                    className="block aspect-square w-full overflow-hidden bg-slate-50"
                     aria-label={`ดูรายละเอียด ${product.name}`}
                   >
                     {product.primaryImage ? (
@@ -436,7 +489,7 @@ export default function ShopHome() {
                         {product.images.length} รูป
                       </span>
                     )}
-                  </button>
+                  </Link>
 
                   <div className="flex flex-1 flex-col p-4">
                     <div className="flex items-start justify-between gap-2">

@@ -30,8 +30,33 @@ import { createReview, listReviewsByProduct } from "../backend/reviews";
 import { listNotifications, markAllRead, markNotificationRead, unreadCount } from "../backend/notifications";
 import { categoryTree, listCategories } from "../backend/categories";
 import { listOrdersForCustomer, getOrder } from "../backend/orders";
-import { listShipmentsForOrder } from "../backend/shipments";
+import { getShipment, listShipmentsForOrder } from "../backend/shipments";
 import { listReturnsForCustomer, requestReturn } from "../backend/returns";
+import { listProducts } from "../backend/products";
+import type { Shop } from "../backend/types";
+
+/* eslint-disable @typescript-eslint/no-explicit-any -- DB row mappers */
+function mapShop(r: Record<string, any>): Shop & { productCount: number; orderCount: number; rating: number | null; reviewCount: number } {
+  return {
+    id: r.id,
+    sellerId: r.seller_id,
+    name: r.name,
+    slug: r.slug ?? null,
+    description: r.description ?? null,
+    imageUrl: r.image_url ?? null,
+    phone: r.phone ?? null,
+    address: r.address ?? null,
+    announcement: r.announcement ?? null,
+    status: r.status,
+    commissionRate: Number(r.commission_rate),
+    currency: r.currency,
+    createdAt: r.created_at,
+    productCount: Number(r.product_count ?? 0),
+    orderCount: Number(r.order_count ?? 0),
+    rating: r.rating != null ? Number(r.rating) : null,
+    reviewCount: Number(r.review_count ?? 0),
+  };
+}
 
 async function recordEvent(ctx: import("./_generated/server").ActionCtx, type: string, entityId: string, payload: Record<string, unknown> = {}) {
   try {
@@ -40,6 +65,56 @@ async function recordEvent(ctx: import("./_generated/server").ActionCtx, type: s
     console.error(`[customer] event ${type} failed:`, err);
   }
 }
+
+// ---------------------------------------------------------------------------
+// shops (public storefront)
+// ---------------------------------------------------------------------------
+export const publicShops = action({
+  args: {},
+  handler: async () => {
+    const rows = await getDb()(
+      `SELECT s.*,
+              (SELECT COUNT(*)::int FROM products p
+                WHERE p.shop_id = s.id AND p.status = 'published') AS product_count,
+              (SELECT COUNT(*)::int FROM order_items oi
+                WHERE oi.shop_id = s.id) AS order_count,
+              (SELECT ROUND(AVG(rating)::numeric, 1) FROM reviews r
+                WHERE r.shop_id = s.id AND r.status = 'published') AS rating,
+              (SELECT COUNT(*)::int FROM reviews r
+                WHERE r.shop_id = s.id AND r.status = 'published') AS review_count
+       FROM shops s
+       WHERE s.status = 'active'
+       ORDER BY s.created_at DESC`,
+    );
+    return rows.map(mapShop);
+  },
+});
+
+/** Shop profile page: shop + published products + rating summary. */
+export const shopDetail = action({
+  args: { shopId: v.string() },
+  handler: async (_ctx, args) => {
+    const db = getDb();
+    const rows = await db(
+      `SELECT s.*,
+              (SELECT COUNT(*)::int FROM products p
+                WHERE p.shop_id = s.id AND p.status = 'published') AS product_count,
+              (SELECT COUNT(*)::int FROM order_items oi
+                WHERE oi.shop_id = s.id) AS order_count,
+              (SELECT ROUND(AVG(rating)::numeric, 1) FROM reviews r
+                WHERE r.shop_id = s.id AND r.status = 'published') AS rating,
+              (SELECT COUNT(*)::int FROM reviews r
+                WHERE r.shop_id = s.id AND r.status = 'published') AS review_count
+       FROM shops s
+       WHERE s.id = $1 AND s.status = 'active'
+       LIMIT 1`,
+      [args.shopId],
+    );
+    if (!rows[0]) throw new Error("ร้านค้าไม่พบ");
+    const products = await listProducts(db, { shopId: args.shopId, status: "published", limit: 100 });
+    return { shop: mapShop(rows[0]), products };
+  },
+});
 
 // ---------------------------------------------------------------------------
 // categories (public)
@@ -201,7 +276,13 @@ export const orderDetail = action({
     const { user } = await requireIdentity(ctx);
     const order = await getOrder(getDb(), args.orderId);
     if (!order || order.customerUserId !== user.id) throw new Error("ออเดอร์นี้ไม่ใช่ของคุณ");
-    const shipments = await listShipmentsForOrder(getDb(), order.id);
+    const db = getDb();
+    const shipmentRows = await listShipmentsForOrder(db, order.id);
+    const shipments = [];
+    for (const s of shipmentRows) {
+      const full = await getShipment(db, s.id);
+      if (full) shipments.push(full);
+    }
     return { ...order, shipments };
   },
 });

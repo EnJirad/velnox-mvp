@@ -5,7 +5,7 @@ import { UserMenu } from "@/components/UserMenu";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/hooks/use-auth";
 import { useCart } from "@/lib/cart";
-import { ShoppingCart } from "lucide-react";
+import { Bell, ShoppingCart, User } from "lucide-react";
 import { useState } from "react";
 import { Link, useLocation } from "react-router";
 
@@ -15,8 +15,8 @@ export function ShopHeader() {
   const location = useLocation();
   const [cartOpen, setCartOpen] = useState(false);
 
-  const navItem = (to: string, label: string) => {
-    const active = location.pathname === to;
+  const navItem = (to: string, label: string, exact = false) => {
+    const active = exact ? location.pathname === to : location.pathname.startsWith(to);
     return (
       <Link
         to={to}
@@ -40,12 +40,22 @@ export function ShopHeader() {
           </Link>
           <SiteSwitcher />
           <nav className="hidden items-center gap-1 md:flex">
-            {navItem("/shop", "สินค้า")}
+            {navItem("/shop", "สินค้า", true)}
             {isAuthenticated && navItem("/shop/orders", "ออเดอร์ของฉัน")}
+            {isAuthenticated && navItem("/shop/wishlist", "รายการโปรด")}
           </nav>
         </div>
 
         <div className="flex items-center gap-1.5">
+          {isAuthenticated && (
+            <Link
+              to="/shop/notifications"
+              className="rounded-[10px] p-2 text-slate-600 transition-colors hover:bg-slate-100"
+              aria-label="การแจ้งเตือน"
+            >
+              <Bell className="size-5" />
+            </Link>
+          )}
           <Button
             variant="ghost"
             className="relative cursor-pointer rounded-[10px] px-2.5 text-slate-600 hover:bg-slate-100"
@@ -61,7 +71,13 @@ export function ShopHeader() {
           </Button>
 
           {isLoading ? null : isAuthenticated ? (
-            <UserMenu />
+            <Link
+              to="/shop/profile"
+              className="rounded-[10px] p-2 text-slate-600 transition-colors hover:bg-slate-100"
+              aria-label="โปรไฟล์"
+            >
+              <User className="size-5" />
+            </Link>
           ) : (
             <Button variant="outline" className="border-slate-200 text-slate-700" asChild>
               <Link to="/auth?returnTo=/shop">เข้าสู่ระบบ</Link>
