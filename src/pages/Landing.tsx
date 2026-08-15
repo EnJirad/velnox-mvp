@@ -82,7 +82,7 @@ function NavBar() {
 function HeroVisual() {
   return (
     <div className="relative">
-      {/* Mock dashboard canvas */}
+      {/* Illustrative hero visual — decorative only, not live data (spec §47) */}
       <div
         className="relative rounded-[20px] border border-slate-200 bg-slate-100 p-5 sm:p-6"
         style={{
@@ -100,7 +100,7 @@ function HeroVisual() {
               </span>
               <div>
                 <p className="text-sm font-semibold text-slate-900">ยอดขายเดือนนี้</p>
-                <p className="text-xs text-slate-400">เป้าหมาย · รายเดือน</p>
+                <p className="text-xs text-slate-400">ตัวอย่างภาพประกอบ · ไม่ใช่ข้อมูลจริง</p>
               </div>
             </div>
             <span className="rounded-full bg-[#ECFDF5] px-2.5 py-1 text-xs font-medium text-emerald-700">

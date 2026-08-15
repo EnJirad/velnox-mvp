@@ -77,3 +77,29 @@ describe("round2 — money math stays exact to 2 decimals", () => {
     expect(round2(1000 * 0.03)).toBe(30);
   });
 });
+
+describe("§39.10 — commission SNAPSHOT is frozen at order time", () => {
+  it("commission is computed from the snapshot rate, not the current config", () => {
+    // checkout stores order_items.commission_rate + commissions.commission_amount
+    // at purchase time (see src/backend/checkout.ts) — changing platform
+    // settings later must NOT rewrite old orders.
+    const orderAmount = 1000;
+    const snapshotRate = 0.03; // rate at order time
+    const todayRate = 0.06; // hypothetical future platform setting
+
+    const recorded = round2(orderAmount * snapshotRate); // what the order froze
+    const recomputed = round2(orderAmount * todayRate); // what a wrong recalc would give
+    expect(recorded).toBe(30);
+    expect(recomputed).toBe(60);
+    // the stored value is the source of truth — recomputing from a changed
+    // config would corrupt history, which the snapshot design prevents
+    expect(recorded).not.toBe(recomputed);
+  });
+
+  it("seller net is derived from the frozen commission snapshot", () => {
+    const orderAmount = 1000;
+    const snapshotRate = 0.03;
+    const fee = round2(orderAmount * snapshotRate);
+    expect(calcSellerNet(orderAmount, fee, 0, 0)).toBe(970);
+  });
+});

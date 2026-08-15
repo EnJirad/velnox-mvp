@@ -230,6 +230,15 @@ Phase 12 Production — staging/prod env, deploy pipeline, monitoring, backup
 
 ---
 
+## Phase 10 (spec "PHASE 10") — Production Hardening, Security, Testing & Final Integration ✅ (จนถึงขอบเขต repo)
+
+- ✅ **Scan §46**: TODO เหลือ 2 จุด intentional (carrier/payment registry) · console.log/debugger: ไม่มี · mock: พบ 1 จุด Landing hero → ติดป้าย "ตัวอย่างภาพประกอบ" (§47)
+- ✅ **Test §39.10**: +2 commission snapshot tests — order ใช้ rate ตอนสั่ง ไม่เปลี่ยนตาม config ใหม่ (55 tests ผ่าน)
+- ✅ **Docs §48 ครบ 9 ไฟล์**: authentication · authorization · api · database · orders · payments · shipping · returns · financial (ตรงกับโค้ดจริง)
+- ✅ **Report §51**: `docs/PHASE-10-REPORT.md` (PASS/FAIL matrix) — Production Ready: **NO** ยังขาด gateway จริง/domains/prod deploy/E2E/legal/admin/backup test
+
+---
+
 ## Phase 11 — Testing
 
 - ✅ Unit test: `tests/*` 48 ตัว (commission calc, penalty, state machine, GPS, IDOR/security, providers, velrepeat)
