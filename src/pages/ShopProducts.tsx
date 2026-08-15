@@ -14,6 +14,7 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/co
 import { Skeleton } from "@/components/ui/skeleton";
 import { api } from "@/convex/_generated/api";
 import { useCart } from "@/lib/cart";
+import { useTracking } from "@/lib/track";
 import {
   PRODUCT_CATEGORY_META,
   formatBaht,
@@ -35,7 +36,7 @@ import {
   Store,
   X,
 } from "lucide-react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useSearchParams } from "react-router";
 import { toast } from "sonner";
 
@@ -73,6 +74,7 @@ export default function ShopProducts() {
   const catalog = useAction(api.commerce.catalogProductsAction);
   const publicShops = useAction(api.customer.publicShops);
   const { add } = useCart();
+  const { track } = useTracking();
 
   const q = params.get("q") ?? "";
   const category = params.get("category") ?? "all";
@@ -148,6 +150,29 @@ export default function ShopProducts() {
   useEffect(() => {
     void load();
   }, [load]);
+
+  // CPNS: completed searches + category views are interest signals.
+  const lastSearchTracked = useRef("");
+  useEffect(() => {
+    const term = q.trim();
+    if (term && term !== lastSearchTracked.current) {
+      lastSearchTracked.current = term;
+      track("SEARCH", { value: term.slice(0, 60) });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [q]);
+
+  const lastCategoryTracked = useRef<string | null>(null);
+  useEffect(() => {
+    if (category === "all" || category === lastCategoryTracked.current) return;
+    lastCategoryTracked.current = category;
+    track("CATEGORY_VIEW", {
+      entityId: category,
+      value: category,
+      context: { label: PRODUCT_CATEGORY_META[category as StoreProductCategory]?.label },
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [category]);
 
   useEffect(() => {
     if (shops.length > 0) return;
@@ -421,6 +446,13 @@ export default function ShopProducts() {
                             to={`/shop/products/${product.id}`}
                             className="block aspect-square w-full overflow-hidden bg-slate-50"
                             aria-label={`ดูรายละเอียด ${product.name}`}
+                            onClick={() =>
+                              track("PRODUCT_CLICK", {
+                                entityId: product.id,
+                                value: product.name,
+                                context: { category: product.category },
+                              })
+                            }
                           >
                             {product.primaryImage ? (
                               <img

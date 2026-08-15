@@ -13,6 +13,7 @@ import {
   formatBaht,
   type StoreProduct,
 } from "@/lib/commerce";
+import { useTracking } from "@/lib/track";
 import {
   CalendarClock,
   Heart,
@@ -22,7 +23,7 @@ import {
   ShoppingCart,
   Store,
 } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 
 interface ProductDetailModalProps {
@@ -34,8 +35,21 @@ interface ProductDetailModalProps {
 
 export function ProductDetailModal({ product, open, onOpenChange, onSubscribe }: ProductDetailModalProps) {
   const { add } = useCart();
+  const { track } = useTracking();
   const [activeIndex, setActiveIndex] = useState(0);
   const [qty, setQty] = useState(1);
+
+  // CPNS: opening the quick-view modal counts as a product view.
+  const viewedRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!open || !product || viewedRef.current === product.id) return;
+    viewedRef.current = product.id;
+    track("PRODUCT_VIEW", {
+      entityId: product.id,
+      value: product.name,
+      context: { category: product.category, price: product.price, shopId: product.shopId, source: "quickview" },
+    });
+  }, [open, product, track]);
 
   if (!product) return null;
 

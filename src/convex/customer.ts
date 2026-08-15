@@ -8,6 +8,7 @@
 "use node";
 
 import { action } from "./_generated/server";
+import type { Id } from "./_generated/dataModel";
 import { api } from "./_generated/api";
 import { v } from "convex/values";
 import { getDb } from "../backend/db";
@@ -69,6 +70,28 @@ async function recordEvent(ctx: import("./_generated/server").ActionCtx, type: s
     await ctx.runMutation(api.intelligence.recordBusinessEvent, { type, entityId, payload });
   } catch (err) {
     console.error(`[customer] event ${type} failed:`, err);
+  }
+}
+
+/** CPNS: record a per-customer behavioral event bound to the Convex user id. */
+async function recordCustomerEvent(
+  ctx: import("./_generated/server").ActionCtx,
+  convexUserId: string,
+  type: string,
+  entityId?: string,
+  value?: string,
+  context?: Record<string, unknown>,
+) {
+  try {
+    await ctx.runMutation(api.memoryEvents.trackForUser, {
+      userId: convexUserId as Id<"users">,
+      type,
+      entityId,
+      value,
+      context,
+    });
+  } catch (err) {
+    console.error(`[customer] customer event ${type} failed:`, err);
   }
 }
 
@@ -251,7 +274,7 @@ export const checkoutAction = action({
     note: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
-    const { user } = await requireIdentity(ctx);
+    const { user, subject } = await requireIdentity(ctx);
     await enforceRateLimit(ctx, { name: "checkout", key: user.id, max: 10, windowMs: 60_000 });
     const result = await checkout({
       userId: user.id,
@@ -275,6 +298,24 @@ export const checkoutAction = action({
     });
     for (const o of result.orders) {
       await recordEvent(ctx, "OrderCreated", o.orderId, { orderNumber: o.orderNumber, total: o.total, sellerId: o.sellerId });
+    }
+    // CPNS: PURCHASE events per product — the strongest Customer Memory signal.
+    try {
+      const db = getDb();
+      for (const o of result.orders) {
+        const items = await db(
+          "SELECT product_id, quantity, product_name FROM order_items WHERE order_id = $1",
+          [o.orderId],
+        );
+        for (const item of items) {
+          await recordCustomerEvent(ctx, subject, "PURCHASE", item.product_id, item.product_name, {
+            quantity: item.quantity,
+            orderId: o.orderId,
+          });
+        }
+      }
+    } catch (err) {
+      console.error("[customer] PURCHASE events failed:", err);
     }
     return result;
   },
@@ -362,8 +403,15 @@ export const myWishlist = action({
 export const toggleWishlistAction = action({
   args: { productId: v.string() },
   handler: async (ctx, args) => {
-    const { user } = await requireIdentity(ctx);
-    return toggleWishlist(getDb(), user.id, args.productId);
+    const { user, subject } = await requireIdentity(ctx);
+    const result = await toggleWishlist(getDb(), user.id, args.productId);
+    await recordCustomerEvent(
+      ctx,
+      subject,
+      result.added ? "WISHLIST_ADD" : "WISHLIST_REMOVE",
+      args.productId,
+    );
+    return result;
   },
 });
 
@@ -413,7 +461,7 @@ export const shopReviews = action({
 export const reorderAction = action({
   args: { orderId: v.string() },
   handler: async (ctx, args) => {
-    const { user } = await requireIdentity(ctx);
+    const { user, subject } = await requireIdentity(ctx);
     const db = getDb();
     const order = await db("SELECT id, customer_user_id, status FROM orders WHERE id = $1", [args.orderId]);
     if (!order[0] || order[0].customer_user_id !== user.id) throw new AppError("ORDER_NOT_FOUND", "ออเดอร์นี้ไม่ใช่ของคุณ");
@@ -429,6 +477,10 @@ export const reorderAction = action({
       try {
         await addToCart(db, user.id, { productId: item.product_id, quantity: item.quantity });
         added.push({ productId: item.product_id, productName: item.product_name, quantity: item.quantity });
+        await recordCustomerEvent(ctx, subject, "REORDER", item.product_id, item.product_name, {
+          quantity: item.quantity,
+          fromOrderId: args.orderId,
+        });
       } catch (err) {
         skipped.push({
           productId: item.product_id,

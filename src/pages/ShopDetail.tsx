@@ -5,6 +5,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { api } from "@/convex/_generated/api";
 import { useCart } from "@/lib/cart";
 import { formatBaht, type StoreProduct } from "@/lib/commerce";
+import { useTracking } from "@/lib/track";
 import { setSeo } from "@/lib/seo";
 import { useAction } from "convex/react";
 import { ArrowLeft, Heart, ImageOff, Package, Plus, ShieldCheck, Star, Store } from "lucide-react";
@@ -33,6 +34,7 @@ export default function ShopDetail() {
   const { shopId } = useParams<{ shopId: string }>();
   const shopDetail = useAction(api.customer.shopDetail);
   const { add } = useCart();
+  const { track } = useTracking();
   const [shop, setShop] = useState<ShopRow | null>(null);
   const [products, setProducts] = useState<StoreProduct[]>([]);
   const [loading, setLoading] = useState(true);
@@ -64,6 +66,13 @@ export default function ShopDetail() {
   useEffect(() => {
     void load();
   }, [load]);
+
+  // CPNS: visiting a store page = SHOP_VIEW (one per visit).
+  useEffect(() => {
+    if (!shop) return;
+    track("SHOP_VIEW", { entityId: shop.id, value: shop.name });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [shop?.id]);
 
   const handleAdd = (product: StoreProduct) => {
     add(

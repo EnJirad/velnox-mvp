@@ -9,6 +9,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
+import { useTracking } from "@/lib/track";
 
 /**
  * Cart line — the real cart lives in the backend (Neon via Convex actions,
@@ -85,6 +86,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
   const addToCartAction = useAction(api.customer.addToCartAction);
   const updateCartItemAction = useAction(api.customer.updateCartItemAction);
   const removeCartItemAction = useAction(api.customer.removeCartItemAction);
+  const { track } = useTracking();
 
   const [lines, setLines] = useState<CartLine[]>([]);
   const [syncing, setSyncing] = useState(false);
@@ -129,6 +131,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
     (product: AddToCartProduct, qty = 1) => {
       const price = product.price ?? 0;
       if (price <= 0 || product.stock <= 0) return;
+      track("CART_ADD", { entityId: product.id, value: product.name, context: { qty } });
       if (!isAuthenticated) {
         setLines((prev) => {
           const existing = prev.find((l) => l.productId === product.id);
@@ -184,26 +187,29 @@ export function CartProvider({ children }: { children: ReactNode }) {
           reload();
         });
     },
-    [isAuthenticated, addToCartAction, applyServer, reload],
+    [isAuthenticated, addToCartAction, applyServer, reload, track],
   );
 
   const setQty = useCallback(
     (productId: string, qty: number) => {
       if (!isAuthenticated) {
-        setLines((prev) =>
-          prev
+        setLines((prev) => {
+          const line = prev.find((l) => l.productId === productId);
+          if (line && qty <= 0) track("CART_REMOVE", { entityId: line.productId, value: line.name });
+          return prev
             .map((l) =>
               l.productId === productId
                 ? { ...l, qty: Math.max(0, Math.min(l.stock, qty)) }
                 : l,
             )
-            .filter((l) => l.qty > 0),
-        );
+            .filter((l) => l.qty > 0);
+        });
         return;
       }
       const line = lines.find((l) => l.productId === productId);
       if (!line) return;
       if (qty <= 0) {
+        track("CART_REMOVE", { entityId: line.productId, value: line.name });
         removeCartItemAction({ cartItemId: line.id })
           .then(applyServer)
           .catch((err) => {
@@ -226,17 +232,22 @@ export function CartProvider({ children }: { children: ReactNode }) {
           reload();
         });
     },
-    [isAuthenticated, lines, removeCartItemAction, updateCartItemAction, applyServer, reload],
+    [isAuthenticated, lines, removeCartItemAction, updateCartItemAction, applyServer, reload, track],
   );
 
   const remove = useCallback(
     (productId: string) => {
       if (!isAuthenticated) {
-        setLines((prev) => prev.filter((l) => l.productId !== productId));
+        setLines((prev) => {
+          const line = prev.find((l) => l.productId === productId);
+          if (line) track("CART_REMOVE", { entityId: line.productId, value: line.name });
+          return prev.filter((l) => l.productId !== productId);
+        });
         return;
       }
       const line = lines.find((l) => l.productId === productId);
       if (!line) return;
+      track("CART_REMOVE", { entityId: line.productId, value: line.name });
       setLines((prev) => prev.filter((l) => l.productId !== productId));
       removeCartItemAction({ cartItemId: line.id })
         .then(applyServer)
@@ -245,7 +256,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
           reload();
         });
     },
-    [isAuthenticated, lines, removeCartItemAction, applyServer, reload],
+    [isAuthenticated, lines, removeCartItemAction, applyServer, reload, track],
   );
 
   const clear = useCallback(() => setLines([]), []);

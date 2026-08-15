@@ -45,7 +45,7 @@ import {
   shortOrderId,
   type OrderStatus,
 } from "@/lib/shop";
-import { useMutation, useQuery } from "convex/react";
+import { useAction, useMutation, useQuery } from "convex/react";
 import {
   AlertTriangle,
   BadgeCheck,
@@ -56,6 +56,7 @@ import {
   Megaphone,
   Package,
   Save,
+  Search,
   Settings,
   ShieldCheck,
   ShoppingBag,
@@ -108,6 +109,14 @@ function canSeeTab(tab: Tab, role?: string, department?: string): boolean {
   }
 }
 
+interface MarketInsights {
+  topSearches: { q: string; count: number }[];
+  topCategories: { category: string; label: string; count: number }[];
+  popularProducts: { product: { id: string; name: string; price: number; unit: string; primaryImage?: { displayUrl: string } | null }; views: number }[];
+  eventCount: number;
+  windowDays: number;
+}
+
 export default function Center() {
   const navigate = useNavigate();
   const { user } = useAuth();
@@ -146,6 +155,19 @@ export default function Center() {
       ? [{ to: "/?tab=settings", label: "ตั้งค่า", icon: Settings, activeMatch: (_, search) => new URLSearchParams(search).get("tab") === "settings" } as MobileTabItem]
       : []),
   ];
+
+  // CPNS: aggregate marketplace interest (privacy-safe — no personal data).
+  const marketInsightsAction = useAction(api.memory.marketInsights);
+  const [market, setMarket] = useState<MarketInsights | null>(null);
+  useEffect(() => {
+    let alive = true;
+    marketInsightsAction()
+      .then((d) => alive && setMarket(d as unknown as MarketInsights))
+      .catch(() => alive && setMarket(null));
+    return () => {
+      alive = false;
+    };
+  }, [marketInsightsAction]);
 
   const overview = useQuery(api.center.overview);
   const products = useQuery(api.products.listAll);
@@ -754,6 +776,104 @@ export default function Center() {
               <BrainCircuit className="size-3.5 text-[#10B981]" />
               Velnox คำนวณจากรอบการสั่งจริงที่ระบบเรียนรู้ — ยิ่งสั่งมาก ยิ่งแม่นยำ
             </p>
+
+            {/* CPNS: what customers are interested in right now (aggregates only) */}
+            {market &&
+              (market.topSearches.length > 0 ||
+                market.topCategories.length > 0 ||
+                market.popularProducts.length > 0) && (
+                <Card className="mt-6 border-slate-200 shadow-none">
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2 text-base">
+                      <TrendingUp className="size-4 text-[#10B981]" />
+                      ลูกค้ากำลังสนใจอะไร · 30 วัน
+                    </CardTitle>
+                    <p className="text-xs text-slate-400">
+                      สรุปจากพฤติกรรมการใช้งานจริงของลูกค้าทั่วตลาด (รวมกัน ไม่ระบุตัวตน) ·{" "}
+                      {formatNumber(market.eventCount)} เหตุการณ์
+                    </p>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="grid gap-6 lg:grid-cols-3">
+                      {/* Top searches */}
+                      <div>
+                        <p className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-slate-400">
+                          <Search className="size-3.5" />
+                          คำค้นหายอดนิยม
+                        </p>
+                        <div className="mt-3 flex flex-wrap gap-1.5">
+                          {market.topSearches.slice(0, 6).map((s) => (
+                            <span
+                              key={s.q}
+                              className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-700"
+                            >
+                              “{s.q}”{" "}
+                              <span className="ml-0.5 text-slate-400">×{s.count}</span>
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* Top categories */}
+                      <div>
+                        <p className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-slate-400">
+                          <Boxes className="size-3.5" />
+                          หมวดที่ถูกเข้าดูบ่อย
+                        </p>
+                        <div className="mt-3 space-y-2">
+                          {market.topCategories.slice(0, 6).map((c) => {
+                            const max = Math.max(1, market.topCategories[0]?.count ?? 1);
+                            return (
+                              <div key={c.category} className="flex items-center gap-2">
+                                <span className="w-28 shrink-0 truncate text-xs text-slate-600">{c.label}</span>
+                                <div className="h-2 flex-1 overflow-hidden rounded-full bg-slate-100">
+                                  <div
+                                    className="h-full rounded-full bg-[#10B981]"
+                                    style={{ width: `${Math.round((c.count / max) * 100)}%` }}
+                                  />
+                                </div>
+                                <span className="w-8 shrink-0 text-right text-xs font-semibold tabular-nums text-slate-900">
+                                  {c.count}
+                                </span>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+
+                      {/* Popular products */}
+                      <div>
+                        <p className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-slate-400">
+                          <Sparkles className="size-3.5" />
+                          สินค้าที่ถูกมองบ่อย
+                        </p>
+                        <div className="mt-3 space-y-2">
+                          {market.popularProducts.slice(0, 6).map(({ product, views }) => (
+                            <div key={product.id} className="flex items-center gap-3">
+                              <span className="flex size-8 shrink-0 items-center justify-center overflow-hidden rounded-[8px] bg-slate-100">
+                                {product.primaryImage ? (
+                                  <img src={product.primaryImage.displayUrl} alt="" className="size-full object-cover" />
+                                ) : (
+                                  <Package className="size-3.5 text-slate-400" />
+                                )}
+                              </span>
+                              <span className="min-w-0 flex-1">
+                                <span className="block truncate text-xs font-medium text-slate-900">{product.name}</span>
+                                <span className="text-[11px] text-slate-400">
+                                  {formatBaht(product.price)}/{product.unit}
+                                </span>
+                              </span>
+                              <span className="shrink-0 text-xs font-semibold tabular-nums text-slate-500">
+                                {formatNumber(views)} ครั้ง
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
           </TabsContent>
 
           {/* ============ Products (view-only registry) ============ */}

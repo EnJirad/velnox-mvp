@@ -18,6 +18,7 @@
 
 import { action } from "./_generated/server";
 import type { ActionCtx } from "./_generated/server";
+import type { Id } from "./_generated/dataModel";
 import { api } from "./_generated/api";
 import { v } from "convex/values";
 import { getDb } from "../backend/db";
@@ -735,7 +736,7 @@ export const createVelRepeat = action({
     intervalDays: v.number(),
   },
   handler: async (ctx, args) => {
-    const { user } = await requireIdentity(ctx);
+    const { identity, user } = await requireIdentity(ctx);
     await enforceRateLimit(ctx, { name: "subscribe", key: user.id, max: 20, windowMs: 3_600_000 });
     const frequency = (args.frequency ?? "monthly") as "daily" | "weekly" | "monthly" | "custom";
     const nextOrderDate = computeNextOrderDate(frequency, new Date(), args.intervalDays);
@@ -748,6 +749,19 @@ export const createVelRepeat = action({
       nextOrderDate,
     });
     await recordEvent(ctx, "SubscriptionUpdated", sub.id, { status: sub.status });
+    // CPNS: starting a VelRepeat subscription is a strong recurring-intent signal.
+    try {
+      const product = await getProduct(getDb(), args.productId);
+      await ctx.runMutation(api.memoryEvents.trackForUser, {
+        userId: identity.subject as Id<"users">,
+        type: "VELREPEAT_START",
+        entityId: args.productId,
+        value: product?.name ?? undefined,
+        context: { quantity: args.quantity, frequency, intervalDays: args.intervalDays, subscriptionId: sub.id },
+      });
+    } catch (err) {
+      console.error("[commerce] VELREPEAT_START event failed:", err);
+    }
     return sub;
   },
 });

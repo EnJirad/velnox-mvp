@@ -5,6 +5,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { api } from "@/convex/_generated/api";
 import { useAuth } from "@/hooks/use-auth";
 import { useCart } from "@/lib/cart";
+import { useTracking } from "@/lib/track";
 import { formatBaht } from "@/lib/commerce";
 import { useAction } from "convex/react";
 import {
@@ -19,7 +20,7 @@ import {
   ShoppingBag,
   Store,
 } from "lucide-react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router";
 import { toast } from "sonner";
 
@@ -67,6 +68,7 @@ export default function ShopCheckout() {
   const myAddresses = useAction(api.customer.myAddresses);
   const checkoutAction = useAction(api.customer.checkoutAction);
   const navigate = useNavigate();
+  const { track } = useTracking();
 
   const [addresses, setAddresses] = useState<AddressRow[] | null>(null);
   const [selectedAddressId, setSelectedAddressId] = useState<string | null>(null);
@@ -89,6 +91,18 @@ export default function ShopCheckout() {
   useEffect(() => {
     if (isAuthenticated && addresses === null) void loadAddresses();
   }, [isAuthenticated, addresses, loadAddresses]);
+
+  // CPNS: starting checkout is a strong intent signal.
+  const checkoutTracked = useRef(false);
+  useEffect(() => {
+    if (checkoutTracked.current || count === 0) return;
+    checkoutTracked.current = true;
+    track("CHECKOUT_START", {
+      value: `สินค้า ${count} ชิ้น`,
+      context: { itemCount: count, total },
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [count]);
 
   const selectedAddress = useMemo(
     () => addresses?.find((a) => a.id === selectedAddressId) ?? null,

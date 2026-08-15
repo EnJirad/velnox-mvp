@@ -203,6 +203,27 @@ const schema = defineSchema(
       .index("by_entity", ["entityId"])
       .index("by_type", ["type"]),
 
+    // -----------------------------------------------------------------------
+    // Customer Memory & Personal Intelligence (docs/Velnox-CPNS.md)
+    // -----------------------------------------------------------------------
+    // "ทุก Interaction คือข้อมูล": every meaningful shopper action on velshop
+    // is recorded here, bound to the customer identity (userId) — or to a
+    // guest anonymous session (anonymousId) when signed out. Personalization
+    // reads ONLY the authenticated user's own rows ("ของใคร ของมัน").
+    // entityId is the NEON commerce id (product / shop / category).
+    customerEvents: defineTable({
+      userId: v.optional(v.id("users")), // signed-in customer
+      anonymousId: v.optional(v.string()), // guest session (localStorage uuid)
+      type: v.string(), // PRODUCT_VIEW | PRODUCT_CLICK | SEARCH | CATEGORY_VIEW | SHOP_VIEW | INTEREST | WISHLIST_ADD | WISHLIST_REMOVE | CART_ADD | CART_REMOVE | CHECKOUT_START | PURCHASE | REORDER | VELREPEAT_START
+      entityId: v.optional(v.string()), // Neon product / shop / category id
+      value: v.optional(v.string()), // search query / category label
+      context: v.optional(v.any()), // extra hints (price, quantity, page)
+      createdAt: v.number(),
+    })
+      .index("by_user_type", ["userId", "type", "createdAt"])
+      .index("by_anonymous", ["anonymousId", "createdAt"])
+      .index("by_type", ["type", "createdAt"]),
+
     // Monthly subscription purchases (velshop "สั่งรายเดือน"): the shop
     // auto-places a new order every intervalDays for the customer.
     subscriptions: defineTable({

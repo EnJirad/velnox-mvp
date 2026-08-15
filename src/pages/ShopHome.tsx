@@ -14,9 +14,11 @@ import {
   type StoreProductCategory,
 } from "@/lib/commerce";
 import { setSeo } from "@/lib/seo";
+import { useTracking } from "@/lib/track";
 import { useAction } from "convex/react";
 import { motion } from "framer-motion";
 import {
+  BellRing,
   CalendarClock,
   Heart,
   History,
@@ -28,8 +30,9 @@ import {
   Sparkles,
   Star,
   Store,
+  TrendingUp,
 } from "lucide-react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router";
 import { toast } from "sonner";
 
@@ -41,11 +44,34 @@ const CATEGORIES: { id: StoreProductCategory | "all"; label: string }[] = [
   })),
 ];
 
-interface InterestRow {
+interface RecommendedRow {
   product: StoreProduct;
-  views?: number;
-  times?: number;
-  lastOrderedAt?: number;
+  score: number;
+  reasons: string[];
+  views: number;
+}
+
+interface ReorderReminderRow {
+  product: StoreProduct;
+  times: number;
+  avgCycleDays: number;
+  lastOrderedAt: number;
+  nextDueAt: number;
+  daysLeft: number;
+  emoji: string;
+}
+
+interface MemorySummary {
+  categories: { category: string; label: string; score: number; count: number }[];
+  searches: { q: string; count: number }[];
+  shops: { shopId: string; shopName: string; score: number; count: number }[];
+  intent: "low" | "medium" | "high";
+  eventCount: number;
+  viewCount: number;
+  purchaseCount: number;
+  cartAddCount: number;
+  wishlistCount: number;
+  checkoutCount: number;
 }
 
 /** Tiny loader for action-backed (non-reactive) data. */
@@ -70,14 +96,22 @@ function useCommerceData<T>(load: () => Promise<T>) {
   return { data, loading, reload };
 }
 
+const INTENT_LABEL: Record<string, string> = {
+  low: "กำลังสำรวจ",
+  medium: "เริ่มสนใจ",
+  high: "พร้อมซื้อสูง",
+};
+
 export default function ShopHome() {
-  const { isAuthenticated, isLoading: authLoading } = useAuth();
+  const { isAuthenticated, isLoading: authLoading, user } = useAuth();
   const listProducts = useAction(api.commerce.listProducts);
-  const popularAction = useAction(api.commerce.popularProducts);
-  const interestsAction = useAction(api.commerce.customerInterests);
+  const recommendAction = useAction(api.memory.recommendForCustomer);
   const regularsAction = useAction(api.commerce.customerRegulars);
+  const remindersAction = useAction(api.memory.dueReorderReminders);
+  const memoryAction = useAction(api.memory.myMemory);
   const publicShops = useAction(api.customer.publicShops);
   const recordInterest = useAction(api.commerce.recordInterest);
+  const { track } = useTracking();
   const settings = useQueryLegacySettings();
   const { add } = useCart();
 
@@ -87,14 +121,17 @@ export default function ShopHome() {
   const shopsData = useCommerceData(
     useCallback(() => publicShops(), [publicShops]),
   );
-  const popularData = useCommerceData(
-    useCallback(() => popularAction(), [popularAction]),
-  );
-  const interestsData = useCommerceData(
-    useCallback(() => interestsAction(), [interestsAction]),
+  const recommendData = useCommerceData(
+    useCallback(() => recommendAction({ limit: 8 }), [recommendAction]),
   );
   const regularsData = useCommerceData(
     useCallback(() => regularsAction(), [regularsAction]),
+  );
+  const remindersData = useCommerceData(
+    useCallback(() => remindersAction(), [remindersAction]),
+  );
+  const memoryData = useCommerceData(
+    useCallback(() => memoryAction(), [memoryAction]),
   );
 
   const [query, setQuery] = useState("");
@@ -103,9 +140,13 @@ export default function ShopHome() {
   const [subProduct, setSubProduct] = useState<StoreProduct | null>(null);
 
   const products = useMemo(() => productsData.data ?? [], [productsData.data]);
-  const popular = useMemo(() => popularData.data ?? [], [popularData.data]);
-  const interests = useMemo(() => interestsData.data ?? [], [interestsData.data]);
+  const recommendations = useMemo(
+    () => (recommendData.data?.items ?? []) as RecommendedRow[],
+    [recommendData.data],
+  );
   const regulars = useMemo(() => regularsData.data ?? [], [regularsData.data]);
+  const reminders = useMemo(() => remindersData.data ?? [], [remindersData.data]);
+  const memory = useMemo(() => memoryData.data as MemorySummary | null, [memoryData.data]);
   const shops = useMemo(() => shopsData.data ?? [], [shopsData.data]);
 
   const filtered = useMemo(() => {
@@ -117,18 +158,26 @@ export default function ShopHome() {
     });
   }, [products, query, category]);
 
-  // Personalized recommendations: this customer's own interests when signed
-  // in, otherwise what everyone is clicking (VelRepeat).
-  const recSource: InterestRow[] =
-    isAuthenticated && interests.length > 0 ? interests : popular;
-  const regularIds = useMemo(
-    () => new Set(regulars.map((r) => r.product.id)),
-    [regulars],
-  );
-  const recommendations = useMemo(
-    () => recSource.filter((r) => !regularIds.has(r.product.id)),
-    [recSource, regularIds],
-  );
+  // CPNS: a settled search is an interest signal.
+  const lastSearchTracked = useRef("");
+  useEffect(() => {
+    const term = query.trim();
+    if (term && term !== lastSearchTracked.current) {
+      lastSearchTracked.current = term;
+      track("SEARCH", { value: term.slice(0, 60) });
+    }
+  }, [query, track]);
+
+  const handleCategory = (id: StoreProductCategory | "all") => {
+    setCategory(id);
+    if (id !== "all") {
+      track("CATEGORY_VIEW", {
+        entityId: id,
+        value: id,
+        context: { label: PRODUCT_CATEGORY_META[id].label },
+      });
+    }
+  };
 
   const handleAdd = (product: StoreProduct, qty = 1) => {
     add(
@@ -147,6 +196,11 @@ export default function ShopHome() {
   const handleInterest = async (product: StoreProduct) => {
     toast.success(`บันทึกความสนใจ "${product.name}" แล้ว 💚`, {
       description: "Velnox จะแนะนำสินค้าแบบนี้ให้คุณบ่อยขึ้น",
+    });
+    track("INTEREST", {
+      entityId: product.id,
+      value: product.name,
+      context: { category: product.category },
     });
     try {
       await recordInterest({ productId: product.id });
@@ -168,6 +222,8 @@ export default function ShopHome() {
 
   const stockOf = (p: StoreProduct) => p.inventory?.available ?? p.inventory?.quantity ?? 0;
 
+  const firstName = user?.name?.split(" ")[0] ?? user?.email?.split("@")[0] ?? "";
+
   return (
     <div className="min-h-screen bg-[#F8FAFC] text-slate-900">
       <ShopHeader />
@@ -185,6 +241,12 @@ export default function ShopHome() {
                 {shopName}
               </h1>
               <p className="mt-2 max-w-lg text-sm leading-6 text-slate-500">{tagline}</p>
+              {isAuthenticated && firstName && (
+                <p className="mt-2 flex items-center gap-1.5 text-sm font-medium text-[#10B981]">
+                  <Sparkles className="size-3.5" />
+                  สวัสดี {firstName} — Velnox จำคุณได้ และคัดสิ่งที่ดีที่สุดมาให้คุณ
+                </p>
+              )}
               {settings?.announcement && (
                 <div className="mt-4 inline-flex items-center gap-2 rounded-full border border-emerald-200 bg-[#ECFDF5] px-3 py-1.5 text-xs font-medium text-emerald-700">
                   <Megaphone className="size-3.5" />
@@ -217,7 +279,7 @@ export default function ShopHome() {
                 <button
                   key={c.id}
                   type="button"
-                  onClick={() => setCategory(c.id)}
+                  onClick={() => handleCategory(c.id)}
                   className={`rounded-full px-3 py-1.5 text-xs font-medium transition-colors ${
                     category === c.id
                       ? "bg-slate-900 text-white"
@@ -231,6 +293,64 @@ export default function ShopHome() {
           </div>
         </div>
       </section>
+
+      {/* Proactive Commerce (CPNS §14) — “ถึงเวลาสั่งซื้อซ้ำแล้ว” */}
+      {!authLoading && isAuthenticated && !remindersData.loading && reminders.length > 0 && (
+        <section className="border-b border-slate-100 bg-gradient-to-b from-[#F0FDF9] to-white">
+          <div className="mx-auto w-full max-w-6xl px-4 py-8 sm:px-6">
+            <div className="flex items-center gap-2.5">
+              <span className="flex size-9 items-center justify-center rounded-[10px] bg-[#10B981] text-white">
+                <BellRing className="size-4" />
+              </span>
+              <div>
+                <h2 className="text-base font-bold tracking-tight text-slate-900">
+                  ถึงเวลาสั่งซื้อซ้ำแล้ว
+                </h2>
+                <p className="text-xs text-slate-400">
+                  Velnox จำรอบการสั่งของคุณได้ — สินค้าเหล่านี้ใกล้ถึงเวลาที่คุณมักจะสั่ง
+                </p>
+              </div>
+            </div>
+
+            <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+              {reminders.map((r, i) => (
+                <motion.div
+                  key={r.product.id}
+                  initial={{ opacity: 0, y: 12 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.3, delay: Math.min(i * 0.05, 0.3) }}
+                  className="flex items-center gap-4 rounded-2xl border border-emerald-200/70 bg-white p-4 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-[0_12px_30px_rgba(16,185,129,0.12)]"
+                >
+                  <span className="flex size-12 shrink-0 items-center justify-center rounded-[14px] bg-[#ECFDF5] text-2xl">
+                    {r.emoji}
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm font-semibold text-slate-900">{r.product.name}</p>
+                    <p className="mt-0.5 text-xs text-slate-400">
+                      สั่งทุก ~{r.avgCycleDays} วัน · สั่งแล้ว {r.times} ครั้ง
+                    </p>
+                    <p className="mt-1 text-xs font-medium text-emerald-700">
+                      {r.daysLeft < 0
+                        ? `เลยรอบมาแล้ว ${Math.abs(r.daysLeft)} วัน`
+                        : r.daysLeft === 0
+                          ? "ถึงกำหนดวันนี้พอดี"
+                          : `อีก ${r.daysLeft} วัน ถึงรอบสั่ง`}
+                    </p>
+                  </div>
+                  <Button
+                    size="sm"
+                    className="shrink-0 gap-1.5 bg-[#10B981] text-white hover:bg-emerald-700"
+                    onClick={() => handleAdd(r.product)}
+                  >
+                    <Plus className="size-3.5" />
+                    ซื้ออีกครั้ง
+                  </Button>
+                </motion.div>
+              ))}
+            </div>
+          </div>
+        </section>
+      )}
 
       {/* Customer Memory — Velnox remembers this customer's regular items */}
       {!authLoading && isAuthenticated && !regularsData.loading && regulars.length > 0 && (
@@ -311,6 +431,50 @@ export default function ShopHome() {
         </section>
       )}
 
+      {/* Customer Understanding (CPNS §7) — what Velnox noticed about YOU */}
+      {!authLoading && isAuthenticated && !memoryData.loading && memory && memory.categories.length > 0 && (
+        <section className="border-b border-slate-100 bg-white">
+          <div className="mx-auto w-full max-w-6xl px-4 py-8 sm:px-6">
+            <div className="flex items-center gap-2.5">
+              <span className="flex size-9 items-center justify-center rounded-[10px] bg-[#ECFDF5]">
+                <TrendingUp className="size-4 text-[#10B981]" />
+              </span>
+              <div>
+                <h2 className="text-base font-bold tracking-tight text-slate-900">
+                  Velnox สังเกตว่าคุณสนใจ…
+                </h2>
+                <p className="text-xs text-slate-400">
+                  ความเข้าใจนี้มาจากพฤติกรรมของคุณเอง — กดหมวดเพื่อกรองสินค้า
+                  {memory.intent && (
+                    <span className="ml-1 rounded-full bg-emerald-50 px-2 py-0.5 font-medium text-emerald-700">
+                      ระดับความตั้งใจซื้อ: {INTENT_LABEL[memory.intent]}
+                    </span>
+                  )}
+                </p>
+              </div>
+            </div>
+
+            <div className="mt-4 flex flex-wrap gap-2">
+              {memory.categories.slice(0, 5).map((c) => (
+                <button
+                  key={c.category}
+                  type="button"
+                  onClick={() => handleCategory(c.category as StoreProductCategory)}
+                  className={`rounded-full px-3.5 py-1.5 text-xs font-medium transition-colors ${
+                    category === c.category
+                      ? "bg-slate-900 text-white"
+                      : "border border-emerald-200 bg-[#F0FDF9] text-emerald-800 hover:border-emerald-300"
+                  }`}
+                >
+                  {c.label}
+                  <span className="ml-1.5 opacity-60">×{c.count}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+        </section>
+      )}
+
       {/* VelRepeat — แนะนำสำหรับคุณ */}
       {!authLoading && recommendations.length > 0 && (
         <section className="border-b border-slate-100 bg-white">
@@ -321,18 +485,18 @@ export default function ShopHome() {
               </span>
               <div>
                 <h2 className="text-base font-bold tracking-tight text-slate-900">
-                  {isAuthenticated ? "แนะนำสำหรับคุณ" : "สินค้ายอดนิยม"}
+                  {recommendData.data?.source === "personal" ? "แนะนำสำหรับคุณ" : "สินค้ายอดนิยม"}
                 </h2>
                 <p className="text-xs text-slate-400">
-                  {isAuthenticated
-                    ? "Velnox เลือกให้จากสิ่งที่คุณสนใจและสั่งบ่อย"
-                    : "จากยอดคลิกของลูกค้าทั่วตลาด (VelRepeat)"}
+                  {recommendData.data?.source === "personal"
+                    ? "Velnox เลือกให้จากสิ่งที่คุณสนใจ ค้นหา และสั่งบ่อย"
+                    : "จากความสนใจของลูกค้าทั่วตลาด (VelRepeat)"}
                 </p>
               </div>
             </div>
 
             <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-              {recommendations.slice(0, 8).map(({ product, views }, i) => (
+              {recommendations.slice(0, 8).map(({ product, reasons, views }, i) => (
                 <motion.div
                   key={product.id}
                   initial={{ opacity: 0, y: 12 }}
@@ -343,7 +507,14 @@ export default function ShopHome() {
                   <button
                     type="button"
                     className="block aspect-[4/3] w-full cursor-pointer overflow-hidden bg-slate-50"
-                    onClick={() => setDetailProduct(product)}
+                    onClick={() => {
+                      setDetailProduct(product);
+                      track("PRODUCT_CLICK", {
+                        entityId: product.id,
+                        value: product.name,
+                        context: { category: product.category, source: "recommendation" },
+                      });
+                    }}
                   >
                     {product.primaryImage ? (
                       <img
@@ -366,6 +537,11 @@ export default function ShopHome() {
                         {views ?? 0} คลิก
                       </Badge>
                     </div>
+                    {reasons && reasons.length > 0 && (
+                      <p className="mt-1 line-clamp-2 text-[11px] leading-4 text-[#10B981]">
+                        {reasons.join(" · ")}
+                      </p>
+                    )}
                     <p className="mt-1 line-clamp-2 text-xs leading-5 text-slate-400">
                       {product.description || PRODUCT_CATEGORY_META[product.category].label}
                     </p>
@@ -410,6 +586,7 @@ export default function ShopHome() {
                 <Link
                   key={shop.id}
                   to={`/shop/shops/${shop.id}`}
+                  onClick={() => track("SHOP_VIEW", { entityId: shop.id, value: shop.name })}
                   className="flex items-center gap-3 rounded-xl border border-slate-200 bg-white p-4 transition-all duration-200 hover:-translate-y-0.5 hover:border-[#10B981]/40 hover:shadow-[0_12px_30px_rgba(15,23,42,0.06)]"
                 >
                   <span className="flex size-12 shrink-0 items-center justify-center overflow-hidden rounded-[12px] bg-[#ECFDF5]">
@@ -479,6 +656,13 @@ export default function ShopHome() {
                     to={`/shop/products/${product.id}`}
                     className="block aspect-square w-full overflow-hidden bg-slate-50"
                     aria-label={`ดูรายละเอียด ${product.name}`}
+                    onClick={() =>
+                      track("PRODUCT_CLICK", {
+                        entityId: product.id,
+                        value: product.name,
+                        context: { category: product.category },
+                      })
+                    }
                   >
                     {product.primaryImage ? (
                       <img

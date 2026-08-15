@@ -6,6 +6,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { api } from "@/convex/_generated/api";
 import { useAuth } from "@/hooks/use-auth";
 import { useCart } from "@/lib/cart";
+import { useTracking } from "@/lib/track";
 import {
   PRODUCT_CATEGORY_META,
   formatBaht,
@@ -27,7 +28,7 @@ import {
   Store,
   Zap,
 } from "lucide-react";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router";
 import { toast } from "sonner";
 
@@ -55,6 +56,7 @@ export default function ShopProductDetail() {
   const toggleWishlist = useAction(api.customer.toggleWishlistAction);
   const myWishlist = useAction(api.customer.myWishlist);
   const { add } = useCart();
+  const { track } = useTracking();
 
   const [product, setProduct] = useState<StoreProduct | null>(null);
   const [loading, setLoading] = useState(true);
@@ -92,6 +94,18 @@ export default function ShopProductDetail() {
   useEffect(() => {
     void load();
   }, [load]);
+
+  // CPNS: opening a product page = PRODUCT_VIEW (once per product per visit).
+  const viewedRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!product || viewedRef.current === product.id) return;
+    viewedRef.current = product.id;
+    track("PRODUCT_VIEW", {
+      entityId: product.id,
+      value: product.name,
+      context: { category: product.category, price: product.price, shopId: product.shopId },
+    });
+  }, [product, track]);
 
   const images = product?.images && product.images.length > 0 ? product.images : product?.primaryImage ? [product.primaryImage] : [];
   const active = images[activeIndex] ?? images[0];
