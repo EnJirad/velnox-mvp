@@ -425,7 +425,9 @@ export default function Center() {
                 </p>
               </div>
             ) : (
-              <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white">
+              <>
+              {/* Desktop: table */}
+              <div className="hidden overflow-x-auto rounded-xl border border-slate-200 bg-white md:block">
                 <Table className="min-w-[760px]">
                   <TableHeader>
                     <TableRow className="hover:bg-transparent">
@@ -502,6 +504,70 @@ export default function Center() {
                   </TableBody>
                 </Table>
               </div>
+
+              {/* Mobile: app-like order cards */}
+              <div className="space-y-3 md:hidden">
+                {orders.map(({ order, items }) => {
+                  const meta = ORDER_STATUS_META[order.status];
+                  return (
+                    <div
+                      key={order._id}
+                      className="rounded-xl border border-slate-200 bg-white p-4 transition-all duration-200 active:scale-[0.99]"
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <p className="truncate font-semibold text-slate-900">{shortOrderId(order._id)}</p>
+                          <p className="mt-0.5 truncate text-xs text-slate-400">
+                            {order.customerName} · {order.customerPhone}
+                          </p>
+                        </div>
+                        {canManageOrders ? (
+                          <Select
+                            value={order.status}
+                            onValueChange={(v) => handleOrderStatus(order._id, v as OrderStatus)}
+                          >
+                            <SelectTrigger className="h-8 w-32 shrink-0 rounded-[10px] border-slate-200 text-xs">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {(["pending", "confirmed", "completed", "cancelled"] as OrderStatus[]).map((s) => (
+                                <SelectItem key={s} value={s}>
+                                  {ORDER_STATUS_META[s].label}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        ) : (
+                          <Badge className={`shrink-0 gap-1.5 rounded-full ring-1 ring-inset ${meta.badge}`}>
+                            <span className={`size-1.5 rounded-full ${meta.dot}`} />
+                            {meta.label}
+                          </Badge>
+                        )}
+                      </div>
+
+                      <div className="mt-3 rounded-[10px] bg-slate-50 px-3 py-2.5">
+                        {items.slice(0, 2).map((item) => (
+                          <p key={item._id} className="truncate text-sm text-slate-600">
+                            {item.productName}{" "}
+                            <span className="text-slate-400">× {item.quantity} {item.unit}</span>
+                          </p>
+                        ))}
+                        {items.length > 2 && (
+                          <p className="text-xs text-slate-400">+{items.length - 2} รายการ</p>
+                        )}
+                      </div>
+
+                      <div className="mt-3 flex items-center justify-between">
+                        <p className="text-xs text-slate-400">
+                          {formatThaiDate(order.createdAt)} · {order.itemCount} ชิ้น
+                        </p>
+                        <p className="font-bold tabular-nums text-slate-900">{formatBaht(order.total)}</p>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+              </>
             )}
             {!canManageOrders && (
               <p className="mt-4 text-xs text-slate-400">
@@ -523,7 +589,9 @@ export default function Center() {
                 </p>
               </div>
             ) : (
-              <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white">
+              <>
+              {/* Desktop: table */}
+              <div className="hidden overflow-x-auto rounded-xl border border-slate-200 bg-white md:block">
                 <Table className="min-w-[820px]">
                   <TableHeader>
                     <TableRow className="hover:bg-transparent">
@@ -606,6 +674,81 @@ export default function Center() {
                   </TableBody>
                 </Table>
               </div>
+
+              {/* Mobile: app-like intelligence cards */}
+              <div className="space-y-3 md:hidden">
+                {intelRows.map(({ product, info, cycle, predictedAt, daysLeft }) => {
+                  const meta = PRODUCT_CATEGORY_META[product.category];
+                  const statusMeta = STATUS_META[info.status];
+                  const Icon = meta.icon;
+                  return (
+                    <div
+                      key={product._id}
+                      className="rounded-xl border border-slate-200 bg-white p-4 transition-all duration-200 active:scale-[0.99]"
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="flex min-w-0 items-center gap-3">
+                          <span className={`flex size-9 shrink-0 items-center justify-center rounded-[10px] ring-1 ring-inset ${meta.chip}`}>
+                            <Icon className={`size-4 ${meta.iconClass}`} />
+                          </span>
+                          <div className="min-w-0">
+                            <p className="truncate text-sm font-semibold text-slate-900">{product.name}</p>
+                            <p className="text-xs text-slate-400">{meta.label}</p>
+                          </div>
+                        </div>
+                        <Badge className={`shrink-0 gap-1 rounded-full ring-1 ring-inset ${statusMeta.badge}`}>
+                          <span className={`size-1.5 rounded-full ${statusMeta.dot}`} />
+                          {statusMeta.label}
+                        </Badge>
+                      </div>
+
+                      <div className="mt-3 grid grid-cols-2 gap-2 rounded-[10px] bg-slate-50 p-3 text-xs">
+                        <div>
+                          <p className="text-slate-400">สต็อกปัจจุบัน</p>
+                          <p className="mt-0.5 font-semibold tabular-nums text-slate-900">
+                            {formatNumber(product.currentStock)} {product.unit}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-slate-400">รอบการซื้อ</p>
+                          <p className="mt-0.5 font-semibold tabular-nums text-slate-900">
+                            {cycle !== undefined ? formatDays(cycle) : "—"}
+                            {product.purchaseCount > 0 && (
+                              <span className="ml-1 font-normal text-slate-400">({product.purchaseCount} ครั้ง)</span>
+                            )}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-slate-400">สั่งล่าสุด</p>
+                          <p className="mt-0.5 font-medium text-slate-700">
+                            {product.lastOrderedAt !== undefined ? formatThaiDate(product.lastOrderedAt) : "—"}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-slate-400">คาดสั่งครั้งหน้า</p>
+                          <p className="mt-0.5 font-medium text-slate-700">
+                            {predictedAt !== undefined ? formatThaiDate(predictedAt) : "—"}
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="mt-3 flex items-center justify-between">
+                        <p className="text-xs text-slate-400">เหลืออีก</p>
+                        {daysLeft !== undefined ? (
+                          daysLeft > 0 ? (
+                            <p className="text-sm font-bold tabular-nums text-slate-900">{formatDays(daysLeft)}</p>
+                          ) : (
+                            <p className="text-sm font-bold text-rose-600">เลยกำหนด</p>
+                          )
+                        ) : (
+                          <p className="text-sm text-slate-400">—</p>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+              </>
             )}
             <p className="mt-4 flex items-center gap-1.5 text-xs text-slate-400">
               <BrainCircuit className="size-3.5 text-[#10B981]" />
@@ -615,7 +758,8 @@ export default function Center() {
 
           {/* ============ Products (view-only registry) ============ */}
           <TabsContent value="products" className="mt-6">
-            <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white">
+            {/* Desktop: table */}
+            <div className="hidden overflow-x-auto rounded-xl border border-slate-200 bg-white md:block">
               <Table className="min-w-[640px]">
                 <TableHeader>
                   <TableRow className="hover:bg-transparent">
@@ -674,6 +818,56 @@ export default function Center() {
                 </TableBody>
               </Table>
             </div>
+
+            {/* Mobile: app-like product cards */}
+            <div className="space-y-3 md:hidden">
+              {(products ?? []).map((p) => {
+                const meta = PRODUCT_CATEGORY_META[p.category];
+                const Icon = meta.icon;
+                return (
+                  <div
+                    key={p._id}
+                    className="rounded-xl border border-slate-200 bg-white p-4 transition-all duration-200 active:scale-[0.99]"
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="flex min-w-0 items-center gap-3">
+                        <span className={`flex size-9 shrink-0 items-center justify-center rounded-[10px] ring-1 ring-inset ${meta.chip}`}>
+                          <Icon className={`size-4 ${meta.iconClass}`} />
+                        </span>
+                        <div className="min-w-0">
+                          <p className="truncate text-sm font-semibold text-slate-900">{p.name}</p>
+                          <p className="text-xs text-slate-400">{meta.label}</p>
+                        </div>
+                      </div>
+                      {p.published ? (
+                        <Badge className="shrink-0 gap-1 rounded-full bg-emerald-50 text-emerald-700 ring-1 ring-inset ring-emerald-600/15">
+                          ประกาศขาย
+                        </Badge>
+                      ) : (
+                        <Badge className="shrink-0 gap-1 rounded-full bg-slate-100 text-slate-500 ring-1 ring-inset ring-slate-600/10">
+                          ยังไม่ประกาศ
+                        </Badge>
+                      )}
+                    </div>
+
+                    <div className="mt-3 flex items-center justify-between rounded-[10px] bg-slate-50 px-3 py-2.5 text-xs">
+                      <span className="text-slate-400">
+                        ราคา{" "}
+                        <span className="font-semibold tabular-nums text-slate-900">
+                          {p.price !== undefined ? formatBaht(p.price) : "—"}
+                        </span>
+                      </span>
+                      <span className="text-slate-400">
+                        สต็อก{" "}
+                        <span className="font-semibold tabular-nums text-slate-900">
+                          {formatNumber(p.currentStock)} {p.unit}
+                        </span>
+                      </span>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
             <p className="mt-4 flex items-center gap-1.5 text-xs text-slate-400">
               <Package className="size-3.5 text-[#10B981]" />
               เปิด-ปิดประกาศขายสินค้า: เจ้าของร้านจัดการได้ที่ velseller → Smart Reorder
@@ -691,7 +885,7 @@ export default function Center() {
                   </p>
                 </CardContent>
               </Card>
-              <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white">
+              <div className="hidden overflow-x-auto rounded-xl border border-slate-200 bg-white md:block">
                 <Table className="min-w-[560px]">
                   <TableHeader>
                     <TableRow className="hover:bg-transparent">
@@ -786,6 +980,77 @@ export default function Center() {
                     })}
                   </TableBody>
                 </Table>
+              </div>
+
+              {/* Mobile: app-like staff cards */}
+              <div className="space-y-3 md:hidden">
+                {(users ?? []).map((u) => {
+                  const role = u.role ?? "customer";
+                  const meta =
+                    ROLE_META[role as keyof typeof ROLE_META] ?? ROLE_META.customer;
+                  const isSelf = u._id === user?._id;
+                  return (
+                    <div
+                      key={u._id}
+                      className="rounded-xl border border-slate-200 bg-white p-4 transition-all duration-200 active:scale-[0.99]"
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <p className="truncate text-sm font-semibold text-slate-900">
+                            {u.name || "ผู้ใช้ที่ยังไม่ตั้งชื่อ"}
+                            {isSelf && <span className="ml-1.5 text-xs text-slate-400">(คุณ)</span>}
+                          </p>
+                          <p className="mt-0.5 truncate text-xs text-slate-400">{u.email ?? "บัญชีผู้เยี่ยมชม"}</p>
+                        </div>
+                        <Badge className={`shrink-0 gap-1 rounded-full ring-1 ring-inset ${meta.badge}`}>
+                          {role === "owner" && <Crown className="size-3" />}
+                          {role === "admin" && <BadgeCheck className="size-3" />}
+                          {meta.label}
+                        </Badge>
+                      </div>
+                      {!isSelf && (
+                        <div className="mt-3 grid grid-cols-2 gap-2">
+                          <Select
+                            value={role}
+                            onValueChange={(v) =>
+                              handleSetUserAccess(
+                                u._id,
+                                v as "customer" | "seller" | "admin" | "owner" | "staff",
+                                u.department,
+                              )
+                            }
+                          >
+                            <SelectTrigger className="h-10 w-full rounded-[10px] border-slate-200 text-sm">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="customer">ลูกค้า</SelectItem>
+                              <SelectItem value="seller">พ่อค้า / ร้านค้า</SelectItem>
+                              <SelectItem value="staff">พนักงาน (ดูข้อมูล)</SelectItem>
+                              <SelectItem value="admin">ผู้ดูแลฝ่าย</SelectItem>
+                              <SelectItem value="owner">เจ้าของบริษัท</SelectItem>
+                            </SelectContent>
+                          </Select>
+                          <Select
+                            value={u.department ?? "general"}
+                            onValueChange={(v) => handleSetUserAccess(u._id, role, v)}
+                          >
+                            <SelectTrigger className="h-10 w-full rounded-[10px] border-slate-200 text-sm">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {DEPARTMENTS.map((d) => (
+                                <SelectItem key={d.id} value={d.id}>
+                                  {d.label}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
               <p className="mt-4 flex items-center gap-1.5 text-xs text-slate-400">
                 <Users className="size-3.5 text-[#10B981]" />

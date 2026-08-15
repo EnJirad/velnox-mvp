@@ -37,7 +37,7 @@ export function MobileTabBar({ items }: { items: MobileTabItem[] }) {
       className="fixed inset-x-0 bottom-0 z-50 border-t border-slate-200 bg-white/95 backdrop-blur md:hidden"
       style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
     >
-      <div className="grid h-16 grid-cols-5">
+      <div className="flex h-16">
         {items.map((item) => {
           const Icon = item.icon;
           const active = item.activeMatch
@@ -49,7 +49,7 @@ export function MobileTabBar({ items }: { items: MobileTabItem[] }) {
               to={item.to}
               aria-current={active ? "page" : undefined}
               className={cn(
-                "relative flex flex-col items-center justify-center gap-1 transition-colors",
+                "relative flex min-w-0 flex-1 flex-col items-center justify-center gap-1 transition-colors",
                 active
                   ? "text-[#10B981]"
                   : "text-slate-400 hover:text-slate-600 active:text-slate-500",

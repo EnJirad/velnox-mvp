@@ -372,7 +372,7 @@ export default function Reorder() {
                 <span className="text-xs text-slate-400">{products.length} รายการ</span>
               </div>
 
-              <div className="mt-3 overflow-x-auto rounded-xl border border-slate-200 bg-white">
+              <div className="mt-3 hidden overflow-x-auto rounded-xl border border-slate-200 bg-white md:block">
                 <Table className="min-w-[720px]">
                   <TableHeader>
                     <TableRow className="hover:bg-transparent">
@@ -530,6 +530,154 @@ export default function Reorder() {
                     })}
                   </TableBody>
                 </Table>
+              </div>
+
+              {/* Mobile: app-like inventory cards */}
+              <div className="mt-3 space-y-3 md:hidden">
+                {products.map((product) => {
+                  const meta = PRODUCT_CATEGORY_META[product.category];
+                  const info = reorderInfo(product);
+                  const statusMeta = STATUS_META[info.status];
+                  const cycle = effectiveCycleDays(product);
+                  const Icon = meta.icon;
+                  return (
+                    <div
+                      key={product._id}
+                      className="rounded-xl border border-slate-200 bg-white p-4 transition-all duration-200 active:scale-[0.99]"
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="flex min-w-0 items-center gap-3">
+                          <span
+                            className={`flex size-9 shrink-0 items-center justify-center rounded-[10px] ring-1 ring-inset ${meta.chip}`}
+                          >
+                            <Icon className={`size-4 ${meta.iconClass}`} />
+                          </span>
+                          <div className="min-w-0">
+                            <p className="truncate text-sm font-semibold text-slate-900">{product.name}</p>
+                            <p className="truncate text-xs text-slate-400">
+                              {meta.label}
+                              {product.supplier ? ` · ${product.supplier}` : ""}
+                            </p>
+                          </div>
+                        </div>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="size-9 shrink-0 text-slate-400 hover:bg-slate-100 hover:text-slate-700"
+                          onClick={() => setReorderProduct(product)}
+                          aria-label={`สั่งซื้อซ้ำ ${product.name}`}
+                        >
+                          <RefreshCw className="size-4" />
+                        </Button>
+                      </div>
+
+                      <div className="mt-3 grid grid-cols-2 gap-2 rounded-[10px] bg-slate-50 p-3 text-xs">
+                        <div>
+                          <p className="text-slate-400">สต็อก</p>
+                          <p className="mt-0.5 font-semibold tabular-nums text-slate-900">
+                            {formatNumber(product.currentStock)} {product.unit}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-slate-400">จุดสั่งซื้อซ้ำ</p>
+                          <p className="mt-0.5 font-semibold tabular-nums text-slate-900">
+                            {formatNumber(product.reorderLevel)} {product.unit}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-slate-400">รอบการซื้อ</p>
+                          <p className="mt-0.5 font-semibold tabular-nums text-slate-900">
+                            {cycle !== undefined ? formatDays(cycle) : "—"}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-slate-400">สั่งล่าสุด</p>
+                          <p className="mt-0.5 font-medium text-slate-700">
+                            {product.lastOrderedAt !== undefined ? formatThaiDate(product.lastOrderedAt) : "—"}
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="mt-3 flex flex-wrap items-center gap-1.5">
+                        <Badge className={`gap-1 rounded-full ring-1 ring-inset ${statusMeta.badge}`}>
+                          <span className={`size-1.5 rounded-full ${statusMeta.dot}`} />
+                          {statusMeta.label}
+                        </Badge>
+                        {info.lowStock && (
+                          <Badge className="gap-1 rounded-full bg-rose-50 text-rose-700 ring-1 ring-inset ring-rose-600/15 hover:bg-rose-50">
+                            สต็อกต่ำ
+                          </Badge>
+                        )}
+                        {product.published && (
+                          <Badge className="gap-1 rounded-full bg-emerald-50 text-emerald-700 ring-1 ring-inset ring-emerald-600/15 hover:bg-emerald-50">
+                            ขายหน้าร้าน
+                          </Badge>
+                        )}
+                        {product.price !== undefined && (
+                          <span className="ml-auto text-sm font-bold tabular-nums text-slate-900">
+                            {formatBaht(product.price)}
+                          </span>
+                        )}
+                      </div>
+
+                      <div className="mt-3 flex items-center gap-2 border-t border-slate-100 pt-3">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="flex-1 gap-1.5 border-slate-200 text-slate-600"
+                          onClick={() => setSaleProduct(product)}
+                        >
+                          <MinusCircle className="size-3.5" />
+                          ขาย / ใช้ไป
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="flex-1 gap-1.5 border-slate-200 text-slate-600"
+                          onClick={() => handleTogglePublish(product)}
+                        >
+                          {product.published ? (
+                            <EyeOff className="size-3.5" />
+                          ) : (
+                            <Eye className="size-3.5" />
+                          )}
+                          {product.published ? "ปิดขาย" : "ประกาศขาย"}
+                        </Button>
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="size-9 shrink-0 text-slate-400 hover:bg-slate-100 hover:text-slate-700"
+                              aria-label={`จัดการเพิ่มเติม ${product.name}`}
+                            >
+                              <MoreHorizontal className="size-4" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end" className="w-48">
+                            <DropdownMenuItem
+                              className="cursor-pointer"
+                              onClick={() => {
+                                setEditingProduct(product);
+                                setFormOpen(true);
+                              }}
+                            >
+                              <Pencil className="size-4" />
+                              แก้ไขสินค้า
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                              className="cursor-pointer text-red-600 focus:bg-red-50 focus:text-red-600"
+                              onClick={() => setDeleteProduct(product)}
+                            >
+                              <Trash2 className="size-4" />
+                              ลบสินค้า
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
             </section>
 
