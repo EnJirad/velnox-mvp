@@ -14,7 +14,8 @@
     "test:watch": "vitest",
     "db:migrate": "bun run db/migrate.ts",
     "db:smoke": "bun run db/smoke.ts",
-    "db:consistency": "bun run db/consistency-check.ts"
+    "db:consistency": "bun run db/consistency-check.ts",
+    "predeploy": "bun run typecheck && bun test && bun run build"
   },
   "dependencies": {
     "@auth/core": "^0.41.1",

@@ -249,6 +249,15 @@ Phase 12 Production — staging/prod env, deploy pipeline, monitoring, backup
 
 ---
 
+## Phase 12 (spec "PHASE 12") — Production Deployment & Launch 🟡 (เตรียมครบ — deploy ต้องบน platform)
+
+- ✅ **SEO/noindex** (§56–57): `velseller.html` + `velcenter.html` = `<meta robots noindex>`; shop/main index ได้ · `public/robots.txt` + `public/sitemap.xml` (template — ยืนยัน domain ก่อน launch)
+- ✅ **pre-deploy gate**: `bun run predeploy` = typecheck + 55 tests + build
+- ✅ **Deployment runbook**: `docs/production/deploy-runbook.md` — ลำดับ 10 STEP (§45) + backup ก่อน launch (§48) + smoke test (§51) + first order (§68) + post-launch 1ชม/6ชม/24ชม/7วัน (§70) + feature freeze (§46) + access control (§53)
+- ✅ **Report**: `docs/PHASE-12-REPORT.md` (format §71) — **PRODUCTION: NOT READY** — ยังต้อง deploy จริง + payment gateway + E2E browser + legal + admin account + backup test
+
+---
+
 ## Phase 11 — Testing
 
 - ✅ Unit test: `tests/*` 48 ตัว (commission calc, penalty, state machine, GPS, IDOR/security, providers, velrepeat)
