@@ -294,6 +294,27 @@ const ORDER_STATUSES: OrderStatus[] = ["pending", "confirmed", "shipped", "deliv
 const PAYMENT_STATUSES: PaymentStatus[] = ["unpaid", "pending", "paid", "partially_refunded", "refunded", "failed"];
 const SHIPPING_STATUSES: ShippingStatus[] = ["not_shipped", "processing", "shipped", "delivered", "returned"];
 
+/**
+ * Order state machine (spec §18):
+ *   pending -> confirmed -> shipped -> delivered -> completed
+ *   pending -> cancelled, confirmed -> cancelled
+ *   shipped/delivered/completed -> cancelled is NOT allowed (use refund flow)
+ * Pure helper — unit-tested in tests/. The DB-write path uses it too.
+ */
+export const ORDER_STATUS_TRANSITIONS: Record<OrderStatus, OrderStatus[]> = {
+  pending: ["confirmed", "cancelled"],
+  confirmed: ["shipped", "cancelled"],
+  shipped: ["delivered"],
+  delivered: ["completed"],
+  completed: [],
+  cancelled: [],
+};
+
+/** Whether `from -> to` is a legal transition (same status is a no-op). */
+export function canTransitionOrderStatus(from: OrderStatus, to: OrderStatus): boolean {
+  return from === to || ORDER_STATUS_TRANSITIONS[from]?.includes(to) === true;
+}
+
 export interface UpdateOrderInput {
   orderId: string;
   status?: OrderStatus;
@@ -320,24 +341,11 @@ export async function updateOrderStatus(input: UpdateOrderInput): Promise<Order>
     if (!SHIPPING_STATUSES.includes(shippingStatus)) throw new OrderError(`Invalid shipping status: ${shippingStatus}`);
     if (before.status === "cancelled") throw new OrderError("Order is already cancelled");
 
-    // --- order state machine ---
-    // pending -> confirmed -> shipped -> delivered -> completed
-    // pending -> cancelled, confirmed -> cancelled
-    // shipped/delivered/completed -> cancelled is NOT allowed (use refund flow)
-    const ALLOWED_NEXT: Record<string, string[]> = {
-      pending: ["confirmed", "cancelled"],
-      confirmed: ["shipped", "cancelled"],
-      shipped: ["delivered"],
-      delivered: ["completed"],
-      completed: [],
-      cancelled: [],
-    };
-    if (status !== before.status) {
-      if (!ALLOWED_NEXT[before.status]?.includes(status)) {
-        throw new OrderError(
-          `Cannot move order from '${before.status}' to '${status}' — status transition not allowed`,
-        );
-      }
+    // --- order state machine (spec §18) ---
+    if (status !== before.status && !canTransitionOrderStatus(before.status, status)) {
+      throw new OrderError(
+        `Cannot move order from '${before.status}' to '${status}' — status transition not allowed`,
+      );
     }
 
     const updated = await tx.query(

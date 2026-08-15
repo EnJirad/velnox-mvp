@@ -16,6 +16,11 @@
 - 📦 [`docs/PHASE2_DATABASE.md`](./docs/PHASE2_DATABASE.md) — schema 36 ตาราง + conflicts ที่รายงาน + Definition of Done
 - 🧱 `db/migrations/002…010` — migration idempotent (รัน `DATABASE_URL="..." bun run db:migrate` ได้ทันที)
 
+### ⚙️ เอกสาร Phase 3 — Backend & Database Foundation (เสร็จแล้ว)
+
+- 🛠 [`docs/PHASE3_BACKEND.md`](./docs/PHASE3_BACKEND.md) — foundation + services + Convex node actions + tests + Definition of Done
+- 🧪 `tests/` — 30 unit tests (commission 3%, return penalty, GPS, order state machine, RBAC) รันด้วย `bun test`
+
 ---
 
 ## Overview

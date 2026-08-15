@@ -82,7 +82,7 @@ export interface SellerProfile {
     ownerUserId: string;
     name: string;
     taxId: string | null;
-    status: "pending" | "approved" | "suspended";
+    status: "pending" | "approved" | "rejected" | "suspended";
     refundPolicyLimit: number;
     createdAt: string;
   };

@@ -1,0 +1,5 @@
+# Scope the native `bun test` runner to the repo's own tests.
+# `velnox-mvp/` is a deployable snapshot of the project — its copied tests
+# resolve against the snapshot's own relative paths and would double-run.
+[test]
+root = "./tests"

@@ -9,8 +9,8 @@
 
 ```
 Phase 1 ✅ Architecture (เอกสาร 3 ฉบับใน docs/)
-Phase 2  Database   — ขยาย Neon schema (categories/variants/cart/audit ฯลฯ) + migration
-Phase 3  Backend    — src/backend/* ต่อตารางใหม่ + validation + error mapping
+Phase 2 ✅ Database   — ขยาย Neon schema (categories/variants/cart/audit ฯลฯ) + migration
+Phase 3 ✅ Backend    — src/backend/* ต่อตารางใหม่ + validation + error mapping + tests
 Phase 4  Auth       — profile/email/phone management + RBAC guard ครบ
 Phase 5  VelShop    — catalog/category/search + cart + checkout multi-seller + GPS/address
 Phase 6  VelSeller  — variants/product type + order fulfillment + store settings + location
@@ -64,17 +64,20 @@ Phase 12 Production — staging/prod env, deploy pipeline, monitoring, backup
 
 ---
 
-## Phase 3 — Backend (src/backend/*)
+## Phase 3 — Backend (src/backend/*) ✅ เสร็จแล้ว
+
+> 📄 รายละเอียดเต็ม: **`docs/PHASE3_BACKEND.md`** — conflicts ที่รายงาน + Definition of Done
+> สรุป: foundation (errors/validation/rules/permissions/audit/identity) + services ครบ (addresses/categories/carts/**checkout multi-seller atomic**/wishlists/reviews/shipments/returns/notifications/platform settings/finance) + Convex node actions 3 ชุด (customer/sellerOps/centerAdmin) + **tests 30 ผ่าน** (`bun test`) + build ตาม §55
 
 **เป้าหมาย:** ทุก business rule อยู่ใน backend ชัดเจน ไม่มี hard-code ใน frontend
 
-- ต่อ service ใหม่: `categories.ts`, `carts.ts`, `reviews.ts`, `wishlists.ts`, `notifications.ts`, `ledger.ts`, `audit.ts`
-- `orders.ts` — ขยายเป็น checkout multi-seller: validate cart → group by seller → สร้าง seller order + parent order → reserve stock (transaction)
-- `payments.ts` — ต่อ `PaymentProvider` interface (Phase 9 เริ่มตอนนี้ที่ interface)
-- `subscriptions.ts` — อ่าน/เขียนเฉพาะ Neon (ยกเลิก Convex subscriptions)
-- validation: สร้าง `src/backend/validation.ts` (zod schema กลาง — มี zod ใน deps แล้ว)
-- error mapping กลาง: ทุก function คืน error เป็นภาษาไทยที่ frontend แสดงได้
-- **ทุก mutation ตรวจ auth + authorization + ownership** (guard ร่วมใน `src/backend/auth.ts`)
+- ✅ foundation: `errors.ts` (error codes กลาง), `validation.ts` (zod + GPS), `rules.ts` (commission/return/shipping จาก platform_settings — ไม่ hard-code), `permissions.ts` (13 permissions + RBAC), `audit.ts`, `identity.ts` (guards กลาง)
+- ✅ services: `addresses.ts` (+GPS บังคับ default), `categories.ts`, `carts.ts`, `checkout.ts` (multi-seller atomic §39–42), `wishlists.ts`, `reviews.ts` (verified purchase), `shipments.ts`+tracking, `returns.ts` (+penalty), `notifications.ts`, `platformSettings.ts`, `finance.ts` (ledger/payout/report)
+- ✅ `orders.ts` — ดึง state machine เป็น pure helper `canTransitionOrderStatus` (ทดสอบได้)
+- ✅ Convex node actions: `customer.ts` (VelShop), `sellerOps.ts` (VelSeller), `centerAdmin.ts` (VelCenter)
+- ✅ tests: `tests/` (vitest) 30 tests ครอบ §60–63 (commission 3%, return penalty, GPS, state machine, RBAC)
+- ✅ build ตาม §55: `tsc -b && vite build` — ไม่มี convex codegen ใน production build
+- ⏳ ที่เหลือ (Payment/Shipping provider, ledger เต็ม, integration tests) → Phase 8–11
 
 ---
 

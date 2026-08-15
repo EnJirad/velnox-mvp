@@ -10,7 +10,7 @@
 
 export type Role = "customer" | "seller" | "staff" | "admin" | "owner";
 export type Department = "marketing" | "sales" | "operations" | "finance" | "general";
-export type SellerStatus = "pending" | "approved" | "suspended";
+export type SellerStatus = "pending" | "approved" | "rejected" | "suspended";
 export type ShopStatus = "active" | "suspended" | "closed";
 export type ProductStatus = "draft" | "published" | "archived";
 export type ProductCategory = "general" | "food" | "daily" | "beauty" | "packaging" | "other";
@@ -128,9 +128,16 @@ export interface Address {
   line2: string | null;
   city: string;
   state: string | null;
+  subdistrict: string | null;
+  district: string | null;
+  province: string | null;
   postalCode: string | null;
   country: string;
+  latitude: number | null;
+  longitude: number | null;
+  placeId: string | null;
   isDefault: boolean;
+  createdAt: string;
 }
 
 /** Frozen shipping address stored in orders.address_snapshot (JSONB). */
@@ -237,3 +244,229 @@ export interface Subscription {
   productName?: string; // joined
   productImageUrl?: string; // joined (primary image)
 }
+
+// ===========================================================================
+// Phase 3 — marketplace foundation entities
+// ===========================================================================
+
+export interface Category {
+  id: string;
+  name: string;
+  slug: string | null;
+  description: string | null;
+  imageUrl: string | null;
+  parentId: string | null;
+  level: number;
+  sortOrder: number;
+  isActive: boolean;
+  children?: Category[];
+}
+
+export interface Cart {
+  id: string;
+  userId: string;
+  status: "active" | "checked_out" | "abandoned";
+  createdAt: string;
+  updatedAt: string;
+  items?: CartItem[];
+}
+
+export interface CartItem {
+  id: string;
+  cartId: string;
+  productId: string;
+  variantId: string | null;
+  sellerId: string;
+  shopId: string;
+  quantity: number;
+  priceSnapshot: number;
+  createdAt: string;
+  // joined for display
+  productName?: string;
+  productImageUrl?: string;
+  shopName?: string;
+  availableStock?: number;
+  unit?: string;
+}
+
+export interface WishlistItem {
+  id: string;
+  wishlistId: string;
+  productId: string;
+  createdAt: string;
+  product?: Product;
+}
+
+export interface Shipment {
+  id: string;
+  orderId: string;
+  sellerId: string;
+  carrier: string;
+  trackingNumber: string | null;
+  status: string;
+  shippingFee: number;
+  estimatedDeliveryDate: string | null;
+  shippedAt: string | null;
+  deliveredAt: string | null;
+  createdAt: string;
+  events?: TrackingEvent[];
+}
+
+export interface TrackingEvent {
+  id: string;
+  shipmentId: string;
+  status: string;
+  description: string | null;
+  location: string | null;
+  occurredAt: string;
+}
+
+export type ReturnStatus =
+  | "requested"
+  | "under_review"
+  | "approved"
+  | "rejected"
+  | "return_shipping"
+  | "received"
+  | "refunding"
+  | "refunded"
+  | "cancelled";
+
+export interface ReturnRequest {
+  id: string;
+  orderId: string;
+  customerUserId: string;
+  sellerId: string;
+  reason: string | null;
+  description: string | null;
+  evidenceUrls: string[];
+  status: ReturnStatus;
+  refundAmount: number;
+  returnTrackingNumber: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface Review {
+  id: string;
+  productId: string;
+  shopId: string;
+  userId: string;
+  orderId: string | null;
+  rating: number;
+  title: string | null;
+  comment: string | null;
+  images: string[];
+  status: "published" | "pending" | "hidden";
+  createdAt: string;
+  userName?: string; // joined
+}
+
+export interface Notification {
+  id: string;
+  userId: string;
+  type: "order" | "payment" | "shipping" | "return" | "refund" | "promotion" | "system" | "seller";
+  title: string;
+  message: string | null;
+  data: Record<string, unknown>;
+  isRead: boolean;
+  createdAt: string;
+}
+
+export interface PlatformSetting {
+  key: string;
+  value: unknown;
+}
+
+/** Resolved business rules from platform_settings (never hard-coded). */
+export interface BusinessRules {
+  platformName: string;
+  currency: string;
+  /** percent (e.g. 3 = 3%) */
+  platformCommissionPercent: number;
+  /** percent of shipping revenue that belongs to the platform */
+  shippingCompanyPercent: number;
+  /** max return rate % the platform covers (10 = 10%) */
+  returnRateThreshold: number;
+  autoApproveSellers: boolean;
+  autoApproveProducts: boolean;
+  taxEnabled: boolean;
+  taxPercent: number;
+}
+
+export type LedgerType =
+  | "sale"
+  | "platform_commission"
+  | "shipping_revenue"
+  | "seller_payout"
+  | "refund"
+  | "return_cost"
+  | "penalty"
+  | "adjustment";
+
+export interface LedgerEntry {
+  id: string;
+  transactionId: string | null;
+  orderId: string | null;
+  sellerId: string | null;
+  type: LedgerType;
+  amount: number;
+  currency: string;
+  description: string | null;
+  createdAt: string;
+}
+
+export interface SellerBalance {
+  sellerId: string;
+  availableBalance: number;
+  pendingBalance: number;
+  totalEarned: number;
+  totalWithdrawn: number;
+  currency: string;
+  updatedAt: string;
+}
+
+export interface SellerPayout {
+  id: string;
+  sellerId: string;
+  amount: number;
+  currency: string;
+  status: "pending" | "processing" | "completed" | "failed" | "cancelled";
+  method: string | null;
+  destination: string | null;
+  requestedAt: string;
+  processedAt: string | null;
+  createdAt: string;
+}
+
+export interface AuditLog {
+  id: string;
+  actorId: string | null;
+  actorRole: string | null;
+  action: string;
+  entityType: string | null;
+  entityId: string | null;
+  before: Record<string, unknown> | null;
+  after: Record<string, unknown> | null;
+  ipAddress: string | null;
+  userAgent: string | null;
+  createdAt: string;
+}
+
+/** Permission codes (spec §47) — stored on staff_profiles.permissions. */
+export const PERMISSIONS = [
+  "VIEW_USERS",
+  "EDIT_USERS",
+  "VIEW_SELLERS",
+  "APPROVE_SELLERS",
+  "SUSPEND_SELLERS",
+  "VIEW_PRODUCTS",
+  "APPROVE_PRODUCTS",
+  "SUSPEND_PRODUCTS",
+  "VIEW_ORDERS",
+  "MANAGE_ORDERS",
+  "VIEW_FINANCE",
+  "MANAGE_PAYOUTS",
+  "MANAGE_PLATFORM_SETTINGS",
+] as const;
+export type Permission = (typeof PERMISSIONS)[number];
