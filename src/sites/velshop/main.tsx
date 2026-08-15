@@ -9,6 +9,9 @@ import {
   SiteSuspense,
 } from "@/lib/app-shell";
 import { siteBasename } from "@/lib/sites";
+import { initMonitoring } from "@/lib/monitoring";
+
+initMonitoring();
 import { lazy } from "react";
 import { createRoot } from "react-dom/client";
 import { BrowserRouter, Navigate, Route, Routes } from "react-router";

@@ -9,6 +9,9 @@ import {
   SiteSuspense,
 } from "@/lib/app-shell";
 import { SITE_URLS } from "@/lib/sites";
+import { initMonitoring } from "@/lib/monitoring";
+
+initMonitoring();
 import React, { lazy, useEffect } from "react";
 import { createRoot } from "react-dom/client";
 import { BrowserRouter, Route, Routes } from "react-router";

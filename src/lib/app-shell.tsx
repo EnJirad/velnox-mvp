@@ -1,5 +1,6 @@
 import React, { Suspense, useEffect } from "react";
 import { useLocation } from "react-router";
+import { captureError } from "./monitoring";
 
 /** Simple loading fallback for route transitions. */
 export function RouteLoading() {
@@ -25,6 +26,7 @@ export class RootErrorBoundary extends React.Component<
   }
   componentDidCatch(err: Error) {
     console.error("[Velnox preview] Root crash:", err);
+    captureError(err, { url: typeof window !== "undefined" ? window.location.href : undefined });
   }
   render() {
     if (this.state.hasError) {

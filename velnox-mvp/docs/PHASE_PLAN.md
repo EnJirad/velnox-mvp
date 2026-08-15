@@ -218,6 +218,18 @@ Phase 12 Production — staging/prod env, deploy pipeline, monitoring, backup
 
 ---
 
+## Phase 9 (spec "PHASE 9") — Production Launch, Real-World Validation & Go-Live 🟡
+
+> spec ระบุเฟสนี้ = ตรวจ/ทดสอบ/หา bug/แก้ + เตรียม production (ห้ามสร้าง feature ใหม่ §1) — สิ่งที่ทำได้จริงใน repo:
+
+- ✅ **Data consistency + financial reconciliation** (§69–71): `db/consistency-check.ts` + `bun run db:consistency` — SELECT-only ตรวจ stock ติดลบ / orphan (order_items, payments, refunds, returns, ledger) / order subtotal ≠ items / commission ≠ rate×amount / paid order ไม่มี payment / **reconciliation**: GMV vs orders, settled commissions vs ledger, seller_balances vs ledger / return rate > 10% ต่อ seller
+- ✅ **Error monitoring — Sentry** (§46–47): `@sentry/react` + `src/lib/monitoring.ts` (init/captureError — **no-op เมื่อไม่มี `VITE_SENTRY_DSN`**) hook `RootErrorBoundary.componentDidCatch` + init ใน 4 entries (main/velshop/velseller/velcenter) — พร้อมใส่ DSN จาก Keys UI
+- ✅ **docs/production/** ครบ 9 ไฟล์ (§99): production-architecture (domains + GO-LIVE checklist §87 + soft launch §88–89) · deployment · environment · rollback (§61/§63) · backup (restore test §44) · monitoring (metrics + alerts §46–47) · incident-response (severity P0–P3 + postmortem §91–93) · security (final review checklist §84) · testing (consistency + E2E + smoke §65/§69)
+- ✅ Verify: typecheck · tests · build ผ่าน
+- ⚠️ **ยังทำไม่ได้ใน repo นี้** (ต้องทำบน platform + เจ้าของ): Vercel projects + domains/SSL, Convex prod deploy + env, payment/carrier provider จริง, E2E browser test, legal pages, admin account จริง, backup restore test, staging → ดู `docs/production/production-architecture.md` §5 checklist
+
+---
+
 ## Phase 11 — Testing
 
 - ✅ Unit test: `tests/*` 48 ตัว (commission calc, penalty, state machine, GPS, IDOR/security, providers, velrepeat)

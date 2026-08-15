@@ -12,6 +12,9 @@ import { lazy } from "react";
 import { createRoot } from "react-dom/client";
 import { BrowserRouter, Route, Routes } from "react-router";
 import "../../index.css";
+import { initMonitoring } from "@/lib/monitoring";
+
+initMonitoring();
 
 const Center = lazy(() => import("@/pages/Center"));
 const AuthPage = lazy(() => import("@/pages/Auth"));

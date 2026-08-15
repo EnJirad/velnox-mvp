@@ -13,7 +13,8 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "db:migrate": "bun run db/migrate.ts",
-    "db:smoke": "bun run db/smoke.ts"
+    "db:smoke": "bun run db/smoke.ts",
+    "db:consistency": "bun run db/consistency-check.ts"
   },
   "dependencies": {
     "@auth/core": "^0.41.1",
@@ -47,6 +48,7 @@
     "@radix-ui/react-toggle": "^1.1.10",
     "@radix-ui/react-toggle-group": "^1.1.11",
     "@radix-ui/react-tooltip": "^1.2.8",
+    "@sentry/react": "^10.70.0",
     "@tailwindcss/vite": "^4.1.17",
     "@vly-ai/integrations": "^0.6.12",
     "@zumer/snapdom": "^2.0.1",

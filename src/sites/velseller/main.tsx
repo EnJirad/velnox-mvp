@@ -12,6 +12,9 @@ import { lazy } from "react";
 import { createRoot } from "react-dom/client";
 import { BrowserRouter, Navigate, Route, Routes } from "react-router";
 import "../../index.css";
+import { initMonitoring } from "@/lib/monitoring";
+
+initMonitoring();
 
 const Dashboard = lazy(() => import("@/pages/Dashboard"));
 const MyShop = lazy(() => import("@/pages/MyShop"));
