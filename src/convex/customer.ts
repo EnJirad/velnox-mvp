@@ -32,7 +32,8 @@ import { categoryTree, listCategories } from "../backend/categories";
 import { listOrdersForCustomer, getOrder } from "../backend/orders";
 import { getShipment, listShipmentsForOrder } from "../backend/shipments";
 import { listReturnsForCustomer, requestReturn } from "../backend/returns";
-import { listProducts } from "../backend/products";
+import { categoryStats, listProducts } from "../backend/products";
+import { listReviewsByShop } from "../backend/reviews";
 import type { Shop } from "../backend/types";
 
 /* eslint-disable @typescript-eslint/no-explicit-any -- DB row mappers */
@@ -127,6 +128,12 @@ export const categories = action({
 export const categoryTreeAction = action({
   args: {},
   handler: async () => categoryTree(getDb()),
+});
+
+/** Category tree + real product counts (products linked via category_id). */
+export const categoryStatsAction = action({
+  args: {},
+  handler: async () => categoryStats(getDb()),
 });
 
 // ---------------------------------------------------------------------------
@@ -366,6 +373,48 @@ export const reviewProduct = action({
 export const productReviews = action({
   args: { productId: v.string() },
   handler: async (ctx, args) => listReviewsByProduct(getDb(), args.productId),
+});
+
+/** Public shop reviews — aggregate of verified reviews on the shop's products. */
+export const shopReviews = action({
+  args: { shopId: v.string() },
+  handler: async (_ctx, args) => listReviewsByShop(getDb(), args.shopId),
+});
+
+/**
+ * Buy Again (spec §28): re-add every line of a past order to the cart.
+ * Each item is re-validated server-side (product still published + stock),
+ * so a price/supply change never silently adds an invalid line.
+ */
+export const reorderAction = action({
+  args: { orderId: v.string() },
+  handler: async (ctx, args) => {
+    const { user } = await requireIdentity(ctx);
+    const db = getDb();
+    const order = await db("SELECT id, customer_user_id, status FROM orders WHERE id = $1", [args.orderId]);
+    if (!order[0] || order[0].customer_user_id !== user.id) throw new Error("ออเดอร์นี้ไม่ใช่ของคุณ");
+    if (order[0].status === "cancelled") throw new Error("ไม่สามารถสั่งซื้อซ้ำจากออเดอร์ที่ยกเลิกได้");
+
+    const items = await db(
+      "SELECT oi.product_id, oi.quantity, oi.product_name FROM order_items oi WHERE oi.order_id = $1",
+      [args.orderId],
+    );
+    const added: { productId: string; productName: string; quantity: number }[] = [];
+    const skipped: { productId: string; productName: string; reason: string }[] = [];
+    for (const item of items) {
+      try {
+        await addToCart(db, user.id, { productId: item.product_id, quantity: item.quantity });
+        added.push({ productId: item.product_id, productName: item.product_name, quantity: item.quantity });
+      } catch (err) {
+        skipped.push({
+          productId: item.product_id,
+          productName: item.product_name,
+          reason: err instanceof Error ? err.message : "สินค้าไม่สามารถสั่งซื้อซ้ำได้",
+        });
+      }
+    }
+    return { added, skipped };
+  },
 });
 
 // ---------------------------------------------------------------------------

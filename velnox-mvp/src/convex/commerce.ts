@@ -31,6 +31,7 @@ import {
   updateShop,
 } from "../backend/sellers";
 import {
+  catalogProducts,
   createProduct,
   deleteProduct,
   getProduct,
@@ -59,6 +60,7 @@ import {
   getSubscription,
   listSubscriptions,
   listSubscriptionsBySeller,
+  updateSubscriptionSettings,
   updateSubscriptionStatus,
 } from "../backend/subscriptions";
 import {
@@ -247,6 +249,39 @@ export const getProductDetail = action({
   args: { productId: v.string() },
   handler: async (_ctx, args) => {
     return getProduct(getDb(), args.productId);
+  },
+});
+
+/**
+ * Storefront catalog (public): keyword + category + shop + price + stock
+ * filters, sort, pagination. Backend counts and filters — the frontend only
+ * renders what the backend returns (spec §31: backend-driven search).
+ */
+export const catalogProductsAction = action({
+  args: {
+    q: v.optional(v.string()),
+    category: v.optional(v.string()),
+    shopId: v.optional(v.string()),
+    minPrice: v.optional(v.number()),
+    maxPrice: v.optional(v.number()),
+    inStock: v.optional(v.boolean()),
+    sortBy: v.optional(v.string()),
+    limit: v.optional(v.number()),
+    offset: v.optional(v.number()),
+  },
+  handler: async (_ctx, args) => {
+    const result = await catalogProducts(getDb(), {
+      q: args.q ?? undefined,
+      category: args.category ?? undefined,
+      shopId: args.shopId ?? undefined,
+      minPrice: args.minPrice ?? undefined,
+      maxPrice: args.maxPrice ?? undefined,
+      inStock: args.inStock ?? undefined,
+      sortBy: (args.sortBy ?? "newest") as "newest" | "price_asc" | "price_desc" | "popular" | "rating",
+      limit: args.limit ?? 24,
+      offset: args.offset ?? 0,
+    });
+    return result;
   },
 });
 
@@ -665,6 +700,37 @@ export const pauseSubscription = action({
     const status = args.status as "active" | "paused" | "cancelled";
     const updated = await updateSubscriptionStatus(db, args.subscriptionId, status);
     await recordEvent(ctx, "SubscriptionUpdated", args.subscriptionId, { status });
+    return updated;
+  },
+});
+
+/**
+ * velshop: change quantity / frequency / interval of a subscription.
+ * Only the owning customer can change it; the backend recomputes the next
+ * order date from today (never accepts a date from the frontend).
+ */
+export const updateSubscriptionAction = action({
+  args: {
+    subscriptionId: v.string(),
+    quantity: v.optional(v.number()),
+    frequency: v.optional(v.string()),
+    intervalDays: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const { user } = await requireIdentity(ctx);
+    const db = getDb();
+    const sub = await getSubscription(db, args.subscriptionId);
+    if (!sub || sub.customerUserId !== user.id) throw new Error("Subscription not found");
+    const updated = await updateSubscriptionSettings(db, args.subscriptionId, {
+      quantity: args.quantity ?? undefined,
+      frequency: args.frequency as "daily" | "weekly" | "monthly" | "custom" | undefined,
+      intervalDays: args.intervalDays ?? undefined,
+    });
+    await recordEvent(ctx, "SubscriptionUpdated", args.subscriptionId, {
+      quantity: updated?.quantity,
+      frequency: updated?.frequency,
+      nextOrderDate: updated?.nextOrderDate,
+    });
     return updated;
   },
 });

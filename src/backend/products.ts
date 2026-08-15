@@ -9,7 +9,7 @@
  */
 import type { Db } from "./db";
 import { getStorage, isStorageConfigured } from "./storage";
-import type { Product, ProductCategory, ProductImage, ProductStatus } from "./types";
+import type { Category, Product, ProductCategory, ProductImage, ProductStatus } from "./types";
 import { ensureInventory, getInventory, setStock } from "./inventory";
 
 const round2 = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100;
@@ -195,6 +195,181 @@ export interface ListProductsOptions {
   q?: string;
   limit?: number;
   offset?: number;
+}
+
+export type CatalogSort = "newest" | "price_asc" | "price_desc" | "popular" | "rating";
+
+export interface CatalogProductsOptions {
+  q?: string;
+  /** legacy product.category enum value OR a categories.slug */
+  category?: string;
+  shopId?: string;
+  minPrice?: number;
+  maxPrice?: number;
+  /** only products with available stock > 0 */
+  inStock?: boolean;
+  sortBy?: CatalogSort;
+  limit?: number;
+  offset?: number;
+}
+
+const PRODUCT_CATEGORY_ENUM = new Set(["general", "food", "daily", "beauty", "packaging", "other"]);
+
+const CATALOG_ORDERS: Record<CatalogSort, string> = {
+  newest: "p.created_at DESC",
+  price_asc: "p.price ASC",
+  price_desc: "p.price DESC",
+  popular: "sold_count DESC, p.created_at DESC",
+  rating: "rating_score DESC, p.created_at DESC",
+};
+
+/**
+ * Storefront catalog: published products with filters + sort + pagination.
+ * Returns { items, total } so the UI can render real pagination.
+ *
+ * `category` accepts either the legacy enum value (p.category) or a
+ * categories.slug (category_id join) — both are real data, never a client
+ * approximation.
+ */
+export async function catalogProducts(db: Db, opts: CatalogProductsOptions = {}): Promise<{ items: Product[]; total: number }> {
+  const where: string[] = ["p.status = 'published'"];
+  const values: unknown[] = [];
+  const push = (sql: string, val: unknown) => {
+    values.push(val);
+    where.push(sql.replace("$x", `$${values.length}`));
+  };
+
+  if (opts.q) {
+    push(`p.name ILIKE $x`, `%${opts.q}%`);
+  }
+  if (opts.category) {
+    if (PRODUCT_CATEGORY_ENUM.has(opts.category)) {
+      push(`p.category = $x`, opts.category);
+    } else {
+      push(`c2.slug = $x`, opts.category);
+    }
+  }
+  if (opts.shopId) {
+    push(`p.shop_id = $x`, opts.shopId);
+  }
+  if (opts.minPrice != null) {
+    push(`p.price >= $x`, opts.minPrice);
+  }
+  if (opts.maxPrice != null) {
+    push(`p.price <= $x`, opts.maxPrice);
+  }
+  if (opts.inStock) {
+    where.push("COALESCE(i.quantity, 0) - COALESCE(i.reserved_quantity, 0) > 0");
+  }
+
+  const whereSql = `WHERE ${where.join(" AND ")}`;
+  const orderSql = CATALOG_ORDERS[opts.sortBy ?? "newest"];
+  const limit = Math.min(Math.max(opts.limit ?? 24, 1), 100);
+  const offset = Math.max(opts.offset ?? 0, 0);
+
+  const countRows = await db(
+    `SELECT COUNT(*)::int AS total
+     FROM products p
+     LEFT JOIN inventory i ON i.product_id = p.id
+     LEFT JOIN categories c2 ON c2.id = p.category_id
+     ${whereSql}`,
+    values,
+  );
+  const total = Number(countRows[0]?.total ?? 0);
+
+  values.push(limit, offset);
+  const rows = await db(
+    `SELECT p.*, s.name AS shop_name, sel.name AS seller_name,
+            i.id AS inventory_id, i.quantity, i.reserved_quantity, i.reorder_level, i.warehouse,
+            pi.url AS primary_image_url, pi.storage_key AS primary_image_key,
+            pi.storage_provider AS primary_image_provider,
+            (SELECT COUNT(*)::int FROM order_items oi WHERE oi.product_id = p.id) AS sold_count,
+            (SELECT COALESCE(AVG(rating), 0)::float8 FROM reviews rv WHERE rv.product_id = p.id AND rv.status = 'published') AS rating_score
+     FROM products p
+     JOIN shops s ON s.id = p.shop_id
+     JOIN sellers sel ON sel.id = s.seller_id
+     LEFT JOIN inventory i ON i.product_id = p.id
+     LEFT JOIN categories c2 ON c2.id = p.category_id
+     LEFT JOIN product_images pi ON pi.product_id = p.id AND pi.is_primary = true
+     ${whereSql}
+     ORDER BY ${orderSql}
+     LIMIT $${values.length - 1} OFFSET $${values.length}`,
+    values,
+  );
+
+  const items = rows.map((r: Record<string, any>) => {
+    const product = mapProduct(r);
+    const quantity = Number(r.quantity);
+    const reserved = Number(r.reserved_quantity);
+    if (r.quantity !== null) {
+      product.inventory = {
+        id: r.inventory_id ?? "",
+        productId: product.id,
+        shopId: r.shop_id,
+        quantity,
+        reservedQuantity: reserved,
+        reorderLevel: Number(r.reorder_level),
+        warehouse: r.warehouse ?? "main",
+        available: quantity - reserved,
+      };
+    }
+    if (r.primary_image_url) {
+      product.primaryImage = mapImage({
+        id: "",
+        product_id: product.id,
+        url: r.primary_image_url,
+        storage_key: r.primary_image_key,
+        storage_provider: r.primary_image_provider,
+        sort_order: 0,
+        is_primary: true,
+      });
+    }
+    return product;
+  });
+
+  return { items, total };
+}
+
+/**
+ * Category tree + real product counts (counted by category_id linkage).
+ * Returns the same nested shape as categoryTree() with a `productCount` on
+ * each node. Root level = seeded marketplace categories.
+ */
+export async function categoryStats(db: Db): Promise<(Category & { productCount: number; children: Category[] })[]> {
+  const counts = await db(
+    `SELECT c.id, COUNT(p.id)::int AS product_count
+     FROM categories c
+     LEFT JOIN products p ON p.category_id = c.id AND p.status = 'published'
+     GROUP BY c.id`,
+  );
+  const countBy = new Map<string, number>(counts.map((r) => [r.id, Number(r.product_count)]));
+  const rows = await db(
+    "SELECT * FROM categories WHERE is_active = true ORDER BY sort_order ASC, name ASC",
+  );
+  const toCategory = (r: Record<string, any>): Category => ({
+    id: r.id,
+    name: r.name,
+    slug: r.slug ?? null,
+    description: r.description ?? null,
+    imageUrl: r.image_url ?? null,
+    parentId: r.parent_id ?? null,
+    level: Number(r.level),
+    sortOrder: Number(r.sort_order),
+    isActive: Boolean(r.is_active),
+  });
+  const byParent = new Map<string | null, Category[]>();
+  for (const c of rows.map(toCategory)) {
+    const list = byParent.get(c.parentId) ?? [];
+    list.push(c);
+    byParent.set(c.parentId, list);
+  }
+  const attach = (parentId: string | null): any[] =>
+    (byParent.get(parentId) ?? []).map((c) => ({
+      ...c,
+      productCount: countBy.get(c.id) ?? 0,
+      children: attach(c.id),
+    }));
+  return attach(null);
 }
 
 /**

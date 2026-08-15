@@ -59,7 +59,9 @@ export function computeNextOrderDate(
   from: Date,
   intervalDays?: number,
 ): string {
-  const days = frequency === "daily" ? 1 : frequency === "weekly" ? 7 : frequency === "monthly" ? 30 : (intervalDays ?? 30);
+  // a custom interval must always be a positive number of days
+  const custom = Math.max(1, Math.round(intervalDays ?? 30));
+  const days = frequency === "daily" ? 1 : frequency === "weekly" ? 7 : frequency === "monthly" ? 30 : custom;
   const next = new Date(from);
   next.setDate(next.getDate() + days);
   return next.toISOString().slice(0, 10);
@@ -154,6 +156,35 @@ export async function updateSubscriptionStatus(
   const rows = await db(
     `UPDATE subscriptions SET status = $2 WHERE id = $1 RETURNING *`,
     [subscriptionId, status],
+  );
+  return rows[0] ? mapSubscription(rows[0]) : null;
+}
+
+/**
+ * Update a customer's VelRepeat settings (quantity / frequency / interval).
+ * next_order_date is recomputed from today so a frequency change always
+ * schedules the next auto-order in the future. Returns the updated row or
+ * null when the subscription doesn't exist.
+ */
+export async function updateSubscriptionSettings(
+  db: Db,
+  subscriptionId: string,
+  patch: { quantity?: number; frequency?: SubscriptionFrequency; intervalDays?: number },
+): Promise<Subscription | null> {
+  const existing = await db("SELECT * FROM subscriptions WHERE id = $1", [subscriptionId]);
+  if (!existing[0]) return null;
+  const sub = mapSubscription(existing[0]);
+
+  const quantity = patch.quantity != null ? Math.max(1, Math.round(patch.quantity)) : sub.quantity;
+  const frequency = patch.frequency ?? sub.frequency;
+  const intervalDays = patch.intervalDays != null ? Math.max(1, Math.round(patch.intervalDays)) : sub.intervalDays;
+  const nextOrderDate = computeNextOrderDate(frequency, new Date(), intervalDays);
+
+  const rows = await db(
+    `UPDATE subscriptions
+     SET quantity = $2, frequency = $3, interval_days = $4, next_order_date = $5
+     WHERE id = $1 RETURNING *`,
+    [subscriptionId, quantity, frequency, intervalDays, nextOrderDate],
   );
   return rows[0] ? mapSubscription(rows[0]) : null;
 }

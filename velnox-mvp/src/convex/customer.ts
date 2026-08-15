@@ -30,8 +30,34 @@ import { createReview, listReviewsByProduct } from "../backend/reviews";
 import { listNotifications, markAllRead, markNotificationRead, unreadCount } from "../backend/notifications";
 import { categoryTree, listCategories } from "../backend/categories";
 import { listOrdersForCustomer, getOrder } from "../backend/orders";
-import { listShipmentsForOrder } from "../backend/shipments";
+import { getShipment, listShipmentsForOrder } from "../backend/shipments";
 import { listReturnsForCustomer, requestReturn } from "../backend/returns";
+import { categoryStats, listProducts } from "../backend/products";
+import { listReviewsByShop } from "../backend/reviews";
+import type { Shop } from "../backend/types";
+
+/* eslint-disable @typescript-eslint/no-explicit-any -- DB row mappers */
+function mapShop(r: Record<string, any>): Shop & { productCount: number; orderCount: number; rating: number | null; reviewCount: number } {
+  return {
+    id: r.id,
+    sellerId: r.seller_id,
+    name: r.name,
+    slug: r.slug ?? null,
+    description: r.description ?? null,
+    imageUrl: r.image_url ?? null,
+    phone: r.phone ?? null,
+    address: r.address ?? null,
+    announcement: r.announcement ?? null,
+    status: r.status,
+    commissionRate: Number(r.commission_rate),
+    currency: r.currency,
+    createdAt: r.created_at,
+    productCount: Number(r.product_count ?? 0),
+    orderCount: Number(r.order_count ?? 0),
+    rating: r.rating != null ? Number(r.rating) : null,
+    reviewCount: Number(r.review_count ?? 0),
+  };
+}
 
 async function recordEvent(ctx: import("./_generated/server").ActionCtx, type: string, entityId: string, payload: Record<string, unknown> = {}) {
   try {
@@ -40,6 +66,56 @@ async function recordEvent(ctx: import("./_generated/server").ActionCtx, type: s
     console.error(`[customer] event ${type} failed:`, err);
   }
 }
+
+// ---------------------------------------------------------------------------
+// shops (public storefront)
+// ---------------------------------------------------------------------------
+export const publicShops = action({
+  args: {},
+  handler: async () => {
+    const rows = await getDb()(
+      `SELECT s.*,
+              (SELECT COUNT(*)::int FROM products p
+                WHERE p.shop_id = s.id AND p.status = 'published') AS product_count,
+              (SELECT COUNT(*)::int FROM order_items oi
+                WHERE oi.shop_id = s.id) AS order_count,
+              (SELECT ROUND(AVG(rating)::numeric, 1) FROM reviews r
+                WHERE r.shop_id = s.id AND r.status = 'published') AS rating,
+              (SELECT COUNT(*)::int FROM reviews r
+                WHERE r.shop_id = s.id AND r.status = 'published') AS review_count
+       FROM shops s
+       WHERE s.status = 'active'
+       ORDER BY s.created_at DESC`,
+    );
+    return rows.map(mapShop);
+  },
+});
+
+/** Shop profile page: shop + published products + rating summary. */
+export const shopDetail = action({
+  args: { shopId: v.string() },
+  handler: async (_ctx, args) => {
+    const db = getDb();
+    const rows = await db(
+      `SELECT s.*,
+              (SELECT COUNT(*)::int FROM products p
+                WHERE p.shop_id = s.id AND p.status = 'published') AS product_count,
+              (SELECT COUNT(*)::int FROM order_items oi
+                WHERE oi.shop_id = s.id) AS order_count,
+              (SELECT ROUND(AVG(rating)::numeric, 1) FROM reviews r
+                WHERE r.shop_id = s.id AND r.status = 'published') AS rating,
+              (SELECT COUNT(*)::int FROM reviews r
+                WHERE r.shop_id = s.id AND r.status = 'published') AS review_count
+       FROM shops s
+       WHERE s.id = $1 AND s.status = 'active'
+       LIMIT 1`,
+      [args.shopId],
+    );
+    if (!rows[0]) throw new Error("ร้านค้าไม่พบ");
+    const products = await listProducts(db, { shopId: args.shopId, status: "published", limit: 100 });
+    return { shop: mapShop(rows[0]), products };
+  },
+});
 
 // ---------------------------------------------------------------------------
 // categories (public)
@@ -52,6 +128,12 @@ export const categories = action({
 export const categoryTreeAction = action({
   args: {},
   handler: async () => categoryTree(getDb()),
+});
+
+/** Category tree + real product counts (products linked via category_id). */
+export const categoryStatsAction = action({
+  args: {},
+  handler: async () => categoryStats(getDb()),
 });
 
 // ---------------------------------------------------------------------------
@@ -201,7 +283,13 @@ export const orderDetail = action({
     const { user } = await requireIdentity(ctx);
     const order = await getOrder(getDb(), args.orderId);
     if (!order || order.customerUserId !== user.id) throw new Error("ออเดอร์นี้ไม่ใช่ของคุณ");
-    const shipments = await listShipmentsForOrder(getDb(), order.id);
+    const db = getDb();
+    const shipmentRows = await listShipmentsForOrder(db, order.id);
+    const shipments = [];
+    for (const s of shipmentRows) {
+      const full = await getShipment(db, s.id);
+      if (full) shipments.push(full);
+    }
     return { ...order, shipments };
   },
 });
@@ -285,6 +373,48 @@ export const reviewProduct = action({
 export const productReviews = action({
   args: { productId: v.string() },
   handler: async (ctx, args) => listReviewsByProduct(getDb(), args.productId),
+});
+
+/** Public shop reviews — aggregate of verified reviews on the shop's products. */
+export const shopReviews = action({
+  args: { shopId: v.string() },
+  handler: async (_ctx, args) => listReviewsByShop(getDb(), args.shopId),
+});
+
+/**
+ * Buy Again (spec §28): re-add every line of a past order to the cart.
+ * Each item is re-validated server-side (product still published + stock),
+ * so a price/supply change never silently adds an invalid line.
+ */
+export const reorderAction = action({
+  args: { orderId: v.string() },
+  handler: async (ctx, args) => {
+    const { user } = await requireIdentity(ctx);
+    const db = getDb();
+    const order = await db("SELECT id, customer_user_id, status FROM orders WHERE id = $1", [args.orderId]);
+    if (!order[0] || order[0].customer_user_id !== user.id) throw new Error("ออเดอร์นี้ไม่ใช่ของคุณ");
+    if (order[0].status === "cancelled") throw new Error("ไม่สามารถสั่งซื้อซ้ำจากออเดอร์ที่ยกเลิกได้");
+
+    const items = await db(
+      "SELECT oi.product_id, oi.quantity, oi.product_name FROM order_items oi WHERE oi.order_id = $1",
+      [args.orderId],
+    );
+    const added: { productId: string; productName: string; quantity: number }[] = [];
+    const skipped: { productId: string; productName: string; reason: string }[] = [];
+    for (const item of items) {
+      try {
+        await addToCart(db, user.id, { productId: item.product_id, quantity: item.quantity });
+        added.push({ productId: item.product_id, productName: item.product_name, quantity: item.quantity });
+      } catch (err) {
+        skipped.push({
+          productId: item.product_id,
+          productName: item.product_name,
+          reason: err instanceof Error ? err.message : "สินค้าไม่สามารถสั่งซื้อซ้ำได้",
+        });
+      }
+    }
+    return { added, skipped };
+  },
 });
 
 // ---------------------------------------------------------------------------

@@ -102,7 +102,12 @@ Phase 12 Production — staging/prod env, deploy pipeline, monitoring, backup
 - ✅ **Cart** (`/shop/cart`): แยกตามร้าน (multi-seller), เพิ่ม/ลด/ลบ, stock สูงสุด, สรุปยอด
 - ✅ **Checkout** (`/shop/checkout`): เลือกที่อยู่ (default ก่อน, ตรวจ GPS) + วิธีชำระ (COD/PromptPay/โอน/บัตร) + review + **multi-shop order** ผ่าน `checkoutAction` (backend คำนวณราคา/stock ใหม่ §40–41) + หน้าสำเร็จ
 - ✅ **GPS/Address** (`/shop/addresses` + `MapPicker` Leaflet): ใช้ตำแหน่งปัจจุบัน / แตะแผนที่ / ลาก marker; default shipping address บังคับ lat/long (§62)
-- ✅ **Orders** (`/shop/orders` + `/shop/orders/:id`): รายการ + detail + timeline + tracking events จาก shipment
+- ✅ **Orders** (`/shop/orders` + `/shop/orders/:id` + `/shop/orders/:id/tracking`): รายการ + detail + timeline + tracking events จาก shipment + **หน้า tracking เฉพาะ**
+- ✅ **Order actions** (detail): **ยกเลิกออเดอร์** (ก่อนจัดส่ง — คืนสต็อกอัตโนมัติ), **ซื้ออีกครั้ง** (`reorderAction` ตรวจ product status/stock ใหม่ทุกครั้ง §28), **ขอคืนสินค้า** (`requestReturnAction`), **รีวิวสินค้า** (verified purchase — delivered/completed เท่านั้น)
+- ✅ **VelRepeat** (`/shop/velrepeat`): รายการ subscription (active/paused/cancelled) + pause/resume/cancel + **แก้ไขจำนวน/รอบ** (`updateSubscriptionAction` — backend คำนวณ next_order_date ใหม่เสมอ)
+- ✅ **Product catalog** (`/shop/products`): search (debounce) + filter หมวดหมู่/ร้านค้า/ช่วงราคา/มีสต็อก + sort (ใหม่ล่าสุด/ราคา/ขายดี/คะแนน) + pagination — **backend-driven** (`catalogProductsAction` นับและกรองใน SQL §31)
+- ✅ **Categories** (`/shop/categories`): category tree จาก backend จริง (`categoryStatsAction`) + จำนวนสินค้าจริง (ผ่าน category_id)
+- ✅ **Header**: search bar → `/shop/products?q=`, nav หน้าแรก/สินค้า/หมวดหมู่/ออเดอร์/รายการโปรด + VelRepeat icon
 - ✅ **Wishlist** (`/shop/wishlist`), **Profile** (`/shop/profile`), **Notifications** (`/shop/notifications` — mark read/all)
 - ✅ ทุกหน้า protected ผ่าน `RequireAuth` + returnTo กลับหน้าเดิม; frontend ไม่ trust price/stock/role (backend ตัดสิน)
 

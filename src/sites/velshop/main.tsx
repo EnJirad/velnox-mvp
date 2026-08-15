@@ -15,12 +15,16 @@ import { BrowserRouter, Navigate, Route, Routes } from "react-router";
 import "../../index.css";
 
 const ShopHome = lazy(() => import("@/pages/ShopHome"));
+const ShopProducts = lazy(() => import("@/pages/ShopProducts"));
+const ShopCategories = lazy(() => import("@/pages/ShopCategories"));
 const ShopProductDetail = lazy(() => import("@/pages/ShopProductDetail"));
 const ShopDetail = lazy(() => import("@/pages/ShopDetail"));
 const ShopCart = lazy(() => import("@/pages/ShopCart"));
 const ShopCheckout = lazy(() => import("@/pages/ShopCheckout"));
 const MyOrders = lazy(() => import("@/pages/MyOrders"));
 const ShopOrderDetail = lazy(() => import("@/pages/ShopOrderDetail"));
+const ShopTracking = lazy(() => import("@/pages/ShopTracking"));
+const VelRepeatPage = lazy(() => import("@/pages/VelRepeatPage"));
 const ShopWishlist = lazy(() => import("@/pages/ShopWishlist"));
 const ShopAddresses = lazy(() => import("@/pages/ShopAddresses"));
 const ShopProfile = lazy(() => import("@/pages/ShopProfile"));
@@ -40,6 +44,8 @@ createRoot(document.getElementById("root")!).render(
             <Routes>
               <Route path="/" element={<Navigate to="/shop" replace />} />
               <Route path="/shop" element={<ShopHome />} />
+              <Route path="/shop/products" element={<ShopProducts />} />
+              <Route path="/shop/categories" element={<ShopCategories />} />
               <Route path="/shop/products/:productId" element={<ShopProductDetail />} />
               <Route path="/shop/shops/:shopId" element={<ShopDetail />} />
               <Route path="/shop/cart" element={<ShopCart />} />
@@ -64,6 +70,22 @@ createRoot(document.getElementById("root")!).render(
                 element={
                   <RequireAuth>
                     <ShopOrderDetail />
+                  </RequireAuth>
+                }
+              />
+              <Route
+                path="/shop/orders/:orderId/tracking"
+                element={
+                  <RequireAuth>
+                    <ShopTracking />
+                  </RequireAuth>
+                }
+              />
+              <Route
+                path="/shop/velrepeat"
+                element={
+                  <RequireAuth>
+                    <VelRepeatPage />
                   </RequireAuth>
                 }
               />

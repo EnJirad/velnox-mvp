@@ -3,17 +3,26 @@ import { Logo } from "@/components/Logo";
 import { SiteSwitcher } from "@/components/SiteSwitcher";
 import { UserMenu } from "@/components/UserMenu";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { useAuth } from "@/hooks/use-auth";
 import { useCart } from "@/lib/cart";
-import { Bell, ShoppingCart, User } from "lucide-react";
+import { Bell, RefreshCw, Search, ShoppingCart, User } from "lucide-react";
 import { useState } from "react";
-import { Link, useLocation } from "react-router";
+import { Link, useLocation, useNavigate } from "react-router";
 
 export function ShopHeader() {
   const { isAuthenticated, isLoading } = useAuth();
   const { count } = useCart();
   const location = useLocation();
+  const navigate = useNavigate();
   const [cartOpen, setCartOpen] = useState(false);
+  const [query, setQuery] = useState("");
+
+  const submitSearch = (e: React.FormEvent) => {
+    e.preventDefault();
+    const q = query.trim();
+    navigate(q ? `/shop/products?q=${encodeURIComponent(q)}` : "/shop/products");
+  };
 
   const navItem = (to: string, label: string, exact = false) => {
     const active = exact ? location.pathname === to : location.pathname.startsWith(to);
@@ -40,13 +49,45 @@ export function ShopHeader() {
           </Link>
           <SiteSwitcher />
           <nav className="hidden items-center gap-1 md:flex">
-            {navItem("/shop", "สินค้า", true)}
-            {isAuthenticated && navItem("/shop/orders", "ออเดอร์ของฉัน")}
+            {navItem("/shop", "หน้าแรก", true)}
+            {navItem("/shop/products", "สินค้า")}
+            {navItem("/shop/categories", "หมวดหมู่")}
+            {isAuthenticated && navItem("/shop/orders", "ออเดอร์")}
             {isAuthenticated && navItem("/shop/wishlist", "รายการโปรด")}
           </nav>
         </div>
 
+        {/* Search (desktop) */}
+        <form onSubmit={submitSearch} className="relative hidden w-full max-w-[220px] xl:max-w-xs lg:block">
+          <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-slate-400" />
+          <Input
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="ค้นหาสินค้า..."
+            className="h-9 rounded-[10px] border-slate-200 bg-slate-50 pl-9 text-sm focus:bg-white"
+            aria-label="ค้นหาสินค้า"
+          />
+        </form>
+
         <div className="flex items-center gap-1.5">
+          {/* Search (mobile) */}
+          <Button
+            variant="ghost"
+            className="cursor-pointer rounded-[10px] px-2 text-slate-600 hover:bg-slate-100 lg:hidden"
+            onClick={() => navigate("/shop/products")}
+            aria-label="ค้นหาสินค้า"
+          >
+            <Search className="size-5" />
+          </Button>
+          {isAuthenticated && (
+            <Link
+              to="/shop/velrepeat"
+              className="rounded-[10px] p-2 text-slate-600 transition-colors hover:bg-slate-100"
+              aria-label="การสั่งซื้ออัตโนมัติ (VelRepeat)"
+            >
+              <RefreshCw className="size-5" />
+            </Link>
+          )}
           {isAuthenticated && (
             <Link
               to="/shop/notifications"
