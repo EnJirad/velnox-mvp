@@ -176,8 +176,8 @@ export default function SellerOrders() {
               <p className="text-sm text-slate-500">ยังไม่มีลูกค้าสมัครสั่งรายเดือน</p>
             </div>
           ) : (
-            <div className="mt-3 overflow-hidden rounded-xl border border-slate-200 bg-white">
-              <Table>
+            <div className="mt-3 overflow-x-auto rounded-xl border border-slate-200 bg-white">
+              <Table className="min-w-[640px]">
                 <TableHeader>
                   <TableRow className="hover:bg-transparent">
                     <TableHead className="pl-5 text-slate-400">ลูกค้า</TableHead>

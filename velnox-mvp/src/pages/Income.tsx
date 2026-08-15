@@ -188,8 +188,8 @@ export default function Income() {
                   </p>
                 </div>
               ) : (
-                <div className="mt-3 overflow-hidden rounded-xl border border-slate-200 bg-white">
-                  <Table>
+                <div className="mt-3 overflow-x-auto rounded-xl border border-slate-200 bg-white">
+                  <Table className="min-w-[720px]">
                     <TableHeader>
                       <TableRow className="hover:bg-transparent">
                         <TableHead className="pl-5 text-slate-400">ออเดอร์</TableHead>

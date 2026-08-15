@@ -41,11 +41,12 @@ import {
   Package,
   Pencil,
   Plus,
+  Search,
   ShieldCheck,
   Store,
   Trash2,
 } from "lucide-react";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 
 const EMPTY_ONBOARD = { shopName: "", slug: "", description: "", taxId: "" };
@@ -66,8 +67,18 @@ export default function MyShop() {
   const [deleting, setDeleting] = useState<StoreProduct | null>(null);
   const [deletingBusy, setDeletingBusy] = useState(false);
   const [togglingId, setTogglingId] = useState<string | null>(null);
+  const [query, setQuery] = useState("");
 
   const shop: StoreShop | null = profile?.shops[0] ?? null;
+
+  const filteredProducts = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return products;
+    return products.filter((p) => p.name.toLowerCase().includes(q));
+  }, [products, query]);
+
+  const publishedCount = products.filter((p) => p.status === "published").length;
+  const draftCount = products.length - publishedCount;
 
   const reloadProducts = useCallback(async () => {
     try {
@@ -299,9 +310,39 @@ export default function MyShop() {
 
         {/* products */}
         <section className="mt-8">
-          <div className="flex items-center justify-between">
-            <h2 className="text-base font-semibold text-slate-900">สินค้าของฉัน</h2>
-            <span className="text-xs text-slate-400">{products.length} รายการ</span>
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex items-center gap-2">
+              <h2 className="text-base font-semibold text-slate-900">สินค้าของฉัน</h2>
+              <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-500">
+                {products.length} รายการ
+              </span>
+            </div>
+            <div className="relative w-full sm:max-w-64">
+              <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-slate-400" />
+              <Input
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder="ค้นหาสินค้าของคุณ..."
+                className="h-10 rounded-[10px] border-slate-200 bg-white pl-9"
+                aria-label="ค้นหาสินค้า"
+              />
+            </div>
+          </div>
+
+          {/* quick stats */}
+          <div className="mt-4 grid grid-cols-3 gap-2 sm:max-w-md">
+            <div className="rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-center">
+              <p className="text-lg font-bold tabular-nums text-slate-900">{products.length}</p>
+              <p className="text-[11px] text-slate-400">ทั้งหมด</p>
+            </div>
+            <div className="rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-center">
+              <p className="text-lg font-bold tabular-nums text-emerald-600">{publishedCount}</p>
+              <p className="text-[11px] text-slate-400">ขายหน้าร้าน</p>
+            </div>
+            <div className="rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-center">
+              <p className="text-lg font-bold tabular-nums text-slate-500">{draftCount}</p>
+              <p className="text-[11px] text-slate-400">ฉบับร่าง</p>
+            </div>
           </div>
 
           {products.length === 0 ? (
@@ -324,8 +365,18 @@ export default function MyShop() {
                 เพิ่มสินค้าแรก
               </Button>
             </div>
+          ) : filteredProducts.length === 0 ? (
+            <div className="mt-3 flex flex-col items-center rounded-2xl border border-dashed border-slate-300 bg-white px-6 py-14 text-center">
+              <Search className="size-7 text-slate-300" />
+              <h3 className="mt-4 text-base font-semibold text-slate-900">ไม่พบสินค้าที่ค้นหา</h3>
+              <p className="mt-1.5 max-w-sm text-sm leading-6 text-slate-500">
+                ลองเปลี่ยนคำค้นหา หรือเพิ่มสินค้าใหม่จากปุ่ม "เพิ่มสินค้า"
+              </p>
+            </div>
           ) : (
-            <div className="mt-3 overflow-hidden rounded-xl border border-slate-200 bg-white">
+            <>
+            {/* Desktop: table */}
+            <div className="mt-3 hidden overflow-hidden rounded-xl border border-slate-200 bg-white md:block">
               <Table>
                 <TableHeader>
                   <TableRow className="hover:bg-transparent">
@@ -337,7 +388,7 @@ export default function MyShop() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {products.map((product) => {
+                  {filteredProducts.map((product) => {
                     const available = product.inventory?.available ?? product.inventory?.quantity ?? 0;
                     return (
                       <TableRow key={product.id} className="hover:bg-slate-50/60">
@@ -440,6 +491,99 @@ export default function MyShop() {
                 </TableBody>
               </Table>
             </div>
+
+            {/* Mobile: app-like product cards */}
+            <div className="mt-3 space-y-3 md:hidden">
+              {filteredProducts.map((product) => {
+                const available = product.inventory?.available ?? product.inventory?.quantity ?? 0;
+                const published = product.status === "published";
+                return (
+                  <div
+                    key={product.id}
+                    className="rounded-xl border border-slate-200 bg-white p-4 transition-all duration-200 active:scale-[0.99]"
+                  >
+                    <div className="flex items-center gap-3">
+                      {product.primaryImage ? (
+                        <img
+                          src={product.primaryImage.thumbUrl || product.primaryImage.url}
+                          alt={product.name}
+                          className="size-14 shrink-0 rounded-[10px] object-cover"
+                          loading="lazy"
+                        />
+                      ) : (
+                        <span className="flex size-14 shrink-0 items-center justify-center rounded-[10px] bg-slate-100">
+                          <ImageOff className="size-5 text-slate-300" />
+                        </span>
+                      )}
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-sm font-semibold text-slate-900">{product.name}</p>
+                        <p className="mt-0.5 text-xs text-slate-400">
+                          {PRODUCT_CATEGORY_META[product.category].label}
+                          {product.images && product.images.length > 0 ? ` · ${product.images.length} รูป` : " · ยังไม่มีรูป"}
+                        </p>
+                        <div className="mt-1.5 flex items-center gap-2">
+                          <p className="text-sm font-bold tabular-nums text-slate-900">
+                            {formatBaht(product.price)}
+                            <span className="text-xs font-normal text-slate-400"> / {product.unit}</span>
+                          </p>
+                          <span className="text-xs text-slate-400">· สต็อก {available}</span>
+                          {published ? (
+                            <Badge className="gap-1 rounded-full bg-emerald-50 text-emerald-700 ring-1 ring-inset ring-emerald-600/15 hover:bg-emerald-50">
+                              <span className="size-1.5 rounded-full bg-emerald-500" />
+                              ขายหน้าร้าน
+                            </Badge>
+                          ) : (
+                            <Badge className="gap-1 rounded-full bg-slate-100 text-slate-500 ring-1 ring-inset ring-slate-600/10 hover:bg-slate-100">
+                              <span className="size-1.5 rounded-full bg-slate-400" />
+                              ฉบับร่าง
+                            </Badge>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                    <div className="mt-3 flex items-center gap-2 border-t border-slate-100 pt-3">
+                      <Button
+                        size="sm"
+                        className="flex-1 gap-1.5 bg-slate-900 text-white hover:bg-slate-800"
+                        onClick={() => handleTogglePublish(product)}
+                        disabled={togglingId === product.id}
+                      >
+                        {togglingId === product.id ? (
+                          <Loader2 className="size-3.5 animate-spin" />
+                        ) : published ? (
+                          <EyeOff className="size-3.5" />
+                        ) : (
+                          <Eye className="size-3.5" />
+                        )}
+                        {published ? "ปิดขาย" : "ประกาศขาย"}
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="flex-1 gap-1.5 border-slate-200 text-slate-600"
+                        onClick={() => {
+                          setEditing(product);
+                          setFormOpen(true);
+                        }}
+                      >
+                        <Pencil className="size-3.5" />
+                        แก้ไข
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="size-9 shrink-0 text-slate-400 hover:bg-red-50 hover:text-red-600"
+                        onClick={() => setDeleting(product)}
+                        aria-label={`ลบ ${product.name}`}
+                      >
+                        <Trash2 className="size-4" />
+                      </Button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+            </>
           )}
         </section>
       </main>

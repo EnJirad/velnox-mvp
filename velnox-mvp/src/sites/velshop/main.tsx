@@ -12,10 +12,37 @@ import { siteBasename } from "@/lib/sites";
 import { initMonitoring } from "@/lib/monitoring";
 
 initMonitoring();
+import { MobileTabBar, type MobileTabItem } from "@/components/MobileTabBar";
+import { useCart } from "@/lib/cart";
+import { Home, Package, ReceiptText, ShoppingCart, User } from "lucide-react";
 import { lazy } from "react";
 import { createRoot } from "react-dom/client";
 import { BrowserRouter, Navigate, Route, Routes } from "react-router";
 import "../../index.css";
+
+/** App-like bottom navigation for mobile (velshop). */
+function ShopTabBar() {
+  const { count } = useCart();
+  const items: MobileTabItem[] = [
+    {
+      to: "/shop",
+      label: "หน้าแรก",
+      icon: Home,
+      activeMatch: (p) => p === "/shop" || p === "/",
+    },
+    { to: "/shop/products", label: "สินค้า", icon: Package },
+    {
+      to: "/shop/cart",
+      label: "ตะกร้า",
+      icon: ShoppingCart,
+      badge: count,
+      activeMatch: (p) => p.startsWith("/shop/cart") || p.startsWith("/shop/checkout"),
+    },
+    { to: "/shop/orders", label: "ออเดอร์", icon: ReceiptText },
+    { to: "/shop/profile", label: "โปรไฟล์", icon: User },
+  ];
+  return <MobileTabBar items={items} />;
+}
 
 const ShopHome = lazy(() => import("@/pages/ShopHome"));
 const ShopProducts = lazy(() => import("@/pages/ShopProducts"));
@@ -43,6 +70,7 @@ createRoot(document.getElementById("root")!).render(
       <BrowserRouter basename={siteBasename("velshop")}>
         <RouteSyncer />
         <CartProvider>
+          <div className="site-app">
           <SiteSuspense>
             <Routes>
               <Route path="/" element={<Navigate to="/shop" replace />} />
@@ -128,6 +156,8 @@ createRoot(document.getElementById("root")!).render(
               <Route path="*" element={<NotFound />} />
             </Routes>
           </SiteSuspense>
+          <ShopTabBar />
+          </div>
         </CartProvider>
       </BrowserRouter>
       <Toaster />

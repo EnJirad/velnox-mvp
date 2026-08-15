@@ -8,11 +8,22 @@ import {
   SiteSuspense,
 } from "@/lib/app-shell";
 import { siteBasename } from "@/lib/sites";
+import { MobileTabBar, type MobileTabItem } from "@/components/MobileTabBar";
+import { RefreshCw, ShoppingBag, Store, Target, Wallet } from "lucide-react";
 import { lazy } from "react";
 import { createRoot } from "react-dom/client";
 import { BrowserRouter, Navigate, Route, Routes } from "react-router";
 import "../../index.css";
 import { initMonitoring } from "@/lib/monitoring";
+
+/** App-like bottom navigation for mobile (velseller). */
+const SELLER_TABS: MobileTabItem[] = [
+  { to: "/seller/goals", label: "เป้าหมาย", icon: Target },
+  { to: "/seller/shop", label: "ร้านของฉัน", icon: Store },
+  { to: "/seller/orders", label: "ออเดอร์", icon: ShoppingBag },
+  { to: "/seller/income", label: "รายได้", icon: Wallet },
+  { to: "/seller/reorder", label: "สั่งซื้อซ้ำ", icon: RefreshCw },
+];
 
 initMonitoring();
 
@@ -31,6 +42,7 @@ createRoot(document.getElementById("root")!).render(
     <ConvexAuthProvider client={convex}>
       <BrowserRouter basename={siteBasename("velseller")}>
         <RouteSyncer />
+        <div className="site-app">
         <SiteSuspense>
           <Routes>
             <Route path="/" element={<Navigate to="/seller/goals" replace />} />
@@ -78,6 +90,8 @@ createRoot(document.getElementById("root")!).render(
             <Route path="*" element={<NotFound />} />
           </Routes>
         </SiteSuspense>
+        <MobileTabBar items={SELLER_TABS} />
+        </div>
       </BrowserRouter>
       <Toaster />
     </ConvexAuthProvider>

@@ -121,9 +121,19 @@
   }
   body {
     @apply bg-background text-foreground;
+    -webkit-tap-highlight-color: transparent;
   }
   button:not([disabled]),
   [role="button"]:not([disabled]) {
     cursor: pointer;
+  }
+}
+
+/* Mobile app shell — every site entry wraps its routes in .site-app.
+   The fixed bottom tab bar (MobileTabBar) needs room on mobile, and iOS
+   home-indicator safe area is respected via env(safe-area-inset-bottom). */
+@media (max-width: 767px) {
+  .site-app {
+    padding-bottom: calc(4.75rem + env(safe-area-inset-bottom, 0px));
   }
 }

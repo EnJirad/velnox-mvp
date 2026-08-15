@@ -56,11 +56,12 @@ export function SiteSwitcher() {
       <DropdownMenuTrigger asChild>
         <Button
           variant="ghost"
-          className="flex cursor-pointer items-center gap-2 rounded-[10px] px-2.5 py-1.5 text-slate-700 hover:bg-slate-100"
+          className="flex cursor-pointer items-center gap-1.5 rounded-[10px] px-2 py-1.5 text-slate-700 hover:bg-slate-100 sm:gap-2 sm:px-2.5"
+          aria-label={`เว็บไซต์ ${current.label} — เปลี่ยนเว็บไซต์`}
         >
           <CurrentIcon className="size-4 text-[#10B981]" />
           <span className="flex flex-col items-start leading-tight">
-            <span className="text-sm font-semibold text-slate-900">{current.label}</span>
+            <span className="hidden text-sm font-semibold text-slate-900 sm:block">{current.label}</span>
             <span className="hidden text-[11px] text-slate-400 sm:block">{current.th}</span>
           </span>
           <ChevronDown className="size-4 text-slate-400" />

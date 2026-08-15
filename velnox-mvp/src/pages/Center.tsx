@@ -1,4 +1,5 @@
 import { Logo } from "@/components/Logo";
+import { MobileTabBar, type MobileTabItem } from "@/components/MobileTabBar";
 import { SiteSwitcher } from "@/components/SiteSwitcher";
 import { UserMenu } from "@/components/UserMenu";
 import { Badge } from "@/components/ui/badge";
@@ -65,7 +66,7 @@ import {
   Users,
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
-import { useNavigate } from "react-router";
+import { useNavigate, useSearchParams } from "react-router";
 import { toast } from "sonner";
 
 type Tab = "overview" | "orders" | "intel" | "products" | "staff" | "settings";
@@ -116,8 +117,35 @@ export default function Center() {
   const isOwner = userRole === "owner";
   const canManageOrders = userRole !== "staff";
 
-  const [tab, setTab] = useState<Tab>("overview");
-  const activeTab: Tab = canSeeTab(tab, userRole, userDepartment) ? tab : "overview";
+  // Tabs are URL-driven (?tab=orders) so the mobile bottom nav and the desktop
+  // tab strip stay in sync, and every view is shareable/deep-linkable.
+  const [searchParams, setSearchParams] = useSearchParams();
+  const urlTab = (searchParams.get("tab") as Tab | null) ?? "overview";
+  const tab: Tab = canSeeTab(urlTab, userRole, userDepartment) ? urlTab : "overview";
+  const setTab = (next: Tab) => {
+    setSearchParams(
+      (prev) => {
+        const params = new URLSearchParams(prev);
+        params.set("tab", next);
+        return params;
+      },
+      { replace: true },
+    );
+  };
+
+  // Mobile bottom nav — same tabs as the desktop strip, filtered by role.
+  const mobileTabs: MobileTabItem[] = [
+    { to: "/?tab=overview", label: "ภาพรวม", icon: TrendingUp, activeMatch: (_, search) => new URLSearchParams(search).get("tab") === "overview" },
+    { to: "/?tab=orders", label: "ออเดอร์", icon: ShoppingBag, activeMatch: (_, search) => new URLSearchParams(search).get("tab") === "orders" },
+    { to: "/?tab=intel", label: "Intelligence", icon: BrainCircuit, activeMatch: (_, search) => new URLSearchParams(search).get("tab") === "intel" },
+    { to: "/?tab=products", label: "สินค้า", icon: Package, activeMatch: (_, search) => new URLSearchParams(search).get("tab") === "products" },
+    ...(isOwner
+      ? [{ to: "/?tab=staff", label: "พนักงาน", icon: Users, activeMatch: (_, search) => new URLSearchParams(search).get("tab") === "staff" } as MobileTabItem]
+      : []),
+    ...(canSeeTab("settings", userRole, userDepartment)
+      ? [{ to: "/?tab=settings", label: "ตั้งค่า", icon: Settings, activeMatch: (_, search) => new URLSearchParams(search).get("tab") === "settings" } as MobileTabItem]
+      : []),
+  ];
 
   const overview = useQuery(api.center.overview);
   const products = useQuery(api.products.listAll);
@@ -284,7 +312,7 @@ export default function Center() {
           </p>
         </div>
 
-        <Tabs value={activeTab} onValueChange={(v) => setTab(v as Tab)} className="mt-7">
+        <Tabs value={tab} onValueChange={(v) => setTab(v as Tab)} className="mt-7">
           <TabsList className="w-full justify-start overflow-x-auto rounded-[12px] border border-slate-200 bg-white p-1 sm:w-auto">
             <TabsTrigger value="overview" className="gap-1.5 rounded-[10px]">
               <TrendingUp className="size-4" /> ภาพรวม
@@ -397,8 +425,8 @@ export default function Center() {
                 </p>
               </div>
             ) : (
-              <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
-                <Table>
+              <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white">
+                <Table className="min-w-[760px]">
                   <TableHeader>
                     <TableRow className="hover:bg-transparent">
                       <TableHead className="pl-5 text-slate-400">ออเดอร์ / ลูกค้า</TableHead>
@@ -495,8 +523,8 @@ export default function Center() {
                 </p>
               </div>
             ) : (
-              <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
-                <Table>
+              <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white">
+                <Table className="min-w-[820px]">
                   <TableHeader>
                     <TableRow className="hover:bg-transparent">
                       <TableHead className="pl-5 text-slate-400">สินค้า</TableHead>
@@ -587,8 +615,8 @@ export default function Center() {
 
           {/* ============ Products (view-only registry) ============ */}
           <TabsContent value="products" className="mt-6">
-            <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
-              <Table>
+            <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white">
+              <Table className="min-w-[640px]">
                 <TableHeader>
                   <TableRow className="hover:bg-transparent">
                     <TableHead className="pl-5 text-slate-400">สินค้า</TableHead>
@@ -663,8 +691,8 @@ export default function Center() {
                   </p>
                 </CardContent>
               </Card>
-              <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
-                <Table>
+              <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white">
+                <Table className="min-w-[560px]">
                   <TableHeader>
                     <TableRow className="hover:bg-transparent">
                       <TableHead className="pl-5 text-slate-400">พนักงาน</TableHead>
@@ -849,6 +877,9 @@ export default function Center() {
           )}
         </Tabs>
       </main>
+
+      {/* App-like bottom nav on mobile (respects role permissions) */}
+      <MobileTabBar items={mobileTabs} />
     </div>
   );
 }

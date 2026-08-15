@@ -27,6 +27,7 @@ createRoot(document.getElementById("root")!).render(
     <ConvexAuthProvider client={convex}>
       <BrowserRouter basename={siteBasename("velcenter")}>
         <RouteSyncer />
+        <div className="site-app">
         <SiteSuspense>
           <Routes>
             <Route
@@ -41,6 +42,7 @@ createRoot(document.getElementById("root")!).render(
             <Route path="*" element={<NotFound />} />
           </Routes>
         </SiteSuspense>
+        </div>
       </BrowserRouter>
       <Toaster />
     </ConvexAuthProvider>
