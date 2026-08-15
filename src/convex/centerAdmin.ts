@@ -16,6 +16,7 @@ import { listSettings, updateSetting, PLATFORM_SETTING_KEYS } from "../backend/p
 import { listAuditLogs, audit } from "../backend/audit";
 import { AppError } from "../backend/errors";
 import { listPayouts, platformRevenueReport, processPayout, recomputeSellerBalance } from "../backend/finance";
+import { updateOrderStatus } from "../backend/orders";
 import { PERMISSION_CATALOG, upsertStaffProfile } from "../backend/permissions";
 import { resolveRules } from "../backend/rules";
 import { createNotification } from "../backend/notifications";
@@ -300,6 +301,140 @@ export const setStaffProfileAction = action({
       ...clientMeta(ctx),
     });
     return { ok: true };
+  },
+});
+
+// ---------------------------------------------------------------------------
+// orders (center) — real Neon commerce data (VIEW_ORDERS / MANAGE_ORDERS)
+// ---------------------------------------------------------------------------
+/**
+ * Company-wide order list from the Neon commerce core (sub-orders = the
+ * fulfillment units, one per shop, each with its own items). Previously the
+ * center dashboard read the legacy Convex orders table which checkout never
+ * writes — that made the order tab show stale/empty data. Staff need
+ * VIEW_ORDERS; owner/admin pass implicitly.
+ */
+export const ordersListAction = action({
+  args: { limit: v.optional(v.number()) },
+  handler: async (ctx, args) => {
+    const identity = await requireCenter(ctx);
+    if (identity.user.role === "staff") await requirePermission(ctx, "VIEW_ORDERS");
+    const db = getDb();
+    const rows = await db(
+      `SELECT o.*, s.name AS shop_name, u.name AS customer_name
+       FROM orders o
+       LEFT JOIN shops s ON s.id = o.shop_id
+       LEFT JOIN users u ON u.id = o.customer_user_id
+       WHERE o.parent_order_id IS NOT NULL
+       ORDER BY o.created_at DESC
+       LIMIT $1`,
+      [args.limit ?? 100],
+    );
+    const orders: any[] = [];
+    for (const r of rows) {
+      const items = await db(
+        `SELECT id, product_name, unit, quantity, subtotal FROM order_items WHERE order_id = $1 ORDER BY created_at ASC`,
+        [r.id],
+      );
+      const snap = typeof r.address_snapshot === "string" ? JSON.parse(r.address_snapshot) : (r.address_snapshot ?? {});
+      orders.push({
+        id: r.id,
+        orderNumber: r.order_number,
+        status: r.status,
+        createdAt: new Date(r.created_at).getTime(),
+        total: Number(r.total),
+        customerName: snap.recipientName ?? r.customer_name ?? "ลูกค้า",
+        customerPhone: snap.phone ?? "",
+        itemCount: items.reduce((s, i) => s + Number(i.quantity), 0),
+        shopName: r.shop_name ?? null,
+        items: items.map((i: any) => ({
+          id: i.id,
+          productName: i.product_name,
+          unit: i.unit,
+          quantity: Number(i.quantity),
+          subtotal: Number(i.subtotal),
+        })),
+      });
+    }
+    return orders;
+  },
+});
+
+/**
+ * Center order-status update against the Neon state machine (spec §18).
+ * Staff need MANAGE_ORDERS; owner/admin pass implicitly. Audit-logged +
+ * business event recorded. The legacy Convex updateStatus mutation (no state
+ * machine, no audit) is no longer used by velcenter.
+ */
+export const updateOrderStatusAction = action({
+  args: { orderId: v.string(), status: v.string() },
+  handler: async (ctx, args) => {
+    const identity = await requireCenter(ctx);
+    if (identity.user.role === "staff") await requirePermission(ctx, "MANAGE_ORDERS");
+    const status = args.status as
+      | "pending"
+      | "confirmed"
+      | "shipped"
+      | "delivered"
+      | "completed"
+      | "cancelled";
+    if (!["pending", "confirmed", "shipped", "delivered", "completed", "cancelled"].includes(status)) {
+      throw new AppError("INVALID_INPUT", "Invalid order status");
+    }
+    const db = getDb();
+    const order = await updateOrderStatus({ orderId: args.orderId, status });
+    await audit(db, {
+      actorId: identity.user.id,
+      actorRole: identity.user.role,
+      action: "ADMIN_UPDATED_ORDER_STATUS",
+      entityType: "order",
+      entityId: args.orderId,
+      after: { status: order.status },
+      ...clientMeta(ctx),
+    });
+    await recordEvent(ctx, "OrderStatusChanged", args.orderId, { status: order.status, actor: identity.user.role });
+    return order;
+  },
+});
+
+/**
+ * Marketplace KPIs from the Neon commerce core (GMV, orders, products,
+ * customers, sellers). Replaces the legacy api.center.overview numbers which
+ * read Convex tables that checkout never writes (revenue showed 0 / wrong).
+ * Goals + reorder intelligence stay in Convex (their real home).
+ */
+export const marketOverviewAction = action({
+  args: {},
+  handler: async (ctx) => {
+    const identity = await requireCenter(ctx);
+    if (identity.user.role === "staff") await requirePermission(ctx, "VIEW_ORDERS");
+    const db = getDb();
+    const agg = await db(
+      `SELECT
+         COALESCE(SUM(total) FILTER (WHERE status = 'completed'), 0) AS revenue,
+         COUNT(*) FILTER (WHERE status <> 'cancelled')::int AS order_count,
+         COUNT(*) FILTER (WHERE status = 'pending')::int AS pending_orders,
+         COUNT(*) FILTER (WHERE status = 'completed')::int AS completed_orders
+       FROM orders WHERE parent_order_id IS NULL`,
+    );
+    const products = await db(
+      `SELECT
+         COUNT(*)::int AS total,
+         COUNT(*) FILTER (WHERE status = 'published')::int AS published
+       FROM products`,
+    );
+    const customers = await db(`SELECT COUNT(*)::int AS n FROM users WHERE role = 'customer'`);
+    const sellers = await db(`SELECT COUNT(*)::int AS n FROM sellers WHERE status = 'approved'`);
+    return {
+      revenue: Number(agg[0].revenue),
+      orderCount: Number(agg[0].order_count),
+      pendingOrders: Number(agg[0].pending_orders),
+      completedOrders: Number(agg[0].completed_orders),
+      productCount: Number(products[0].total),
+      publishedCount: Number(products[0].published),
+      customerCount: Number(customers[0].n),
+      sellerCount: Number(sellers[0].n),
+    };
   },
 });
 

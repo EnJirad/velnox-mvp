@@ -43,7 +43,7 @@ import {
   ROLE_META,
   formatBaht,
   shortOrderId,
-  type OrderStatus,
+  type CenterOrderStatus,
 } from "@/lib/shop";
 import { useAction, useMutation, useQuery } from "convex/react";
 import {
@@ -66,7 +66,7 @@ import {
   TrendingUp,
   Users,
 } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router";
 import { toast } from "sonner";
 
@@ -169,15 +169,82 @@ export default function Center() {
     };
   }, [marketInsightsAction]);
 
+  // Convex-owned data (real home): goals, reorder intelligence + restocking
+  // list, employees, store settings.
   const overview = useQuery(api.center.overview);
   const products = useQuery(api.products.listAll);
   // Employee list returns [] for non-owners (the staff tab is owner-only anyway).
   const users = useQuery(api.users.listUsers);
   const settings = useQuery(api.center.getSettings);
-  const orders = useQuery(api.orders.allOrders);
   const setUserAccess = useMutation(api.users.setUserAccess);
   const updateSettings = useMutation(api.center.updateSettings);
-  const updateOrderStatus = useMutation(api.orders.updateStatus);
+
+  // Marketplace KPIs + orders come from the Neon commerce core (velcenter used
+  // to read legacy Convex tables that checkout never writes → 0/wrong numbers).
+  const marketOverviewAction = useAction(api.centerAdmin.marketOverviewAction);
+  const ordersListAction = useAction(api.centerAdmin.ordersListAction);
+  const updateOrderStatusAction = useAction(api.centerAdmin.updateOrderStatusAction);
+
+  interface MarketOverview {
+    revenue: number;
+    orderCount: number;
+    pendingOrders: number;
+    completedOrders: number;
+    productCount: number;
+    publishedCount: number;
+    customerCount: number;
+    sellerCount: number;
+  }
+  interface CenterOrderItem {
+    id: string;
+    productName: string;
+    unit: string;
+    quantity: number;
+    subtotal: number;
+  }
+  interface CenterOrderRow {
+    id: string;
+    orderNumber: string;
+    status: string;
+    createdAt: number; // epoch ms
+    total: number;
+    customerName: string;
+    customerPhone: string;
+    itemCount: number;
+    shopName: string | null;
+    items: CenterOrderItem[];
+  }
+
+  const [marketKpi, setMarketKpi] = useState<MarketOverview | null>(null);
+  const [ordersData, setOrdersData] = useState<CenterOrderRow[] | null>(null);
+  const [ordersLoading, setOrdersLoading] = useState(false);
+
+  const loadMarket = useCallback(async () => {
+    try {
+      setMarketKpi(await marketOverviewAction());
+    } catch {
+      setMarketKpi(null);
+    }
+  }, [marketOverviewAction]);
+
+  const loadOrders = useCallback(async () => {
+    setOrdersLoading(true);
+    try {
+      setOrdersData(await ordersListAction({ limit: 100 }));
+    } catch {
+      setOrdersData([]);
+    } finally {
+      setOrdersLoading(false);
+    }
+  }, [ordersListAction]);
+
+  useEffect(() => {
+    void loadMarket();
+  }, [loadMarket]);
+
+  useEffect(() => {
+    if (tab === "orders") void loadOrders();
+  }, [tab, loadOrders]);
 
   // ---- Intelligence rows (computed from learned cycles) ----
   const intelRows = useMemo(() => {
@@ -198,16 +265,34 @@ export default function Center() {
   }, [products]);
 
   const dueCount = intelRows.filter((r) => r.info.status === "due").length;
-  const pendingOrders = (orders ?? []).filter((o) => o.order.status === "pending").length;
+  const pendingOrders = (ordersData ?? []).filter((o) => o.status === "pending").length;
 
-  const handleOrderStatus = async (orderId: Id<"orders">, status: OrderStatus) => {
+  // Next valid statuses per the Neon state machine (mirrors backend
+  // ORDER_STATUS_TRANSITIONS) — center can only move an order forward.
+  const NEXT_STATUS: Record<string, string[]> = {
+    pending: ["confirmed", "cancelled"],
+    confirmed: ["shipped", "cancelled"],
+    shipped: ["delivered"],
+    delivered: ["completed"],
+    completed: [],
+    cancelled: [],
+  };
+  const statusOptions = (current: string): string[] => [
+    current,
+    ...(NEXT_STATUS[current] ?? []),
+  ];
+
+  const handleOrderStatus = async (orderId: string, status: string) => {
     if (!canManageOrders) return;
     try {
-      await updateOrderStatus({ orderId, status });
+      await updateOrderStatusAction({ orderId, status });
       toast.success("อัปเดตสถานะออเดอร์แล้ว");
+      void loadOrders();
     } catch (error) {
       console.error("Update order status error:", error);
-      toast.error("อัปเดตไม่สำเร็จ กรุณาลองอีกครั้ง");
+      toast.error(
+        error instanceof Error ? error.message : "อัปเดตไม่สำเร็จ กรุณาลองอีกครั้ง",
+      );
     }
   };
 
@@ -280,18 +365,19 @@ export default function Center() {
   };
 
   const stats = useMemo(() => {
-    const o = overview;
+    const o = overview; // goals + reorder intelligence (Convex — real home)
+    const m = marketKpi; // marketplace KPIs (Neon commerce core — real data)
     return [
-      { icon: TrendingUp, label: "ยอดขายรวม", value: o ? formatBaht(o.revenue) : "—", sub: "ออเดอร์ที่เสร็จสิ้น", accent: "text-emerald-600" },
-      { icon: ShoppingBag, label: "ออเดอร์ทั้งหมด", value: o ? String(o.orderCount) : "—", sub: `${o?.pendingOrders ?? 0} รอจัดการ`, accent: "text-sky-600" },
+      { icon: TrendingUp, label: "ยอดขายรวม", value: m ? formatBaht(m.revenue) : "—", sub: "ออเดอร์ที่เสร็จสิ้น", accent: "text-emerald-600" },
+      { icon: ShoppingBag, label: "ออเดอร์ทั้งหมด", value: m ? String(m.orderCount) : "—", sub: `${m?.pendingOrders ?? 0} รอจัดการ`, accent: "text-sky-600" },
       { icon: Target, label: "เป้าหมายสำเร็จ", value: o ? `${o.goalsAchieved}/${o.goalsTotal}` : "—", sub: "จากทั้งหมด", accent: "text-slate-700" },
-      { icon: Users, label: "ลูกค้า", value: o ? String(o.customerCount) : "—", sub: "บัญชีลูกค้า", accent: "text-amber-600" },
-      { icon: Package, label: "สินค้าทั้งหมด", value: o ? String(o.productCount) : "—", sub: `${o?.publishedCount ?? 0} รายการประกาศขาย`, accent: "text-slate-700" },
+      { icon: Users, label: "ลูกค้า", value: m ? String(m.customerCount) : "—", sub: "บัญชีลูกค้า", accent: "text-amber-600" },
+      { icon: Store, label: "ร้านค้าอนุมัติ", value: m ? String(m.sellerCount) : "—", sub: "seller ที่ผ่านอนุมัติ", accent: "text-slate-700" },
+      { icon: Package, label: "สินค้าทั้งหมด", value: m ? String(m.productCount) : "—", sub: `${m?.publishedCount ?? 0} รายการประกาศขาย`, accent: "text-slate-700" },
       { icon: Boxes, label: "สต็อกต่ำ", value: o ? String(o.lowStockCount) : "—", sub: "ถึงจุดสั่งซื้อซ้ำ", accent: "text-rose-600" },
       { icon: AlertTriangle, label: "ต้องสั่งด่วน", value: o ? String(o.dueReorderCount) : "—", sub: "เลยรอบการสั่ง", accent: "text-rose-600" },
-      { icon: ShieldCheck, label: "สินค้าที่ประกาศขาย", value: o ? String(o.publishedCount) : "—", sub: "แสดงใน velshop", accent: "text-emerald-600" },
     ];
-  }, [overview]);
+  }, [overview, marketKpi]);
 
   return (
     <div className="min-h-screen bg-[#F8FAFC] text-slate-900">
@@ -407,16 +493,16 @@ export default function Center() {
                   <div className="rounded-xl bg-emerald-50 p-4">
                     <p className="text-xs font-medium text-emerald-600">ยอดขายจาก velshop</p>
                     <p className="mt-1 text-2xl font-bold tabular-nums text-emerald-700">
-                      {overview ? formatBaht(overview.revenue) : "—"}
+                      {marketKpi ? formatBaht(marketKpi.revenue) : "—"}
                     </p>
                     <p className="mt-0.5 text-xs text-emerald-600/70">
-                      จากออเดอร์ที่เสร็จสิ้น {overview?.completedOrders ?? 0} ออเดอร์
+                      จากออเดอร์ที่เสร็จสิ้น {marketKpi?.completedOrders ?? 0} ออเดอร์
                     </p>
                   </div>
                   <div className="rounded-xl bg-sky-50 p-4">
                     <p className="text-xs font-medium text-sky-600">ออเดอร์รอจัดการ</p>
                     <p className="mt-1 text-2xl font-bold tabular-nums text-sky-700">
-                      {overview?.pendingOrders ?? 0} ออเดอร์
+                      {marketKpi?.pendingOrders ?? 0} ออเดอร์
                     </p>
                     <p className="mt-0.5 text-xs text-sky-600/70">จัดการได้ที่แท็บ ออเดอร์</p>
                   </div>
@@ -427,7 +513,7 @@ export default function Center() {
 
           {/* ============ Orders ============ */}
           <TabsContent value="orders" className="mt-6">
-            {orders === undefined ? (
+            {ordersLoading || ordersData === null ? (
               <div className="space-y-4">
                 {Array.from({ length: 3 }).map((_, i) => (
                   <div
@@ -436,7 +522,7 @@ export default function Center() {
                   />
                 ))}
               </div>
-            ) : orders.length === 0 ? (
+            ) : ordersData.length === 0 ? (
               <div className="flex flex-col items-center rounded-2xl border border-dashed border-slate-300 bg-white px-6 py-16 text-center">
                 <span className="flex size-14 items-center justify-center rounded-2xl bg-[#ECFDF5]">
                   <ShoppingBag className="size-7 text-[#10B981]" />
@@ -461,13 +547,21 @@ export default function Center() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {orders.map(({ order, items }) => {
-                      const meta = ORDER_STATUS_META[order.status];
+                    {ordersData.map((order) => {
+                      const meta =
+                        ORDER_STATUS_META[order.status as CenterOrderStatus] ?? {
+                          label: order.status,
+                          badge: "bg-slate-100 text-slate-500 ring-slate-600/10 hover:bg-slate-100",
+                          dot: "bg-slate-400",
+                        };
                       return (
-                        <TableRow key={order._id} className="hover:bg-slate-50/60">
+                        <TableRow key={order.id} className="hover:bg-slate-50/60">
                           <TableCell className="pl-5">
-                            <p className="font-medium text-slate-900">{shortOrderId(order._id)}</p>
+                            <p className="font-medium text-slate-900">
+                              {order.orderNumber ?? shortOrderId(order.id)}
+                            </p>
                             <p className="text-xs text-slate-400">
+                              {order.shopName && <span className="font-medium text-slate-500">{order.shopName} · </span>}
                               {order.customerName} · {order.customerPhone}
                             </p>
                           </TableCell>
@@ -477,13 +571,13 @@ export default function Center() {
                           </TableCell>
                           <TableCell>
                             <div className="max-w-56 space-y-0.5">
-                              {items.slice(0, 2).map((item) => (
-                                <p key={item._id} className="truncate text-sm text-slate-600">
+                              {order.items.slice(0, 2).map((item) => (
+                                <p key={item.id} className="truncate text-sm text-slate-600">
                                   {item.productName} × {item.quantity} {item.unit}
                                 </p>
                               ))}
-                              {items.length > 2 && (
-                                <p className="text-xs text-slate-400">+{items.length - 2} รายการ</p>
+                              {order.items.length > 2 && (
+                                <p className="text-xs text-slate-400">+{order.items.length - 2} รายการ</p>
                               )}
                             </div>
                           </TableCell>
@@ -496,19 +590,15 @@ export default function Center() {
                             {canManageOrders ? (
                               <Select
                                 value={order.status}
-                                onValueChange={(v) =>
-                                  handleOrderStatus(order._id, v as OrderStatus)
-                                }
+                                onValueChange={(v) => handleOrderStatus(order.id, v)}
                               >
                                 <SelectTrigger className="ml-auto h-9 w-36 rounded-[10px] border-slate-200 text-sm">
                                   <SelectValue />
                                 </SelectTrigger>
                                 <SelectContent>
-                                  {(
-                                    ["pending", "confirmed", "completed", "cancelled"] as OrderStatus[]
-                                  ).map((s) => (
+                                  {statusOptions(order.status).map((s) => (
                                     <SelectItem key={s} value={s}>
-                                      {ORDER_STATUS_META[s].label}
+                                      {(ORDER_STATUS_META[s as CenterOrderStatus] ?? { label: s }).label}
                                     </SelectItem>
                                   ))}
                                 </SelectContent>
@@ -529,32 +619,40 @@ export default function Center() {
 
               {/* Mobile: app-like order cards */}
               <div className="space-y-3 md:hidden">
-                {orders.map(({ order, items }) => {
-                  const meta = ORDER_STATUS_META[order.status];
+                {ordersData.map((order) => {
+                  const meta =
+                    ORDER_STATUS_META[order.status as CenterOrderStatus] ?? {
+                      label: order.status,
+                      badge: "bg-slate-100 text-slate-500 ring-slate-600/10 hover:bg-slate-100",
+                      dot: "bg-slate-400",
+                    };
                   return (
                     <div
-                      key={order._id}
+                      key={order.id}
                       className="rounded-xl border border-slate-200 bg-white p-4 transition-all duration-200 active:scale-[0.99]"
                     >
                       <div className="flex items-start justify-between gap-3">
                         <div className="min-w-0">
-                          <p className="truncate font-semibold text-slate-900">{shortOrderId(order._id)}</p>
+                          <p className="truncate font-semibold text-slate-900">
+                            {order.orderNumber ?? shortOrderId(order.id)}
+                          </p>
                           <p className="mt-0.5 truncate text-xs text-slate-400">
+                            {order.shopName && <span className="font-medium text-slate-500">{order.shopName} · </span>}
                             {order.customerName} · {order.customerPhone}
                           </p>
                         </div>
                         {canManageOrders ? (
                           <Select
                             value={order.status}
-                            onValueChange={(v) => handleOrderStatus(order._id, v as OrderStatus)}
+                            onValueChange={(v) => handleOrderStatus(order.id, v)}
                           >
                             <SelectTrigger className="h-8 w-32 shrink-0 rounded-[10px] border-slate-200 text-xs">
                               <SelectValue />
                             </SelectTrigger>
                             <SelectContent>
-                              {(["pending", "confirmed", "completed", "cancelled"] as OrderStatus[]).map((s) => (
+                              {statusOptions(order.status).map((s) => (
                                 <SelectItem key={s} value={s}>
-                                  {ORDER_STATUS_META[s].label}
+                                  {(ORDER_STATUS_META[s as CenterOrderStatus] ?? { label: s }).label}
                                 </SelectItem>
                               ))}
                             </SelectContent>
@@ -568,14 +666,14 @@ export default function Center() {
                       </div>
 
                       <div className="mt-3 rounded-[10px] bg-slate-50 px-3 py-2.5">
-                        {items.slice(0, 2).map((item) => (
-                          <p key={item._id} className="truncate text-sm text-slate-600">
+                        {order.items.slice(0, 2).map((item) => (
+                          <p key={item.id} className="truncate text-sm text-slate-600">
                             {item.productName}{" "}
                             <span className="text-slate-400">× {item.quantity} {item.unit}</span>
                           </p>
                         ))}
-                        {items.length > 2 && (
-                          <p className="text-xs text-slate-400">+{items.length - 2} รายการ</p>
+                        {order.items.length > 2 && (
+                          <p className="text-xs text-slate-400">+{order.items.length - 2} รายการ</p>
                         )}
                       </div>
 

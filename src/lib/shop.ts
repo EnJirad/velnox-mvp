@@ -3,6 +3,7 @@ import {
   CheckCircle2,
   Clock3,
   PackageCheck,
+  Truck,
   XCircle,
   type LucideIcon,
 } from "lucide-react";
@@ -11,8 +12,17 @@ export type Order = Doc<"orders">;
 export type OrderItem = Doc<"orderItems">;
 export type OrderStatus = Order["status"];
 
+/** Full order lifecycle used by the Neon commerce core (also shown in velcenter). */
+export type CenterOrderStatus =
+  | "pending"
+  | "confirmed"
+  | "shipped"
+  | "delivered"
+  | "completed"
+  | "cancelled";
+
 export const ORDER_STATUS_META: Record<
-  OrderStatus,
+  CenterOrderStatus,
   { label: string; badge: string; dot: string }
 > = {
   pending: {
@@ -24,6 +34,16 @@ export const ORDER_STATUS_META: Record<
     label: "ยืนยันแล้ว",
     badge: "bg-sky-50 text-sky-700 ring-sky-600/15 hover:bg-sky-50",
     dot: "bg-sky-500",
+  },
+  shipped: {
+    label: "จัดส่งแล้ว",
+    badge: "bg-indigo-50 text-indigo-700 ring-indigo-600/15 hover:bg-indigo-50",
+    dot: "bg-indigo-500",
+  },
+  delivered: {
+    label: "ส่งถึงแล้ว",
+    badge: "bg-teal-50 text-teal-700 ring-teal-600/15 hover:bg-teal-50",
+    dot: "bg-teal-500",
   },
   completed: {
     label: "เสร็จสิ้น",
@@ -37,9 +57,11 @@ export const ORDER_STATUS_META: Record<
   },
 };
 
-export const ORDER_STATUS_ICONS: Record<OrderStatus, LucideIcon> = {
+export const ORDER_STATUS_ICONS: Record<CenterOrderStatus, LucideIcon> = {
   pending: Clock3,
   confirmed: PackageCheck,
+  shipped: Truck,
+  delivered: PackageCheck,
   completed: CheckCircle2,
   cancelled: XCircle,
 };

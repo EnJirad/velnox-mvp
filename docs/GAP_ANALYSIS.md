@@ -125,7 +125,7 @@
 | Env แยก dev/staging/prod | `.env.local` + Keys/API keys + docs | 🟡 | สร้าง deployment แยกได้ใน Convex — Phase 11/12 |
 | Secret ไม่เข้า git | `.gitignore` ครอบ `.env*`, `_generated` | ✅ | |
 | Responsive desktop/tablet/mobile | shadcn/ui + Tailwind responsive + mobile tab bar + การ์ดแบบแอปทุกหน้า | ✅ | |
-| Tests | vitest: business rules · state machine · IDOR/security · providers · velrepeat · **customer memory core** — 79 ผ่าน | ✅ | `src/lib/customer-memory-core.test.ts` + `tests/*` |
+| Tests | vitest: business rules · state machine · IDOR/security · providers · velrepeat · **customer memory core** — 58 ผ่าน (ตรวจจริง 2026-08-15) | ✅ | `src/lib/customer-memory-core.test.ts` + `tests/*` |
 | CI/CD | docs Vercel ครบ (build command inject Convex URL + rewrite 3 เว็บ) | 🟡 | ยังไม่มี test ใน pipeline — Phase 11/12 |
 
 ---
@@ -145,7 +145,7 @@
 | Smart Reorder + Proactive (spec §16) | `dueReorderReminders` — “ถึงเวลาสั่งซื้อซ้ำแล้ว” เรียนรอบจากออเดอร์จริง | ✅ | |
 | VelRepeat lifecycle (spec §17) | start/cancel events + subscriptions (pause/resume/cancel/แก้ไขรอบ) | ✅ | `VELREPEAT_CANCEL` ใหม่ใน Phase 14 |
 | Privacy: ไม่เปิด raw behavior ใน admin UI | velcenter เห็น aggregate เท่านั้น (`marketInsights`) | ✅ | |
-| Test ระบบ memory (spec §51) | +21 tests (weights/decay/intent/merge) → 79 ผ่านรวม | ✅ | |
+| Test ระบบ memory (spec §51) | weights/decay/intent/merge — ครอบในชุด 58 ผ่านรวม | ✅ | |
 
 ---
 

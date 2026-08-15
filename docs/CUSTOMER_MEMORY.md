@@ -193,7 +193,7 @@ Priority: personalized → contextual → generic fallback
 - intent: view อย่างเดียวไม่ใช่ intent / medium / high thresholds
 - merge: dedup ไม่นับซ้ำ / idempotent / เก็บของที่ต่างกัน
 
-รวมกับ `tests/*` (business rules, state machine, IDOR/security, providers, velrepeat) — ทั้งชุด **79 ผ่าน**
+รวมกับ `tests/*` (business rules, state machine, IDOR/security, providers, velrepeat) — ทั้งชุด **58 ผ่าน** (ตรวจจริง 2026-08-15: `bun test` 58 pass / 0 fail)
 
 ---
 

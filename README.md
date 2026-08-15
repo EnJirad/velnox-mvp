@@ -19,7 +19,7 @@
 ### ⚙️ เอกสาร Phase 3 — Backend & Database Foundation (เสร็จแล้ว)
 
 - 🛠 [`docs/PHASE3_BACKEND.md`](./docs/PHASE3_BACKEND.md) — foundation + services + Convex node actions + tests + Definition of Done
-- 🧪 `tests/` — 30 unit tests (commission 3%, return penalty, GPS, order state machine, RBAC) รันด้วย `bun test`
+- 🧪 `tests/` + `src/lib/customer-memory-core.test.ts` — 58 unit tests (commission 3%, return penalty, GPS, order state machine, RBAC, providers, VelRepeat, customer memory) รันด้วย `bun test`
 
 ---
 
