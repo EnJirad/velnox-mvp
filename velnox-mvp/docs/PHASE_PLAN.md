@@ -189,20 +189,35 @@ Phase 12 Production — staging/prod env, deploy pipeline, monitoring, backup
 
 ---
 
+## Phase 7 (spec "PHASE 7") — Testing, Security, Production Hardening & Deployment ✅
+
+> spec ที่เจ้าของส่งมาระบุ PHASE 7 = Hardening/Deployment (ตรงกับ Phase 11–12 เดิมบางส่วน)
+
+- ✅ **Audit จริง** → `docs/PHASE-7-AUDIT.md` (โครงสร้าง, 4 apps, auth, db, convex, security, mock/hardcode scan)
+- ✅ **Security fixes**:
+  - Rate limiting (§25): `src/convex/rateLimit.ts` + `rateLimits` table — ครอบ checkout 10/min · cancel_order 20/min · review 20/h · return 10/h · subscribe 20/h
+  - Health endpoint (§53): `GET <convex-url>/health` → `{status:ok}`
+  - **Dependency advisories**: `@convex-dev/auth` 0.0.90→0.0.95 + `@auth/core` 0.37.4→**0.41.3** (ปิด **critical** GHSA-7rqj-j65f-68wh homoglyph email bypass) · `react-router` 7.18.1→**7.18.2** (CSRF RSC advisory)
+- ✅ **Tests**: 48 ผ่าน (business rules, state machine, IDOR/security, GPS, providers, velrepeat)
+- ✅ **Build**: `bun run build` ผ่าน — ไม่ต้อง login Convex CLI (§36/§40)
+- ✅ **Docs**: `PHASE-7-AUDIT.md` · `PHASE-7-REPORT.md` · `SECURITY.md` · `DEPLOYMENT.md` · `PRODUCTION.md` · `DATABASE-RECOVERY.md` · `ENVIRONMENT.md` · `E2E-TESTING.md`
+- ⚠️ **ยังไม่ประกาศ Production Ready** — ต้องทำก่อนเปิด: E2E browser test จริง, domain/SSL/production monitoring, payment gateway จริง, carrier API (รายละเอียดใน PHASE-7-REPORT.md §11)
+
+---
+
 ## Phase 11 — Testing
 
-- Unit test: `src/backend/*` (commission calc, penalty, order snapshot, ledger)
-- Integration test: Neon ทดสอบ (test database แยก) — สร้าง order → stock reserve → payment → settlement flow
-- Test runner: Vitest (มี ecosystem อยู่แล้วใน Vite project)
-- CI: GitHub Actions — typecheck (`bun tsc -b --noEmit`) + test + `convex deploy` เฉพาะ production branch
+- ✅ Unit test: `tests/*` 48 ตัว (commission calc, penalty, state machine, GPS, IDOR/security, providers, velrepeat)
+- ⏳ Integration test: Neon ทดสอบ (test database แยก) — สร้าง order → stock reserve → payment → settlement flow (ยังไม่ทำ — ต้องใช้ Neon จริง)
+- Test runner: Vitest ✅ (บวก bun test native — bunfig.toml scope `tests/`)
+- ⏳ CI: GitHub Actions — typecheck + test + `convex deploy` เฉพาะ production branch (ยังไม่ได้ตั้งใน repo)
 
 ---
 
 ## Phase 12 — Production Deployment
 
-- สร้าง deployment แยก: dev / staging / production (Convex)
-- Env แยกตาม deployment (Keys/API keys) — ตาม `INSTALL_AND_USAGE.md` §6
-- Deploy 3 เว็บ Vercel (มีคู่มือแล้ว) + custom domains (shop/seller/center.velnox.com)
+- ✅ คู่มือครบ: `docs/DEPLOYMENT.md` + `docs/PRODUCTION.md` + `docs/ENVIRONMENT.md` (4 เว็บ Vercel + Convex deploy + rollback + smoke test)
+- ⏳ ปฏิบัติจริง: ตั้ง Vercel projects 4 ตัว + custom domains (velnox/shop/seller/center.velnox.com) + SSL + Neon PITR/scheduled dump + monitoring/alerting — งานที่ hosting platform
 - Monitoring: error tracking (Sentry — Gravity Index) + uptime
 - Backup: Neon automated backup + policy ทดสอบ restore
 - Security review: CORS/Allowed Origins, rate limit, secret rotation

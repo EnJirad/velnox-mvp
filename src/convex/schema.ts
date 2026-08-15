@@ -232,6 +232,16 @@ const schema = defineSchema(
       announcement: v.optional(v.string()),
       updatedAt: v.number(),
     }).index("by_key", ["key"]),
+
+    // API rate limiting counters (spec §25): one doc per (name, key) window.
+    // Used by write-heavy / abuse-prone node actions (checkout, review,
+    // return, subscription) — a fixed sliding window enforced server-side.
+    rateLimits: defineTable({
+      name: v.string(), // e.g. "checkout", "review", "otp"
+      key: v.string(), // e.g. user id (or ip for auth endpoints)
+      count: v.number(),
+      resetAt: v.number(), // epoch ms when the window resets
+    }).index("by_name_key", ["name", "key"]),
   },
   {
     schemaValidation: false,

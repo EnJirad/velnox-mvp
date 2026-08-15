@@ -35,6 +35,7 @@ import { listReturnsForCustomer, requestReturn } from "../backend/returns";
 import { categoryStats, listProducts } from "../backend/products";
 import { listReviewsByShop } from "../backend/reviews";
 import { audit } from "../backend/audit";
+import { enforceRateLimit } from "./rateLimit";
 import type { Shop } from "../backend/types";
 
 /* eslint-disable @typescript-eslint/no-explicit-any -- DB row mappers */
@@ -250,6 +251,7 @@ export const checkoutAction = action({
   },
   handler: async (ctx, args) => {
     const { user } = await requireIdentity(ctx);
+    await enforceRateLimit(ctx, { name: "checkout", key: user.id, max: 10, windowMs: 60_000 });
     const result = await checkout({
       userId: user.id,
       addressId: args.addressId,
@@ -315,6 +317,7 @@ export const requestReturnAction = action({
   },
   handler: async (ctx, args) => {
     const { user } = await requireIdentity(ctx);
+    await enforceRateLimit(ctx, { name: "return", key: user.id, max: 10, windowMs: 3_600_000 });
     const ret = await requestReturn(getDb(), {
       customerUserId: user.id,
       orderId: args.orderId,
@@ -377,6 +380,7 @@ export const reviewProduct = action({
   },
   handler: async (ctx, args) => {
     const { user } = await requireIdentity(ctx);
+    await enforceRateLimit(ctx, { name: "review", key: user.id, max: 20, windowMs: 3_600_000 });
     return createReview(getDb(), {
       userId: user.id,
       productId: args.productId,

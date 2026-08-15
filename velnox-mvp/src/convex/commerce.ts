@@ -55,6 +55,7 @@ import {
 import { recordPayment, refundPayment } from "../backend/payments";
 import { audit } from "../backend/audit";
 import { gpsSchema } from "../backend/validation";
+import { enforceRateLimit } from "./rateLimit";
 import {
   advanceSubscription,
   computeNextOrderDate,
@@ -640,6 +641,7 @@ export const cancelOrderAction = action({
   args: { orderId: v.string() },
   handler: async (ctx, args) => {
     const { user } = await requireIdentity(ctx);
+    await enforceRateLimit(ctx, { name: "cancel_order", key: user.id, max: 20, windowMs: 60_000 });
     const db = getDb();
     const order = await db("SELECT id, customer_user_id, payment_status FROM orders WHERE id = $1", [args.orderId]);
     if (!order[0] || order[0].customer_user_id !== user.id) {
@@ -714,6 +716,7 @@ export const createVelRepeat = action({
   },
   handler: async (ctx, args) => {
     const { user } = await requireIdentity(ctx);
+    await enforceRateLimit(ctx, { name: "subscribe", key: user.id, max: 20, windowMs: 3_600_000 });
     const frequency = (args.frequency ?? "monthly") as "daily" | "weekly" | "monthly" | "custom";
     const nextOrderDate = computeNextOrderDate(frequency, new Date(), args.intervalDays);
     const sub = await createSubscription(getDb(), {
