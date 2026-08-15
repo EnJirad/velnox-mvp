@@ -239,6 +239,16 @@ Phase 12 Production — staging/prod env, deploy pipeline, monitoring, backup
 
 ---
 
+## Phase 11 (spec "PHASE 11") — Production Hardening + Security + Deployment Readiness ✅ (จนถึงขอบเขต repo)
+
+- ✅ **ลบ legacy order path คู่ขนาน**: `convex/orders.ts placeOrder` (เขียน Convex tables ตรง ๆ, bypass Neon ledger/commission/idempotency/audit) + `commerce.ts placeOrder` (รับ shippingFee จาก client §7) — ไม่มี caller ทั้งคู่ → order creation มีเส้นทางเดียว: `checkoutAction` → `src/backend/checkout.ts`
+- ✅ **Audit log ครบ product actions** (§22): SELLER_CREATED_PRODUCT · SELLER_UPDATED_PRODUCT (before/after) · SELLER_UPDATED_PRODUCT_STATUS · SELLER_ARCHIVED_PRODUCT — `requireSellerProduct` คืน `user`
+- ✅ **Security headers** (§50): `vercel.json` ใหม่ (CSP/X-Content-Type-Options/X-Frame-Options/Referrer-Policy/Permissions-Policy/HSTS)
+- ⚠️ **`.env.example`**: platform บล็อก sensitive files → template อยู่ใน `docs/ENVIRONMENT.md` + `docs/production/environment.md`
+- ✅ **Report**: `docs/PHASE-11-REPORT.md` (format §71) — 55 tests ผ่าน, build ผ่าน, Production Readiness: **NOT READY** (รายการค้างใน report)
+
+---
+
 ## Phase 11 — Testing
 
 - ✅ Unit test: `tests/*` 48 ตัว (commission calc, penalty, state machine, GPS, IDOR/security, providers, velrepeat)

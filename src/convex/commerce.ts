@@ -98,8 +98,11 @@ async function requireSeller(ctx: ActionCtx) {
 }
 
 /** Verify the seller owns the product (Product -> Shop -> Seller chain). */
-async function requireSellerProduct(ctx: ActionCtx, productId: string): Promise<{ seller: Seller; product: Product }> {
-  const { seller } = await requireSeller(ctx);
+async function requireSellerProduct(
+  ctx: ActionCtx,
+  productId: string,
+): Promise<{ seller: Seller; product: Product; user: { id: string; role: string } }> {
+  const { seller, user } = await requireSeller(ctx);
   const db = getDb();
   const product = await getProduct(db, productId);
   if (!product) throw new AppError("PRODUCT_NOT_FOUND", "Product not found");
@@ -107,7 +110,7 @@ async function requireSellerProduct(ctx: ActionCtx, productId: string): Promise<
   if (!shop || shop.sellerId !== seller.id) {
     throw new AppError("FORBIDDEN", "สินค้านี้ไม่ใช่ของคุณ");
   }
-  return { seller, product };
+  return { seller, product, user };
 }
 
 /** Verify the seller owns at least one line of the order (marketplace split orders). */
@@ -341,7 +344,7 @@ export const createProductAction = action({
     reorderLevel: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
-    const { seller } = await requireSeller(ctx);
+    const { seller, user } = await requireSeller(ctx);
     const db = getDb();
     const shops = await listShopsBySeller(db, seller.id);
     if (!shops.some((s) => s.id === args.shopId)) throw new AppError("FORBIDDEN", "ร้านนี้ไม่ใช่ของคุณ");
@@ -359,6 +362,14 @@ export const createProductAction = action({
     if (args.reorderLevel) {
       await setReorderLevel(db, product.id, args.reorderLevel);
     }
+    await audit(db, {
+      actorId: user.id,
+      actorRole: "seller",
+      action: "SELLER_CREATED_PRODUCT",
+      entityType: "product",
+      entityId: product.id,
+      after: { name: product.name, price: product.price, status: product.status, shopId: product.shopId },
+    });
     return getProduct(db, product.id);
   },
 });
@@ -375,7 +386,7 @@ export const updateProductAction = action({
     status: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
-    const { product } = await requireSellerProduct(ctx, args.productId);
+    const { product, user } = await requireSellerProduct(ctx, args.productId);
     const updated = await updateProduct(getDb(), product.id, {
       name: args.name,
       description: args.description,
@@ -385,6 +396,19 @@ export const updateProductAction = action({
       supplier: args.supplier,
       status: args.status as "draft" | "published" | "archived" | undefined,
     });
+    await audit(getDb(), {
+      actorId: user.id,
+      actorRole: "seller",
+      action: "SELLER_UPDATED_PRODUCT",
+      entityType: "product",
+      entityId: product.id,
+      before: { name: product.name, price: product.price, status: product.status },
+      after: {
+        name: updated?.name,
+        price: updated?.price,
+        status: updated?.status,
+      },
+    });
     return updated;
   },
 });
@@ -392,7 +416,7 @@ export const updateProductAction = action({
 export const setProductStatusAction = action({
   args: { productId: v.string(), status: v.string() },
   handler: async (ctx, args) => {
-    const { product } = await requireSellerProduct(ctx, args.productId);
+    const { product, user } = await requireSellerProduct(ctx, args.productId);
     const status = args.status as "draft" | "published" | "archived";
     if (!["draft", "published", "archived"].includes(status)) throw new AppError("INVALID_INPUT", "Invalid product status");
     if (status === "published") {
@@ -401,6 +425,15 @@ export const setProductStatusAction = action({
       if (full.price <= 0) throw new AppError("INVALID_INPUT", "ต้องตั้งราคาก่อนจึงจะประกาศขายได้");
     }
     await updateProduct(getDb(), product.id, { status });
+    await audit(getDb(), {
+      actorId: user.id,
+      actorRole: "seller",
+      action: "SELLER_UPDATED_PRODUCT_STATUS",
+      entityType: "product",
+      entityId: product.id,
+      before: { status: product.status },
+      after: { status },
+    });
     await recordEvent(ctx, "ProductUpdated", product.id, { status });
     return getProduct(getDb(), product.id);
   },
@@ -409,7 +442,15 @@ export const setProductStatusAction = action({
 export const deleteProductAction = action({
   args: { productId: v.string() },
   handler: async (ctx, args) => {
-    const { product } = await requireSellerProduct(ctx, args.productId);
+    const { product, user } = await requireSellerProduct(ctx, args.productId);
+    await audit(getDb(), {
+      actorId: user.id,
+      actorRole: "seller",
+      action: "SELLER_ARCHIVED_PRODUCT",
+      entityType: "product",
+      entityId: product.id,
+      before: { name: product.name, status: product.status },
+    });
     await deleteProduct(getDb(), product.id);
     await recordEvent(ctx, "ProductDeleted", product.id, {});
     return { ok: true };
@@ -560,33 +601,9 @@ export const reorderProductImagesAction = action({
 // ---------------------------------------------------------------------------
 // orders
 // ---------------------------------------------------------------------------
-export const placeOrder = action({
-  args: {
-    items: v.array(v.object({ productId: v.string(), quantity: v.number() })),
-    address: v.any(),
-    idempotencyKey: v.string(),
-    shippingFee: v.optional(v.number()),
-    note: v.optional(v.string()),
-    paymentMethod: v.optional(v.string()),
-  },
-  handler: async (ctx, args) => {
-    const { user } = await requireIdentity(ctx);
-    const order = await createOrder({
-      customerUserId: user.id,
-      items: args.items,
-      addressSnapshot: args.address,
-      idempotencyKey: args.idempotencyKey,
-      shippingFee: args.shippingFee ?? 0,
-      note: args.note,
-      paymentMethod: args.paymentMethod as "cod" | "transfer" | "card" | "promptpay" | "wallet" | undefined,
-    });
-    await recordEvent(ctx, "OrderCreated", order.id, {
-      orderNumber: order.orderNumber,
-      total: order.total,
-    });
-    return order;
-  },
-});
+// NOTE: order creation lives in the Commerce Core only (customer.ts
+// checkoutAction → src/backend/checkout.ts). The legacy placeOrder action
+// (client-supplied shippingFee/address) was removed in Phase 11.
 
 export const myOrders = action({
   args: { limit: v.optional(v.number()) },

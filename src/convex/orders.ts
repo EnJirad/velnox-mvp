@@ -5,90 +5,11 @@ import { orderStatusValidator } from "./schema";
 import { canAdmin, canSell, getCurrentUser } from "./users";
 
 /**
- * Customer order flow (velshop): a signed-in customer places an order from
- * published products. Stock is deducted immediately; the seller confirms,
- * completes or cancels it in velseller / velcenter.
+ * NOTE: order creation lives in the Commerce Core only (customer.ts
+ * checkoutAction → src/backend/checkout.ts → Neon). The legacy Convex-table
+ * placeOrder flow was removed (Phase 11) because it bypassed the Neon ledger,
+ * commissions, idempotency and audit trail.
  */
-export const placeOrder = mutation({
-  args: {
-    items: v.array(
-      v.object({
-        productId: v.id("products"),
-        quantity: v.number(),
-      }),
-    ),
-    customerName: v.string(),
-    customerPhone: v.string(),
-    customerAddress: v.optional(v.string()),
-    note: v.optional(v.string()),
-  },
-  handler: async (ctx, { items, customerName, customerPhone, customerAddress, note }) => {
-    const user = await getCurrentUser(ctx);
-    if (user === null) throw new Error("Not authenticated");
-    if (items.length === 0) throw new Error("กรุณาเลือกสินค้าก่อนสั่งซื้อ");
-    if (!customerName.trim() || !customerPhone.trim()) {
-      throw new Error("กรุณากรอกชื่อและเบอร์โทร");
-    }
-
-    const now = Date.now();
-    let total = 0;
-    let itemCount = 0;
-
-    // Validate every line, snapshot the details and deduct stock.
-    const prepared = [];
-    for (const item of items) {
-      if (item.quantity <= 0) throw new Error("จำนวนสินค้าไม่ถูกต้อง");
-      const product = await ctx.db.get(item.productId);
-      if (!product || !product.published) throw new Error("สินค้าบางรายการไม่มีจำหน่ายแล้ว");
-      if (product.price === undefined) throw new Error(`สินค้า "${product.name}" ยังไม่มีราคา`);
-      if (product.currentStock < item.quantity) {
-        throw new Error(`สต็อก "${product.name}" ไม่พอ (เหลือ ${product.currentStock} ${product.unit})`);
-      }
-      const subtotal = Math.round(product.price * item.quantity * 100) / 100;
-      total += subtotal;
-      itemCount += item.quantity;
-      prepared.push({
-        productId: product._id,
-        productName: product.name,
-        unit: product.unit,
-        quantity: item.quantity,
-        price: product.price,
-        subtotal,
-      });
-      await ctx.db.patch(product._id, {
-        currentStock: Math.max(0, product.currentStock - item.quantity),
-        updatedAt: now,
-      });
-    }
-
-    const orderId = await ctx.db.insert("orders", {
-      userId: user._id,
-      status: "pending",
-      customerName: customerName.trim(),
-      customerPhone: customerPhone.trim(),
-      customerAddress: customerAddress?.trim() || undefined,
-      note: note?.trim() || undefined,
-      total: Math.round(total * 100) / 100,
-      itemCount,
-      createdAt: now,
-      updatedAt: now,
-    });
-
-    for (const line of prepared) {
-      await ctx.db.insert("orderItems", {
-        orderId,
-        productId: line.productId,
-        productName: line.productName,
-        unit: line.unit,
-        quantity: line.quantity,
-        price: line.price,
-        subtotal: line.subtotal,
-      });
-    }
-
-    return orderId;
-  },
-});
 
 const fetchOrdersWithItems = async (ctx: QueryCtx, orderIds: Id<"orders">[]) => {
   const rows = [];
