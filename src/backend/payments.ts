@@ -77,6 +77,12 @@ export async function recordPayment(input: RecordPaymentInput): Promise<Payment>
     if (order.rows[0].payment_status === "paid") {
       throw new PaymentError("Order is already paid");
     }
+    // The recorded amount must match the order total exactly — a caller can
+    // never book a payment for a different amount (spec: ห้ามเชื่อตัวเลขจาก
+    // frontend — เงินคำนวณจาก server เท่านั้น).
+    if (round2(input.amount) !== round2(Number(order.rows[0].total))) {
+      throw new PaymentError("Payment amount does not match the order total");
+    }
 
     const status = input.status ?? "pending";
     const paidAt = status === "succeeded" ? new Date().toISOString() : null;

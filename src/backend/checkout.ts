@@ -16,6 +16,7 @@
 import { withTransaction } from "./db";
 import { AppError } from "./errors";
 import { round2 } from "./rules";
+import { quoteShipping } from "./shipping";
 import { checkoutInputSchema } from "./validation";
 import type { PaymentMethod } from "./types";
 
@@ -42,13 +43,17 @@ interface LockedLine {
   subtotal: number;
 }
 
-export async function checkout(input: { userId: string; addressId: string; paymentMethod?: PaymentMethod; shippingFee?: number; note?: string | null }): Promise<CheckoutResult> {
+export async function checkout(input: { userId: string; addressId: string; paymentMethod?: PaymentMethod; shippingMethod?: string; note?: string | null }): Promise<CheckoutResult> {
   const parsed = checkoutInputSchema.parse({
     addressId: input.addressId,
     paymentMethod: input.paymentMethod ?? "cod",
-    shippingFee: input.shippingFee ?? 0,
+    shippingMethod: input.shippingMethod ?? "standard",
     note: input.note ?? null,
   });
+
+  // The shipping fee is quoted server-side — the client only chooses a method
+  // (standard / express). No money number is ever trusted from the frontend.
+  const shippingFee = round2(quoteShipping({ methodId: parsed.shippingMethod }).fee);
 
   return withTransaction(async (tx) => {
     // 1. address must exist, belong to the user, and carry GPS (spec §8, §62)
@@ -154,8 +159,8 @@ export async function checkout(input: { userId: string; addressId: string; payme
       [
         input.userId,
         round2(lines.reduce((s, l) => s + l.subtotal, 0)),
-        parsed.shippingFee,
-        round2(lines.reduce((s, l) => s + l.subtotal, 0) + parsed.shippingFee),
+        shippingFee,
+        round2(lines.reduce((s, l) => s + l.subtotal, 0) + shippingFee),
         JSON.stringify(addressSnapshot),
         parsed.note ?? null,
         `checkout-${cartId}`,
@@ -166,7 +171,7 @@ export async function checkout(input: { userId: string; addressId: string; payme
     const orders: CheckoutResult["orders"] = [];
     for (const [shopId, shopLines] of byShop) {
       const shopSubtotal = round2(shopLines.reduce((s, l) => s + l.subtotal, 0));
-      const shopTotal = round2(shopSubtotal + parsed.shippingFee);
+      const shopTotal = round2(shopSubtotal + shippingFee);
       const shopOrder = await tx.query(
         `INSERT INTO orders
            (customer_user_id, parent_order_id, seller_id, shop_id, status, payment_status,
@@ -179,11 +184,11 @@ export async function checkout(input: { userId: string; addressId: string; payme
           shopLines[0].sellerId,
           shopId,
           shopSubtotal,
-          parsed.shippingFee,
+          shippingFee,
           shopTotal,
           JSON.stringify(addressSnapshot),
           parsed.note ?? null,
-          input.paymentMethod === "cod" ? "cod" : null,
+          parsed.shippingMethod,
           `checkout-${cartId}-${shopId}`,
         ],
       );
@@ -240,7 +245,7 @@ export async function checkout(input: { userId: string; addressId: string; payme
         sellerId: shopLines[0].sellerId,
         shopName: shopLines[0].shopName,
         subtotal: shopSubtotal,
-        shippingFee: parsed.shippingFee,
+        shippingFee,
         total: shopTotal,
       });
     }

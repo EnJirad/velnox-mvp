@@ -13,6 +13,7 @@
  * Business rules live HERE (server-side) — never in the frontend.
  */
 import { withTransaction, type Db } from "./db";
+import { resolveRules } from "./rules";
 import type {
   AddressSnapshot,
   Order,
@@ -419,8 +420,9 @@ export async function cancelOrder(orderId: string): Promise<Order> {
 // ---------------------------------------------------------------------------
 // seller income report (velseller "รายได้")
 // ---------------------------------------------------------------------------
-const SELLER_COMMISSION_RATE = 0.03; // Velnox charges 3% per item sold
-const RETURN_COVERAGE_RATE = 0.1; // returns covered up to 10% of sales
+// Commission % and the return coverage threshold are read from
+// platform_settings (rules.ts) — NEVER hard-coded (spec §23/§34). This keeps
+// velSeller's numbers identical to velCenter's finance report.
 
 export interface SellerIncomeReport {
   gross: number;
@@ -441,12 +443,18 @@ export interface SellerIncomeReport {
 }
 
 /**
- * Seller income: gross completed sales, returned value, the 3% commission,
- * and the payout estimate under Velnox's return policy (returns beyond 10% of
- * sales are the seller's responsibility). All math is server-side, rounded to
+ * Seller income: gross completed sales, returned value, the platform
+ * commission (from platform_settings) and the payout estimate under Velnox's
+ * return policy (returns beyond the configured threshold are the seller's
+ * responsibility). Only REAL returns count (status return_requested/returned)
+ * — a cancelled order is not a return. All math is server-side, rounded to
  * 2 decimals — never trust frontend numbers.
  */
 export async function sellerIncome(db: Db, sellerId: string, limit = 200): Promise<SellerIncomeReport> {
+  const rules = await resolveRules(db);
+  const commissionPercent = rules.platformCommissionPercent;
+  const thresholdPercent = rules.returnRateThreshold;
+
   const rows = await db(
     `SELECT DISTINCT o.*
      FROM orders o
@@ -474,7 +482,9 @@ export async function sellerIncome(db: Db, sellerId: string, limit = 200): Promi
     const subtotal = round2(mine.reduce((s, i) => s + i.subtotal, 0));
     const qty = mine.reduce((s, i) => s + i.quantity, 0);
 
-    if (order.status === "cancelled") {
+    // compare against the raw row: the typed OrderStatus union is narrower
+    // than the DB enum which also allows return_requested/returned
+    if (r.status === "return_requested" || r.status === "returned") {
       returns += subtotal;
       returnCount += qty;
     } else if (order.status === "completed") {
@@ -488,10 +498,10 @@ export async function sellerIncome(db: Db, sellerId: string, limit = 200): Promi
 
   gross = round2(gross);
   returns = round2(returns);
-  const commission = round2(gross * SELLER_COMMISSION_RATE);
+  const commission = round2((gross * commissionPercent) / 100);
   const totalOrdered = gross + returns;
   const returnRate = totalOrdered > 0 ? round2(returns / totalOrdered) : 0;
-  const returnCoverage = round2(Math.min(returns, gross * RETURN_COVERAGE_RATE));
+  const returnCoverage = round2(Math.min(returns, (gross * thresholdPercent) / 100));
   const payout = round2(gross - commission - (returns - returnCoverage));
 
   transactions.sort((a, b) => (a.order.createdAt < b.order.createdAt ? 1 : -1));
@@ -502,7 +512,7 @@ export async function sellerIncome(db: Db, sellerId: string, limit = 200): Promi
     returns,
     returnCount,
     commission,
-    commissionRate: SELLER_COMMISSION_RATE,
+    commissionRate: round2(commissionPercent / 100),
     returnRate,
     returnCoverage,
     payout,

@@ -270,17 +270,19 @@ export const checkoutAction = action({
   args: {
     addressId: v.string(),
     paymentMethod: v.optional(v.string()),
-    shippingFee: v.optional(v.number()),
+    shippingMethod: v.optional(v.string()),
     note: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     const { user, subject } = await requireIdentity(ctx);
     await enforceRateLimit(ctx, { name: "checkout", key: user.id, max: 10, windowMs: 60_000 });
+    // Only the shipping METHOD is accepted from the client — the fee itself is
+    // quoted server-side by the checkout service (never trust client money).
     const result = await checkout({
       userId: user.id,
       addressId: args.addressId,
       paymentMethod: (args.paymentMethod ?? "cod") as "cod" | "transfer" | "card" | "promptpay" | "wallet",
-      shippingFee: args.shippingFee ?? 0,
+      shippingMethod: args.shippingMethod ?? "standard",
       note: args.note ?? null,
     });
     await audit(getDb(), {

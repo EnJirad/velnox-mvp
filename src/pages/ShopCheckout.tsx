@@ -135,7 +135,7 @@ export default function ShopCheckout() {
       const res = (await checkoutAction({
         addressId: selectedAddressId,
         paymentMethod,
-        shippingFee: 0,
+        shippingMethod: "standard",
       })) as unknown as CheckoutResult;
       setResult(res);
       clear();

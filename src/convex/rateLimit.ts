@@ -35,6 +35,21 @@ export const hitRateLimit = mutation({
         count: 1,
         resetAt: now + args.windowMs,
       });
+      // housekeeping: drop other expired windows for this limiter so the
+      // table stays bounded (no unbounded growth between deployments)
+      try {
+        const expired = await ctx.db
+          .query("rateLimits")
+          .withIndex("by_name_key", (q) => q.eq("name", args.name))
+          .filter((q) => q.lte(q.field("resetAt"), now))
+          .collect();
+        for (const row of expired) {
+          if (row._id === undefined) continue;
+          await ctx.db.delete(row._id);
+        }
+      } catch {
+        // cleanup must never break rate limiting itself
+      }
       return { allowed: true, remaining: args.max - 1, retryAfterMs: 0 };
     }
 

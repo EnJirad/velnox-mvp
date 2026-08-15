@@ -90,11 +90,14 @@ export const cartItemInputSchema = z.object({
   quantity: positiveIntSchema,
 });
 
-/** Checkout input — address id must belong to the caller (checked in service). */
+/** Checkout input — address id must belong to the caller (checked in service).
+ *  The client only picks a shipping METHOD; the fee itself is quoted
+ *  server-side (shipping.ts) so no money number ever comes from the frontend
+ *  (spec §58: เงินคำนวณจาก backend เท่านั้น). */
 export const checkoutInputSchema = z.object({
   addressId: idSchema,
   paymentMethod: z.enum(["cod", "transfer", "card", "promptpay", "wallet"]).default("cod"),
-  shippingFee: z.number().min(0).max(100_000_000).default(0),
+  shippingMethod: z.enum(["standard", "express"]).default("standard"),
   note: z.string().trim().max(500).nullish(),
 });
 

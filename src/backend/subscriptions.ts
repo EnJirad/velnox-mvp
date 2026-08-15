@@ -204,16 +204,20 @@ export async function rescheduleSubscription(
 /**
  * Active subscriptions whose next order date has arrived — the VelRepeat
  * scheduler (Convex cron) polls this, then creates orders via createOrder().
+ * When `sellerId` is given the query is scoped to that seller's subscriptions
+ * so a seller-triggered run can never create orders for another seller's
+ * products (authorization rule — "ของใคร ของมัน").
  */
-export async function getDueSubscriptions(db: Db, onDate: string): Promise<Subscription[]> {
+export async function getDueSubscriptions(db: Db, onDate: string, sellerId?: string): Promise<Subscription[]> {
   const rows = await db(
     `SELECT s.*, p.name AS product_name, pi.url AS product_image_url
      FROM subscriptions s
      JOIN products p ON p.id = s.product_id
      LEFT JOIN product_images pi ON pi.product_id = p.id AND pi.is_primary = true
      WHERE s.status = 'active' AND s.next_order_date <= $1::date
+       ${sellerId ? "AND s.seller_id = $2" : ""}
      ORDER BY s.next_order_date ASC`,
-    [onDate],
+    sellerId ? [onDate, sellerId] : [onDate],
   );
   return rows.map(mapSubscription);
 }

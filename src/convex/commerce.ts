@@ -57,6 +57,7 @@ import { recordPayment, refundPayment } from "../backend/payments";
 import { audit } from "../backend/audit";
 import { AppError } from "../backend/errors";
 import { gpsSchema } from "../backend/validation";
+import { resolveRules } from "../backend/rules";
 import { enforceRateLimit } from "./rateLimit";
 import {
   advanceSubscription,
@@ -170,6 +171,18 @@ export const openShop = action({
       name: args.shopName,
       taxId: args.taxId ?? null,
     });
+    // Approval gate (spec §9): the seller starts 'pending'. Auto-approve when
+    // platform auto_approve_sellers is on, or when the shop belongs to the
+    // company itself (owner/admin) so the company's own storefront works
+    // immediately. Third-party sellers stay pending until velcenter approves.
+    const rules = await resolveRules(db);
+    if (rules.autoApproveSellers || user.role === "owner" || user.role === "admin") {
+      await db(
+        `UPDATE sellers SET status = 'approved', approved_at = now() WHERE id = $1`,
+        [seller.id],
+      );
+      seller.status = "approved";
+    }
     const existing = await listShopsBySeller(db, seller.id);
     const shop = existing[0] ?? (await createShop(db, {
       sellerId: seller.id,
@@ -418,10 +431,15 @@ export const updateProductAction = action({
 export const setProductStatusAction = action({
   args: { productId: v.string(), status: v.string() },
   handler: async (ctx, args) => {
-    const { product, user } = await requireSellerProduct(ctx, args.productId);
+    const { product, user, seller } = await requireSellerProduct(ctx, args.productId);
     const status = args.status as "draft" | "published" | "archived";
     if (!["draft", "published", "archived"].includes(status)) throw new AppError("INVALID_INPUT", "Invalid product status");
     if (status === "published") {
+      // Seller approval gate: only approved sellers can list products for sale
+      // (spec §9/§11 — auto_approve controlled from platform settings).
+      if (seller.status !== "approved") {
+        throw new AppError("FORBIDDEN", "ร้านค้ายังไม่ผ่านการอนุมัติ — รอเจ้าของบริษัทอนุมัติก่อนประกาศขาย");
+      }
       const full = await getProduct(getDb(), product.id);
       if (!full?.inventory) throw new AppError("INVALID_INPUT", "ต้องตั้งสต็อกก่อนจึงจะประกาศขายได้");
       if (full.price <= 0) throw new AppError("INVALID_INPUT", "ต้องตั้งราคาก่อนจึงจะประกาศขายได้");
@@ -830,18 +848,23 @@ export const updateSubscriptionAction = action({
 
 /**
  * VelRepeat scheduler trigger (velseller "สร้างออเดอร์รอบครบกำหนด"): every
- * active subscription whose next order date has arrived creates a real order
- * through the commerce core (inventory reserve + snapshots + commission) and
- * advances to the next cycle. Subscriptions with insufficient stock are
- * skipped (the customer is notified via a business event).
+ * ACTIVE subscription of THIS seller whose next order date has arrived
+ * creates a real order through the commerce core (inventory reserve +
+ * snapshots + commission) and advances to the next cycle. Subscriptions with
+ * insufficient stock are skipped (the customer is notified via a business
+ * event). The run is scoped to the calling seller (authorization: a seller
+ * can never create orders for another seller's products).
  */
 export const processDueSubscriptions = action({
   args: {},
   handler: async (ctx) => {
     const { seller } = await requireSeller(ctx);
+    if (seller.status !== "approved") {
+      throw new AppError("FORBIDDEN", "ร้านค้ายังไม่ผ่านการอนุมัติ");
+    }
     const db = getDb();
     const today = new Date().toISOString().slice(0, 10);
-    const due = await getDueSubscriptions(db, today);
+    const due = await getDueSubscriptions(db, today, seller.id);
 
     let created = 0;
     let skipped = 0;

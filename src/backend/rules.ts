@@ -25,52 +25,40 @@ export const DEFAULT_RULES: BusinessRules = {
   taxPercent: 7,
 };
 
-/** Resolve business rules from platform_settings (admin-editable via VelCenter). */
+/** Resolve business rules from platform_settings (admin-editable via VelCenter).
+ *
+ * Reads the full settings table in ONE query per call and resolves every rule
+ * from that snapshot — no stale process-lifetime cache, no fire-and-forget
+ * warm-up. After the owner changes a setting, the very next report/action
+ * picks it up. */
 export async function resolveRules(db: Db): Promise<BusinessRules> {
+  const rows = await db("SELECT key, value FROM platform_settings");
+  const values = new Map<string, unknown>();
+  for (const r of rows) {
+    try {
+      values.set(r.key, typeof r.value === "string" ? JSON.parse(r.value) : r.value);
+    } catch {
+      values.set(r.key, r.value);
+    }
+  }
   const num = (key: string, fallback: number) => {
-    const v = getSettingValueSync(db, key);
+    const v = values.get(key);
     return typeof v === "number" && Number.isFinite(v) ? v : fallback;
   };
+  const str = (v: unknown, fallback: string) => (typeof v === "string" ? v : fallback);
+  const bool = (v: unknown, fallback: boolean) => (typeof v === "boolean" ? v : fallback);
   return {
-    platformName: str(getSettingValueSync(db, "platform_name"), DEFAULT_RULES.platformName),
-    currency: str(getSettingValueSync(db, "currency"), DEFAULT_RULES.currency),
+    platformName: str(values.get("platform_name"), DEFAULT_RULES.platformName),
+    currency: str(values.get("currency"), DEFAULT_RULES.currency),
     platformCommissionPercent: num("platform_commission_percent", DEFAULT_RULES.platformCommissionPercent),
     shippingCompanyPercent: num("shipping_company_percent", DEFAULT_RULES.shippingCompanyPercent),
     returnRateThreshold: num("return_rate_threshold", DEFAULT_RULES.returnRateThreshold),
-    autoApproveSellers: bool(getSettingValueSync(db, "auto_approve_sellers"), DEFAULT_RULES.autoApproveSellers),
-    autoApproveProducts: bool(getSettingValueSync(db, "auto_approve_products"), DEFAULT_RULES.autoApproveProducts),
-    taxEnabled: bool(getSettingValueSync(db, "tax_enabled"), DEFAULT_RULES.taxEnabled),
+    autoApproveSellers: bool(values.get("auto_approve_sellers"), DEFAULT_RULES.autoApproveSellers),
+    autoApproveProducts: bool(values.get("auto_approve_products"), DEFAULT_RULES.autoApproveProducts),
+    taxEnabled: bool(values.get("tax_enabled"), DEFAULT_RULES.taxEnabled),
     taxPercent: num("tax_percent", DEFAULT_RULES.taxPercent),
   };
 }
-
-// small sync helpers over the cached settings map (avoid re-query per key)
-const settingsCache = new WeakMap<Db, Map<string, unknown>>();
-function getSettingValueSync(db: Db, key: string): unknown {
-  let cache = settingsCache.get(db);
-  if (!cache) {
-    cache = new Map();
-    settingsCache.set(db, cache);
-    void cacheAll(db, cache);
-  }
-  return cache.get(key);
-}
-function cacheAll(db: Db, cache: Map<string, unknown>) {
-  // fire-and-forget warm-up; resolveRules is usually called after settings exist
-  db("SELECT key, value FROM platform_settings")
-    .then((rows) => {
-      for (const r of rows) {
-        try {
-          cache.set(r.key, typeof r.value === "string" ? JSON.parse(r.value) : r.value);
-        } catch {
-          cache.set(r.key, r.value);
-        }
-      }
-    })
-    .catch(() => {});
-}
-const str = (v: unknown, fallback: string) => (typeof v === "string" ? v : fallback);
-const bool = (v: unknown, fallback: boolean) => (typeof v === "boolean" ? v : fallback);
 
 // ---------------------------------------------------------------------------
 // pure calculation helpers (unit-tested in tests/)
