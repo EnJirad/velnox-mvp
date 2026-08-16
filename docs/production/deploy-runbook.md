@@ -18,7 +18,7 @@ bun run predeploy        # typecheck + 55 tests + build (ต้องผ่า�
 | 2 | **Convex Backend** — `npx convex deploy` (prod deployment) | functions ready, `/health` → ok |
 | 3 | **Authentication** — env: `SITE_URL` (prod domain), `JWT_PRIVATE_KEY`, `JWKS` + OTP relay | login/OTP ผ่านบน prod |
 | 4 | **Storage** — `CLOUDINARY_*` prod env | upload signature ใช้ได้ |
-| 5 | **VelShop** — Vercel project (env: `VITE_CONVEX_URL` → prod deployment, `VITE_SITE_BASENAME=/shop`, `VITE_VEL*_URL`) | เปิดเว็บ/login/product ผ่าน |
+| 5 | **VelShop** — Vercel project (env: `VITE_CONVEX_URL` → prod deployment, `VITE_SITE_BASENAME=""`, `VITE_VEL*_URL`) | เปิดเว็บ/login/product ผ่าน |
 | 6 | **VelSeller** — Vercel project | login + dashboard ผ่าน |
 | 7 | **VelCenter** — Vercel project | login (owner) + dashboard ผ่าน |
 | 8 | **Main Velnox** — Vercel project (landing + links) | เปิด/ลิงก์ถูก |
