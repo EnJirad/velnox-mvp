@@ -1,4 +1,7 @@
 .env.local
 node_modules
 dist
-convex/_generated
+
+# Convex type-safe bindings are COMMITTED so every app builds in a clean
+# checkout (Vercel root dirs) without needing a linked Convex deployment.
+# Regenerate with `bun convex codegen` when convex/ source changes.

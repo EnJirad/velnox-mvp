@@ -27,7 +27,7 @@ import { CheckCircle2, Gauge, Plus, Target, Timer } from "lucide-react";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
 
-export default function Dashboard() {
+export default function SellerGoals() {
   const { user } = useAuth();
   const goals = useQuery(api.goals.list);
   const removeGoal = useMutation(api.goals.remove);

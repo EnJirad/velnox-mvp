@@ -434,13 +434,14 @@ git remote add github https://github.com/EnJirad/velnox-mvp.git
 git push -u github main
 ```
 
-> ✅ สิ่งที่ควร commit: โค้ดทั้งหมด + `INSTALL_AND_USAGE.md` + `velnox-mvp/README.md`
-> ❌ ไม่ commit: `node_modules/`, `dist/`, `src/convex/_generated/`, `.env*` (อยู่ใน `.gitignore` แล้ว)
+> ✅ สิ่งที่ควร commit: โค้ดทั้งหมด + `INSTALL_AND_USAGE.md` + `docs/`
+> ❌ ไม่ commit: `node_modules/`, `dist/`, `convex/_generated/`, `.env*` (อยู่ใน `.gitignore` แล้ว)
 
 ---
 
 ## 📄 เอกสารอื่น ๆ
 
-- `velnox-mvp/README.md` — รายละเอียดสถาปัตยกรรม 3 เว็บ + ฟีเจอร์ทั้งหมด
-- `velnox-mvp/integrations.md` — คู่มือ AI / Email / Payment integrations (VLY)
-- `README.md` — คอนเวนชันการพัฒนา (เดิมจาก template)
+- `README.md` — สรุปสถาปัตยกรรม monorepo 4 apps + การ deploy
+- `apps/README.md` — รายละเอียดแต่ละ app (VelShop / VelSeller / VelCenter / Corporate)
+- `integrations.md` — คู่มือ AI / Email / Payment integrations (VLY)
+- `docs/FINAL_ARCHITECTURE_REPORT.md` — รายงานการย้ายโครงสร้างฉบับสุดท้าย

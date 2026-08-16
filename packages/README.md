@@ -1,21 +1,33 @@
-# Velnox Shared Packages
+# Velnox Shared Package
 
-โค้ดที่ใช้ร่วมกันระหว่าง 4 apps อยู่ที่ตำแหน่งจริงต่อไปนี้ (single source — ไม่มีการคัดลอก):
+Shared frontend code for all four apps lives in one Bun workspace package:
 
-| Package เป้าหมาย | ตำแหน่งจริงใน repo | เนื้อหา |
+`packages/shared` (imported as `@velnox/shared`, source under `packages/shared/src`)
+
+| Area | Location | Contents |
 |---|---|---|
-| `ui` | `src/components/ui/` (+ `components.json`) | 60+ shadcn/ui primitives (button, dialog, table, form...) — ไม่มี business logic |
-| `auth` | `src/convex/auth.ts` · `src/convex/auth.config.ts` · `src/convex/auth/emailOtp.ts` · `src/components/RequireAuth.tsx` · `src/components/RequireRole.tsx` · `src/hooks/use-auth.ts` | Convex Auth + route guards (client UX) |
-| `types` | `src/backend/types.ts` · `src/convex/schema.ts` (role/validators) | Domain types ร่วม |
-| `validation` | `src/backend/validation.ts` (zod — 15 schemas) · `src/backend/errors.ts` | schema validation กลาง (backend เป็น authoritative) |
-| `constants` | `src/convex/schema.ts` (ROLES/departments) · `src/lib/shop.ts` (status meta) · `src/lib/sites.ts` (URLs) | ค่าคงที่/สถานะ/ลิงก์ข้ามแอป |
-| `utils` | `src/lib/utils.ts` (cn...) · `src/lib/customer-memory-core.ts` | helper ทั่วไป + Customer Memory core (มี unit test) |
-| `config` | `src/lib/sites.ts` (`SITE_URLS`, `siteBasename`) · `vercel.json` · `.env.example` | URL/env/deploy config กลาง |
-| `api` | `src/convex/*` (Blackend API) + `src/backend/*` (Neon access) | typed API + business rules — **backend เดียวสำหรับทั้ง 4 apps** |
+| UI kit | `packages/shared/src/components/ui/` | 60+ shadcn/ui primitives (button, dialog, table, form, …) — no business logic |
+| App shell & shared components | `packages/shared/src/components/` | `AppHeader`, `RequireAuth`, `RequireRole`, `SiteSwitcher`, `UserMenu`, `MobileTabBar`, seller/goals/reorder dialogs |
+| Hooks | `packages/shared/src/hooks/` | `use-auth`, `use-mobile` |
+| Lib | `packages/shared/src/lib/` | `sites` (SITE_URLS / basename), `utils` (cn), `commerce` types, `shop`/`goals`/`reorder` helpers, `customer-memory-core`, `track`, `monitoring`, `app-shell`, `vly-integrations` |
+| Auth pages | `packages/shared/src/pages/` | `Auth`, `NotFound` |
+| Theme | `packages/shared/src/index.css` | global Tailwind v4 theme CSS (imported by every app entry) |
 
-## กติกา
+## Rules
 
-- **ห้าม duplicate:** ถ้าต้องใช้ของร่วม ต้อง import จากตำแหน่งจริงข้างบน (alias `@/*` ชี้ `src/`)
-- **ห้ามเอา business logic ลง `ui`:** องค์ประกอบ UI ต้องไร้ logic ของแอป
-- อนาคตถ้าจะแยกเป็น packages จริง (npm workspace) ให้ย้ายทีละตัวตาม
-  `docs/RESTRUCTURE_INVENTORY.md` §16 — ไม่จำเป็นสำหรับ MVP
+- **No duplication:** shared code is imported as `@velnox/shared/...` from a single
+  location — never copied into an app.
+- **No business logic in `ui`:** UI primitives stay free of app logic.
+- Apps must not import each other's source; they communicate through the
+  production domains (`SITE_URLS` in `packages/shared/src/lib/sites.ts`).
+
+## Shared infrastructure (not packages)
+
+The shared backend stays centralized at the repo root:
+
+| Piece | Location |
+|---|---|
+| Convex backend (one deployment for all apps) | `convex/` |
+| Neon commerce core (business rules) | `backend/` |
+| Database schema & migrations | `db/` |
+| Unit tests | `tests/` |

@@ -65,9 +65,10 @@ function Auth() {
       returnTo?.startsWith("/") && !returnTo.startsWith("//")
         ? returnTo
         : roleHome(user?.role);
-    // Entry URLs (e.g. /velseller.html) belong to a different app — a
-    // client-side navigate would render 404 inside this router instead.
-    if (target.startsWith("/vel")) {
+    // Cross-app entry URLs (e.g. a legacy /velseller/... path or another
+    // app's route) belong to a different app — a client-side navigate would
+    // render 404 inside this router instead.
+    if (target.startsWith("/vel") || !target.startsWith("/")) {
       window.location.assign(target);
     } else {
       navigate(target);
