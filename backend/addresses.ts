@@ -7,6 +7,7 @@
  */
 /* eslint-disable @typescript-eslint/no-explicit-any -- DB row mappers */
 import type { Db } from "./db";
+import { toMs } from "./dates";
 import { AppError } from "./errors";
 import { addressInputSchema, type AddressInput } from "./validation";
 import type { Address } from "./types";
@@ -31,7 +32,7 @@ function mapAddress(r: Record<string, any>): Address {
     longitude: r.longitude != null ? Number(r.longitude) : null,
     placeId: r.place_id ?? null,
     isDefault: Boolean(r.is_default),
-    createdAt: r.created_at,
+    createdAt: toMs(r.created_at),
   };
 }
 

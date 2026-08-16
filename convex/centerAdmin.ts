@@ -7,7 +7,7 @@
  */
 "use node";
 
-import { action } from "./_generated/server";
+import { serializedAction as action } from "./lib/serialize";
 import { api } from "./_generated/api";
 import { v } from "convex/values";
 import { getDb } from "../backend/db";
@@ -183,6 +183,13 @@ export const setSellerStatusAction = action({
        WHERE id = $1`,
       [args.sellerId, status, identity.user.id, args.reason ?? null],
     );
+    // spec §13: shop visibility follows seller status — approved -> active,
+    // rejected -> stays pending, suspended -> suspended (never sellable).
+    if (status === "approved" || status === "rejected" || status === "suspended") {
+      const shopStatus = status === "approved" ? "active" : status === "suspended" ? "suspended" : "pending";
+      await db(`UPDATE shops SET status = $2 WHERE seller_id = $1 AND status <> $2`, [args.sellerId, shopStatus]);
+    }
+
     await audit(db, {
       actorId: identity.user.id,
       actorRole: identity.user.role,

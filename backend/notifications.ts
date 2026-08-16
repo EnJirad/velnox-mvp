@@ -8,6 +8,7 @@
  */
 /* eslint-disable @typescript-eslint/no-explicit-any -- DB row mappers */
 import type { Db } from "./db";
+import { toMs } from "./dates";
 import type { Notification } from "./types";
 
 const VALID_TYPES = ["order", "payment", "shipping", "return", "refund", "promotion", "system", "seller"] as const;
@@ -23,7 +24,7 @@ function mapNotification(r: Record<string, any>): Notification {
     message: r.message ?? null,
     data,
     isRead: Boolean(r.is_read),
-    createdAt: r.created_at,
+    createdAt: toMs(r.created_at),
   };
 }
 

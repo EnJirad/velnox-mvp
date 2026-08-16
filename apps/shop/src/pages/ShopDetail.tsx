@@ -25,7 +25,7 @@ interface ShopRow {
   announcement: string | null;
   status: string;
   currency: string;
-  createdAt: string;
+  createdAt: number;
   productCount: number;
   orderCount: number;
   rating: number | null;

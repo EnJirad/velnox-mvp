@@ -10,6 +10,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any -- DB row mappers */
 import type { Db } from "./db";
 import { withTransaction } from "./db";
+import { toMs } from "./dates";
 import { AppError } from "./errors";
 import {
   calcPlatformFee,
@@ -60,7 +61,7 @@ export async function writeLedger(
     amount: Number(r.amount),
     currency: r.currency,
     description: r.description ?? null,
-    createdAt: r.created_at,
+    createdAt: toMs(r.created_at),
   };
 }
 
@@ -88,7 +89,7 @@ export interface SellerFinancialReport {
     orderNumber: string;
     subtotal: number;
     status: string;
-    createdAt: string;
+    createdAt: number;
   }>;
 }
 
@@ -123,7 +124,7 @@ export async function sellerFinancialReport(db: Db, sellerId: string, limit = 10
       grossSales = round2(grossSales + subtotal);
       grossOrders += 1;
       completedOrders += 1;
-      transactions.push({ orderId: o.id, orderNumber: o.order_number, subtotal, status: o.status, createdAt: o.created_at });
+      transactions.push({ orderId: o.id, orderNumber: o.order_number, subtotal, status: o.status, createdAt: toMs(o.created_at) });
     } else if (o.status === "return_requested" || o.status === "returned") {
       returnsValue = round2(returnsValue + subtotal);
       returnedOrders += 1;
@@ -349,9 +350,9 @@ function mapPayout(r: Record<string, any>): SellerPayout {
     status: r.status,
     method: r.method ?? null,
     destination: r.destination ?? null,
-    requestedAt: r.requested_at,
-    processedAt: r.processed_at ?? null,
-    createdAt: r.created_at,
+    requestedAt: toMs(r.requested_at),
+    processedAt: r.processed_at != null ? toMs(r.processed_at) : null,
+    createdAt: toMs(r.created_at),
   };
 }
 

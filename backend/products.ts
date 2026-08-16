@@ -8,6 +8,7 @@
  * metadata (url, storage key, alt, sort order, primary flag, dimensions).
  */
 import type { Db } from "./db";
+import { toMs } from "./dates";
 import { AppError } from "./errors";
 import { priceSchema } from "./validation";
 import { getStorage, isStorageConfigured } from "./storage";
@@ -41,8 +42,8 @@ function mapProduct(r: Record<string, any>): Product {
     status: r.status,
     rejectionReason: r.rejection_reason ?? null,
     supplier: r.supplier ?? null,
-    createdAt: r.created_at,
-    updatedAt: r.updated_at,
+    createdAt: toMs(r.created_at),
+    updatedAt: toMs(r.updated_at),
     shopName: r.shop_name ?? undefined,
     sellerName: r.seller_name ?? undefined,
   };
@@ -66,7 +67,7 @@ function mapImage(r: Record<string, any>): ProductImage {
     isPrimary: Boolean(r.is_primary),
     width: r.width != null ? Number(r.width) : null,
     height: r.height != null ? Number(r.height) : null,
-    createdAt: r.created_at,
+    createdAt: toMs(r.created_at),
   };
 }
 
@@ -246,7 +247,9 @@ const CATALOG_ORDERS: Record<CatalogSort, string> = {
  * approximation.
  */
 export async function catalogProducts(db: Db, opts: CatalogProductsOptions = {}): Promise<{ items: Product[]; total: number }> {
-  const where: string[] = ["p.status = 'published'"];
+  // spec §13: only products from ACTIVE shops are sellable — a pending/rejected
+  // seller's shop never surfaces in the storefront.
+  const where: string[] = ["p.status = 'published'", "s.status = 'active'"];
   const values: unknown[] = [];
   const push = (sql: string, val: unknown) => {
     values.push(val);
@@ -288,6 +291,7 @@ export async function catalogProducts(db: Db, opts: CatalogProductsOptions = {})
   const countRows = await db(
     `SELECT COUNT(*)::int AS total
      FROM products p
+     JOIN shops s ON s.id = p.shop_id
      LEFT JOIN inventory i ON i.product_id = p.id
      LEFT JOIN categories c2 ON c2.id = p.category_id
      ${whereSql}`,

@@ -43,7 +43,7 @@ interface AddressRow {
   latitude: number | null;
   longitude: number | null;
   isDefault: boolean;
-  createdAt: string;
+  createdAt: number;
 }
 
 interface CheckoutResult {

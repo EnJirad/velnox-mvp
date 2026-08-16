@@ -85,7 +85,7 @@ interface OrderDetail {
   shippingFee: number;
   total: number;
   note: string | null;
-  createdAt: string;
+  createdAt: number;
   addressSnapshot: {
     recipientName?: string;
     phone?: string;

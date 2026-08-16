@@ -13,6 +13,7 @@
  * Business rules live HERE (server-side) — never in the frontend.
  */
 import { withTransaction, type Db } from "./db";
+import { toMs } from "./dates";
 import { resolveRules } from "./rules";
 import type {
   AddressSnapshot,
@@ -72,8 +73,8 @@ function mapOrder(r: Record<string, any>): Order {
     addressSnapshot:
       typeof r.address_snapshot === "string" ? JSON.parse(r.address_snapshot) : (r.address_snapshot ?? {}),
     note: r.note ?? null,
-    createdAt: r.created_at,
-    updatedAt: r.updated_at,
+    createdAt: toMs(r.created_at),
+    updatedAt: toMs(r.updated_at),
   };
 }
 

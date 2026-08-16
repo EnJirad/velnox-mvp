@@ -16,7 +16,7 @@
  */
 "use node";
 
-import { action } from "./_generated/server";
+import { serializedAction as action } from "./lib/serialize";
 import type { ActionCtx } from "./_generated/server";
 import type { Id } from "./_generated/dataModel";
 import { api } from "./_generated/api";
@@ -222,11 +222,15 @@ async function applySeller(
     seller.status = "approved";
   }
   const existing = await listShopsBySeller(db, seller.id);
+  // spec §13: only an approved seller's shop is 'active'; a pending/rejected
+  // seller's shop stays 'pending' so nothing is sellable before review.
+  const approved = seller.status === "approved";
   const shop = existing[0] ?? (await createShop(db, {
     sellerId: seller.id,
     name: args.shopName,
     slug: args.slug ?? null,
     description: args.description ?? null,
+    status: approved ? "active" : "pending",
   }));
   return { user, seller, shop };
 }

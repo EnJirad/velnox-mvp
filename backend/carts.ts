@@ -8,6 +8,7 @@
  */
 /* eslint-disable @typescript-eslint/no-explicit-any -- DB row mappers */
 import type { Db } from "./db";
+import { toMs } from "./dates";
 import { AppError } from "./errors";
 import { getProduct } from "./products";
 import { cartItemInputSchema } from "./validation";
@@ -25,7 +26,7 @@ function mapCartItem(r: Record<string, any>): CartItem {
     shopId: r.shop_id,
     quantity: Number(r.quantity),
     priceSnapshot: Number(r.price_snapshot),
-    createdAt: r.created_at,
+    createdAt: toMs(r.created_at),
     // joined columns
     productName: r.product_name ?? undefined,
     productImageUrl: r.primary_image_url ?? undefined,

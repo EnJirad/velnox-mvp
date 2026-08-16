@@ -15,7 +15,7 @@ interface AuditRow {
   entityId: string | null;
   before: Record<string, unknown> | null;
   after: Record<string, unknown> | null;
-  createdAt: string;
+  createdAt: number;
 }
 
 /**

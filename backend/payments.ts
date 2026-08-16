@@ -9,6 +9,7 @@
  * settlement time (see ARCHITECTURE_V3_MIGRATION.md, Phase 4).
  */
 import { withTransaction, type Db } from "./db";
+import { toMs } from "./dates";
 import type { Payment, PaymentMethod, PaymentRowStatus, Refund } from "./types";
 
 const round2 = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100;
@@ -29,8 +30,8 @@ function mapPayment(r: Record<string, any>): Payment {
     method: r.method,
     status: r.status,
     externalRef: r.external_ref ?? null,
-    paidAt: r.paid_at ?? null,
-    createdAt: r.created_at,
+    paidAt: r.paid_at != null ? toMs(r.paid_at) : null,
+    createdAt: toMs(r.created_at),
   };
 }
 
@@ -42,7 +43,7 @@ function mapRefund(r: Record<string, any>): Refund {
     amount: Number(r.amount),
     reason: r.reason ?? null,
     status: r.status,
-    createdAt: r.created_at,
+    createdAt: toMs(r.created_at),
   };
 }
 

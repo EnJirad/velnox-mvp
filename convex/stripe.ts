@@ -13,7 +13,7 @@
  */
 "use node";
 
-import { action } from "./_generated/server";
+import { serializedAction as action } from "./lib/serialize";
 import { api } from "./_generated/api";
 import { v } from "convex/values";
 import { getDb } from "../backend/db";

@@ -27,7 +27,7 @@ interface NotificationRow {
   title: string;
   message: string | null;
   isRead: boolean;
-  createdAt: string;
+  createdAt: number;
 }
 
 const TYPE_ICONS: Record<string, LucideIcon> = {

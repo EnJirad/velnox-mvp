@@ -22,7 +22,8 @@ export interface StoreImage {
   isPrimary: boolean;
   width: number | null;
   height: number | null;
-  createdAt: string;
+  /** Unix ms — Convex boundary serializes Neon timestamptz to ms */
+  createdAt: number;
 }
 
 export interface StoreInventory {
@@ -52,8 +53,9 @@ export interface StoreProduct {
   status: StoreProductStatus;
   rejectionReason: string | null;
   supplier: string | null;
-  createdAt: string;
-  updatedAt: string;
+  /** Unix ms */
+  createdAt: number;
+  updatedAt: number;
   images?: StoreImage[];
   primaryImage?: StoreImage | null;
   inventory?: StoreInventory;
@@ -74,7 +76,8 @@ export interface StoreShop {
   status: "active" | "suspended" | "closed";
   commissionRate: number;
   currency: string;
-  createdAt: string;
+  /** Unix ms */
+  createdAt: number;
 }
 
 export interface SellerProfile {
@@ -86,7 +89,8 @@ export interface SellerProfile {
     status: "pending" | "approved" | "rejected" | "suspended";
     rejectionReason: string | null;
     refundPolicyLimit: number;
-    createdAt: string;
+    /** Unix ms */
+    createdAt: number;
   };
   shops: StoreShop[];
 }
@@ -150,8 +154,9 @@ export interface StoreOrder {
   currency: string;
   addressSnapshot: StoreAddressSnapshot;
   note: string | null;
-  createdAt: string;
-  updatedAt: string;
+  /** Unix ms */
+  createdAt: number;
+  updatedAt: number;
   items?: StoreOrderItem[];
   customerName?: string;
   customerPhone?: string;
@@ -219,8 +224,9 @@ export interface StoreSubscription {
   intervalDays: number;
   nextOrderDate: string; // YYYY-MM-DD
   status: "active" | "paused" | "cancelled";
-  createdAt: string;
-  updatedAt: string;
+  /** Unix ms */
+  createdAt: number;
+  updatedAt: number;
   productName?: string;
   productImageUrl?: string;
   /** joined for the seller VelRepeat panel */
@@ -229,7 +235,8 @@ export interface StoreSubscription {
 }
 
 // ---------------------------------------------------------------------------
-// formatters (Neon timestamps are ISO strings, not Convex ms numbers)
+// formatters — accept both ISO strings (backend-derived values) and Unix ms
+// numbers (Convex boundary serialization of Neon timestamptz).
 // ---------------------------------------------------------------------------
 export function formatBaht(value: number): string {
   return `฿${value.toLocaleString("th-TH", {
@@ -238,7 +245,7 @@ export function formatBaht(value: number): string {
   })}`;
 }
 
-export function formatIsoDate(iso: string): string {
+export function formatIsoDate(iso: string | number): string {
   return new Intl.DateTimeFormat("th-TH", {
     day: "numeric",
     month: "short",
@@ -246,7 +253,7 @@ export function formatIsoDate(iso: string): string {
   }).format(new Date(iso));
 }
 
-export function formatIsoDateTime(iso: string): string {
+export function formatIsoDateTime(iso: string | number): string {
   return new Intl.DateTimeFormat("th-TH", {
     day: "numeric",
     month: "short",
