@@ -131,13 +131,22 @@ async function run() {
   }
 
   // 11. seller ledger vs seller_balances projection (balances derived from ledger)
+  //     Aggregate the ledger per seller FIRST (subquery), then join 1:1 on
+  //     seller_id — seller_balances has exactly one row per seller (seller_id
+  //     UNIQUE), so the balance columns are account-level values, never
+  //     aggregates. Grouping the outer query on b.seller_id alone would leave
+  //     b.available_balance/pending_balance/total_earned ungrouped (PG rejects
+  //     non-PK columns), and joining the raw ledger would multiply rows.
   const balanceMismatch = await pool.query(`
     SELECT b.seller_id, b.available_balance, b.pending_balance, b.total_earned,
-           COALESCE(SUM(CASE WHEN l.type = 'sale' THEN l.amount ELSE 0 END), 0) AS ledger_sales
+           COALESCE(ls.ledger_sales, 0) AS ledger_sales
     FROM seller_balances b
-    LEFT JOIN financial_ledger l ON l.seller_id = b.seller_id
-    GROUP BY b.seller_id
-    HAVING ABS(b.total_earned - COALESCE(SUM(CASE WHEN l.type = 'sale' THEN l.amount ELSE 0 END), 0)) > 0.01
+    LEFT JOIN (
+      SELECT seller_id, SUM(CASE WHEN type = 'sale' THEN amount ELSE 0 END) AS ledger_sales
+      FROM financial_ledger
+      GROUP BY seller_id
+    ) ls ON ls.seller_id = b.seller_id
+    WHERE ABS(b.total_earned - COALESCE(ls.ledger_sales, 0)) > 0.01
     LIMIT 20`);
   report(balanceMismatch.rows, "seller_balances", "total_earned != ledger sales", "warn");
 
