@@ -23,7 +23,7 @@ import {
   XCircle,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Link } from "react-router";
+import { Link, useSearchParams } from "react-router";
 import { toast } from "sonner";
 
 interface Loaded {
@@ -36,10 +36,37 @@ export default function MyOrders() {
   const myOrdersAction = useAction(api.commerce.myOrders);
   const mySubscriptionsAction = useAction(api.commerce.mySubscriptions);
   const pauseSubscription = useAction(api.commerce.pauseSubscription);
+  const stripePaymentStatus = useAction(api.stripe.stripePaymentStatusAction);
+  const [searchParams, setSearchParams] = useSearchParams();
 
   const [data, setData] = useState<Loaded | null>(null);
   const [loading, setLoading] = useState(true);
   const [cancellingId, setCancellingId] = useState<string | null>(null);
+
+  // Stripe hosted-checkout return (Phase 14): `?payment=success|cancelled`
+  // is appended by the session's success/cancel URLs. Verify against the
+  // gateway (the webhook may not have landed yet) and surface the outcome.
+  useEffect(() => {
+    const payment = searchParams.get("payment");
+    const orderId = searchParams.get("order");
+    if (!payment || !orderId) return;
+    setSearchParams({ order: orderId }, { replace: true });
+    if (payment === "cancelled") {
+      toast.error(t("orders.paymentCancelled"));
+      return;
+    }
+    if (payment === "success") {
+      stripePaymentStatus({ parentOrderId: orderId })
+        .then((res) => {
+          const paid = Boolean((res as unknown as { paid?: boolean })?.paid);
+          toast.success(paid ? t("orders.paymentSuccess") : t("orders.paymentPending"));
+          return myOrdersAction({ limit: 50 });
+        })
+        .then((orders) => setData((prev) => (prev ? { ...prev, orders } : prev)))
+        .catch((err) => console.error("Stripe payment status check failed:", err));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams]);
 
   const load = useCallback(async () => {
     const [orders, subscriptions] = await Promise.all([

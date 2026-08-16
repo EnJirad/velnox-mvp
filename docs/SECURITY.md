@@ -6,9 +6,10 @@ Version: 1.0 · Phase 7
 
 ## 1. Authentication
 
-- **Convex Auth** (Email OTP + Anonymous guest) — ระบบเดียวทั้ง 4 เว็บ (§55)
-- `src/convex/auth.ts` + `emailOtp.ts` เป็น **read-only (platform-managed)** — ห้ามแก้
+- **Convex Auth** (Email OTP + Anonymous guest + **Password** สำหรับพนักงาน velcenter) — ระบบเดียวทั้ง 4 เว็บ (§55)
 - OTP อายุ 15 นาที, 6 หลัก; Convex Auth มี built-in rate limiting สำหรับ sign-in/OTP
+- **Password policy** (§9–§11): อย่างน้อย 8 ตัว, มีตัวอักษร + ตัวเลข; hash scrypt ใน `authAccounts` เท่านั้น — บริษัทไม่สามารถดูรหัสผ่านเดิมของใครได้ (`backend/passwords.ts`, `convex/employeeAuth.ts`)
+- OTP email ใช้ `FREEBUFF_EMAIL_API_KEY` จาก Keys/API keys UI — **ห้าม hard-code key ในซอร์ส** (§69)
 - Session จัดการโดย Convex (httpOnly cookie ฝั่ง backend) — **ไม่เก็บ token ใน localStorage** (§45)
 
 ## 2. Authorization Model (ทดสอบใน `tests/security.test.ts`)

@@ -17,4 +17,16 @@ crons.interval(
   api.memory.flushToNeon,
 );
 
+// VelRepeat (spec §19, §47): every 6 hours, turn every ACTIVE subscription
+// whose next_order_date has arrived into a real order (idempotent per
+// subscription + due date, so overlapping runs cannot duplicate). Runs
+// without a user context; the action rejects any signed-in caller and is
+// globally rate-limited (1 run / 6h window), so only the scheduler can drive
+// it and overlapping runs are safe.
+crons.interval(
+  "process due VelRepeat subscriptions",
+  { hours: 6 },
+  api.commerce.processAllDueSubscriptions,
+);
+
 export default crons;

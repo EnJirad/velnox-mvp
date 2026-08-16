@@ -13,7 +13,10 @@ import type * as auth_emailOtp from "../auth/emailOtp.js";
 import type * as center from "../center.js";
 import type * as centerAdmin from "../centerAdmin.js";
 import type * as commerce from "../commerce.js";
+import type * as crons from "../crons.js";
 import type * as customer from "../customer.js";
+import type * as employeeAuth from "../employeeAuth.js";
+import type * as employeeAuthHelpers from "../employeeAuthHelpers.js";
 import type * as goals from "../goals.js";
 import type * as http from "../http.js";
 import type * as intelligence from "../intelligence.js";
@@ -23,6 +26,7 @@ import type * as orders from "../orders.js";
 import type * as products from "../products.js";
 import type * as rateLimit from "../rateLimit.js";
 import type * as sellerOps from "../sellerOps.js";
+import type * as stripe from "../stripe.js";
 import type * as subscriptions from "../subscriptions.js";
 import type * as users from "../users.js";
 
@@ -38,7 +42,10 @@ declare const fullApi: ApiFromModules<{
   center: typeof center;
   centerAdmin: typeof centerAdmin;
   commerce: typeof commerce;
+  crons: typeof crons;
   customer: typeof customer;
+  employeeAuth: typeof employeeAuth;
+  employeeAuthHelpers: typeof employeeAuthHelpers;
   goals: typeof goals;
   http: typeof http;
   intelligence: typeof intelligence;
@@ -48,6 +55,7 @@ declare const fullApi: ApiFromModules<{
   products: typeof products;
   rateLimit: typeof rateLimit;
   sellerOps: typeof sellerOps;
+  stripe: typeof stripe;
   subscriptions: typeof subscriptions;
   users: typeof users;
 }>;

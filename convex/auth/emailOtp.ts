@@ -16,6 +16,15 @@ export const emailOtp = Email({
     return generateRandomString(random, alphabet, 6);
   },
   async sendVerificationRequest({ identifier: email, token }) {
+    // The API key is a server secret — never hard-code it in source (spec §69).
+    // Set FREEBUFF_EMAIL_API_KEY in the project Keys/API keys UI. Without it
+    // OTP emails cannot be sent and sign-in fails loudly instead of silently.
+    const apiKey = process.env.FREEBUFF_EMAIL_API_KEY;
+    if (!apiKey) {
+      throw new Error(
+        "FREEBUFF_EMAIL_API_KEY is not configured — set it in the Keys/API keys UI to enable OTP email",
+      );
+    }
     try {
       await axios.post(
         "https://auth.freebuff.app/send_otp",
@@ -26,7 +35,7 @@ export const emailOtp = Email({
         },
         {
           headers: {
-            "x-api-key": "fb_email_2crN1hqIArZP2bEfvjp5Qik4",
+            "x-api-key": apiKey,
           },
         },
       );

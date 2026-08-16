@@ -9,6 +9,9 @@ export type ErrorCode =
   | "FORBIDDEN"
   | "NOT_FOUND"
   | "INVALID_INPUT"
+  | "VALIDATION_ERROR"
+  | "RATE_LIMITED"
+  | "INTERNAL_ERROR"
   | "OUT_OF_STOCK"
   | "PRICE_CHANGED"
   | "ORDER_NOT_FOUND"
@@ -25,6 +28,9 @@ const THAI_MESSAGES: Record<ErrorCode, string> = {
   FORBIDDEN: "คุณไม่มีสิทธิ์ดำเนินการนี้",
   NOT_FOUND: "ไม่พบข้อมูลที่ขอ",
   INVALID_INPUT: "ข้อมูลไม่ถูกต้อง กรุณาตรวจสอบอีกครั้ง",
+  VALIDATION_ERROR: "ข้อมูลไม่ผ่านการตรวจสอบ กรุณาตรวจสอบอีกครั้ง",
+  RATE_LIMITED: "ทำรายการถี่เกินไป กรุณารอสักครู่แล้วลองใหม่",
+  INTERNAL_ERROR: "เกิดข้อผิดพลาดภายในระบบ กรุณาลองใหม่ในภายหลัง",
   OUT_OF_STOCK: "สินค้าหมดจากสต็อก",
   PRICE_CHANGED: "ราคาสินค้าเปลี่ยนแปลง กรุณาตรวจสอบตะกร้าอีกครั้ง",
   ORDER_NOT_FOUND: "ไม่พบออเดอร์นี้",

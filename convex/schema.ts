@@ -90,6 +90,10 @@ const schema = defineSchema(
 
       role: v.optional(roleValidator), // role of the user. do not remove
       department: v.optional(departmentValidator), // velcenter department scope
+      // true while the employee must pick a new password before using velcenter
+      // (set by HR on creation / password reset — spec §10). Cleared by
+      // setOwnPasswordAction after a successful password change.
+      mustChangePassword: v.optional(v.boolean()),
     }).index("email", ["email"]), // index for the email. do not remove or modify
 
     // business goals / targets for the owner goals dashboard

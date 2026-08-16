@@ -30,7 +30,9 @@ import {
   ArrowLeft,
   CheckCircle2,
   Clock3,
+  CreditCard,
   ImageOff,
+  Loader2,
   MapPin,
   Package,
   RefreshCw,
@@ -75,6 +77,7 @@ interface ShipmentRow {
 interface OrderDetail {
   id: string;
   orderNumber: string;
+  parentOrderId: string;
   status: string;
   paymentStatus: string;
   shippingStatus: string;
@@ -95,6 +98,7 @@ interface OrderDetail {
   };
   items?: OrderItemRow[];
   shipments?: ShipmentRow[];
+  payments?: Array<{ id: string; method: string; status: string; amount: number }>;
 }
 
 const ORDER_STEPS: Array<{ key: string; icon: LucideIcon }> = [
@@ -124,11 +128,13 @@ export default function ShopOrderDetail() {
   const cancelOrder = useAction(api.commerce.cancelOrderAction);
   const requestReturn = useAction(api.customer.requestReturnAction);
   const reviewProduct = useAction(api.customer.reviewProduct);
+  const createStripeCheckout = useAction(api.stripe.createStripeCheckoutAction);
 
   const [order, setOrder] = useState<OrderDetail | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
+  const [paying, setPaying] = useState(false);
 
   // cancel dialog
   const [cancelOpen, setCancelOpen] = useState(false);
@@ -300,6 +306,28 @@ export default function ShopOrderDetail() {
   const shipments = order.shipments ?? [];
   const stepIndex = order.status === "cancelled" ? -1 : ORDER_STEPS.findIndex((s) => s.key === order.status);
 
+  // Phase 14: a pending Stripe "online" payment offers a hosted pay button.
+  const needsOnlinePayment =
+    order.paymentStatus !== "paid" &&
+    (order.payments ?? []).some((p) => p.method === "online" && p.status === "pending");
+
+  const handlePayOnline = async () => {
+    if (!order) return;
+    setPaying(true);
+    try {
+      const { url } = (await createStripeCheckout({
+        orderId: order.parentOrderId || order.id,
+        returnPath: `/orders/${order.id}`,
+      })) as unknown as { url: string };
+      if (!url) throw new Error(t("orderDetail.payOnlinePending"));
+      window.location.assign(url);
+    } catch (err) {
+      console.error("Stripe checkout error:", err);
+      toast.error(err instanceof Error ? err.message : t("orderDetail.payOnlinePending"));
+      setPaying(false);
+    }
+  };
+
   const addressText = [
     order.addressSnapshot.line1,
     order.addressSnapshot.line2,
@@ -334,6 +362,17 @@ export default function ShopOrderDetail() {
               <span className="size-1.5 rounded-full bg-slate-400" />
               {paymentLabel(order.paymentStatus)}
             </Badge>
+            {needsOnlinePayment && (
+              <Button
+                size="sm"
+                className="gap-1.5 bg-slate-900 text-white hover:bg-slate-800"
+                onClick={handlePayOnline}
+                disabled={paying}
+              >
+                {paying ? <Loader2 className="size-3.5 animate-spin" /> : <CreditCard className="size-3.5" />}
+                {t("orderDetail.payOnlineNow")}
+              </Button>
+            )}
           </div>
         </div>
 

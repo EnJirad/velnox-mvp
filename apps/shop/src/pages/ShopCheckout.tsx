@@ -15,6 +15,7 @@ import {
   Banknote,
   CheckCircle2,
   CreditCard,
+  Globe,
   Loader2,
   MapPin,
   QrCode,
@@ -58,6 +59,7 @@ const PAYMENT_METHODS: Array<{ id: string; icon: LucideIcon }> = [
   { id: "promptpay", icon: QrCode },
   { id: "transfer", icon: CreditCard },
   { id: "card", icon: CreditCard },
+  { id: "online", icon: Globe },
 ];
 
 function formatAddress(a: AddressRow): string {
@@ -67,7 +69,8 @@ function formatAddress(a: AddressRow): string {
 
 /** Map a payment-method id to its translation key (e.g. "cod" → "checkout.payCod"). */
 function payKey(id: string): string {
-  return `checkout.pay${id === "promptpay" ? "Promptpay" : id === "cod" ? "Cod" : id === "transfer" ? "Transfer" : "Card"}`;
+  const map: Record<string, string> = { cod: "Cod", promptpay: "Promptpay", transfer: "Transfer", card: "Card", online: "Online" };
+  return `checkout.pay${map[id] ?? "Cod"}`;
 }
 
 export default function ShopCheckout() {
@@ -76,13 +79,28 @@ export default function ShopCheckout() {
   const { lines, total, count, clear, reload, syncing } = useCart();
   const myAddresses = useAction(api.customer.myAddresses);
   const checkoutAction = useAction(api.customer.checkoutAction);
+  const createStripeCheckout = useAction(api.stripe.createStripeCheckoutAction);
+  const stripeConfigured = useAction(api.stripe.stripeConfiguredAction);
   const { track } = useTracking();
 
   const [addresses, setAddresses] = useState<AddressRow[] | null>(null);
   const [selectedAddressId, setSelectedAddressId] = useState<string | null>(null);
   const [paymentMethod, setPaymentMethod] = useState("cod");
   const [submitting, setSubmitting] = useState(false);
+  const [paying, setPaying] = useState(false);
+  const [stripeReady, setStripeReady] = useState<boolean | null>(null);
   const [result, setResult] = useState<CheckoutResult | null>(null);
+
+  // The "online" (Stripe) method only appears when the gateway is configured.
+  useEffect(() => {
+    let cancelled = false;
+    stripeConfigured()
+      .then((ok) => !cancelled && setStripeReady(Boolean(ok)))
+      .catch(() => !cancelled && setStripeReady(false));
+    return () => {
+      cancelled = true;
+    };
+  }, [stripeConfigured]);
 
   const loadAddresses = useCallback(async () => {
     try {
@@ -157,6 +175,24 @@ export default function ShopCheckout() {
     }
   };
 
+  /** "Online" orders: redirect to Stripe's hosted payment page. */
+  const handlePayOnline = async () => {
+    if (!result) return;
+    setPaying(true);
+    try {
+      const { url } = (await createStripeCheckout({
+        orderId: result.parentOrderId,
+        returnPath: `/orders?order=${result.parentOrderId}`,
+      })) as unknown as { url: string };
+      if (!url) throw new Error(t("checkout.payNowDesc"));
+      window.location.assign(url);
+    } catch (err) {
+      console.error("Stripe checkout error:", err);
+      toast.error(err instanceof Error ? err.message : t("checkout.failed"));
+      setPaying(false);
+    }
+  };
+
   // ---- success screen -----------------------------------------------------
   if (result) {
     return (
@@ -195,15 +231,28 @@ export default function ShopCheckout() {
           </div>
 
           <div className="mt-6 flex flex-col gap-2 sm:flex-row">
-            <Button className="flex-1 gap-1.5 bg-slate-900 text-white hover:bg-slate-800" asChild>
-              <Link to="/orders">{t("checkout.trackOrder")}</Link>
-            </Button>
+            {paymentMethod === "online" ? (
+              <Button
+                className="flex-1 gap-1.5 bg-slate-900 text-white hover:bg-slate-800"
+                onClick={handlePayOnline}
+                disabled={paying}
+              >
+                {paying ? <Loader2 className="size-4 animate-spin" /> : <CreditCard className="size-4" />}
+                {t("checkout.payNow")}
+              </Button>
+            ) : (
+              <Button className="flex-1 gap-1.5 bg-slate-900 text-white hover:bg-slate-800" asChild>
+                <Link to="/orders">{t("checkout.trackOrder")}</Link>
+              </Button>
+            )}
             <Button variant="outline" className="flex-1 border-slate-200 text-slate-700" asChild>
               <Link to="/">{t("checkout.continueShopping")}</Link>
             </Button>
           </div>
           <p className="mt-4 text-center text-xs text-slate-400">
-            {t("checkout.paymentNote", { method: t(payKey(paymentMethod)) })}
+            {paymentMethod === "online"
+              ? t("checkout.payNowDesc")
+              : t("checkout.paymentNote", { method: t(payKey(paymentMethod)) })}
           </p>
         </main>
       </div>
@@ -338,7 +387,7 @@ export default function ShopCheckout() {
                 {t("checkout.paymentTitle")}
               </h2>
               <div className="mt-4 grid gap-2.5 sm:grid-cols-2">
-                {PAYMENT_METHODS.map((m) => {
+                {PAYMENT_METHODS.filter((m) => m.id !== "online" || stripeReady !== false).map((m) => {
                   const Icon = m.icon;
                   const active = paymentMethod === m.id;
                   return (

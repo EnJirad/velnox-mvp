@@ -31,6 +31,7 @@ import { createReview, listReviewsByProduct } from "../backend/reviews";
 import { listNotifications, markAllRead, markNotificationRead, unreadCount } from "../backend/notifications";
 import { categoryTree, listCategories } from "../backend/categories";
 import { listOrdersForCustomer, getOrder } from "../backend/orders";
+import { getPaymentsForOrder } from "../backend/payments";
 import { getShipment, listShipmentsForOrder } from "../backend/shipments";
 import { listReturnsForCustomer, requestReturn } from "../backend/returns";
 import { categoryStats, listProducts } from "../backend/products";
@@ -338,16 +339,25 @@ export const orderDetail = action({
   args: { orderId: v.string() },
   handler: async (ctx, args) => {
     const { user } = await requireIdentity(ctx);
-    const order = await getOrder(getDb(), args.orderId);
-    if (!order || order.customerUserId !== user.id) throw new AppError("ORDER_NOT_FOUND", "ออเดอร์นี้ไม่ใช่ของคุณ");
     const db = getDb();
+    const order = await getOrder(db, args.orderId);
+    if (!order || order.customerUserId !== user.id) throw new AppError("ORDER_NOT_FOUND", "ออเดอร์นี้ไม่ใช่ของคุณ");
     const shipmentRows = await listShipmentsForOrder(db, order.id);
     const shipments = [];
     for (const s of shipmentRows) {
       const full = await getShipment(db, s.id);
       if (full) shipments.push(full);
     }
-    return { ...order, shipments };
+    // Payment rows (method/status) + parent order id so the UI can show an
+    // "Pay online" action for pending Stripe payments (Phase 14).
+    const orderRow = await db("SELECT parent_order_id FROM orders WHERE id = $1", [args.orderId]);
+    const paymentRows = await getPaymentsForOrder(db, args.orderId);
+    return {
+      ...order,
+      parentOrderId: orderRow[0]?.parent_order_id ?? order.id,
+      payments: paymentRows.map((p) => ({ id: p.id, method: p.method, status: p.status, amount: p.amount })),
+      shipments,
+    };
   },
 });
 

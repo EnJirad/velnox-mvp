@@ -17,6 +17,7 @@
 import { getDb } from "./db";
 import type { Payment, PaymentMethod, Refund } from "./types";
 import { getPaymentsForOrder, recordPayment, refundPayment } from "./payments";
+import { stripeIsConfigured } from "./stripe";
 
 // ---------------------------------------------------------------------------
 // provider registry
@@ -63,6 +64,12 @@ export const PAYMENT_METHODS: PaymentMethodMeta[] = [
     label: "กระเป๋าเงิน",
     provider: "manual",
     instructions: "ชำระผ่านกระเป๋าเงินของร้านค้า",
+  },
+  {
+    id: "online",
+    label: "ชำระออนไลน์ (บัตร / PromptPay)",
+    provider: "stripe",
+    instructions: "ชำระด้วยบัตรเครดิต/เดบิต หรือ PromptPay ผ่าน Stripe — ตัดเงินทันที",
   },
 ];
 
@@ -130,12 +137,62 @@ class ManualPaymentProvider implements PaymentProvider {
 
 const providers = new Map<PaymentProviderId, PaymentProvider>([
   ["manual", new ManualPaymentProvider()],
-  // TODO(Phase 9 — payment gateway): register real gateways once their API
-  // clients + webhook handlers exist, e.g.:
-  //   ["omise", new OmiseProvider(process.env.OMISE_SECRET_KEY!)],
-  //   ["stripe", new StripeProvider(process.env.STRIPE_SECRET_KEY!)],
 ]);
 
 export function getPaymentProvider(id?: PaymentProviderId | string | null): PaymentProvider {
   return providers.get((id as PaymentProviderId) ?? "manual") ?? providers.get("manual")!;
+}
+
+/** True when a real online gateway (Stripe) is live for "online" payments. */
+export function onlinePaymentsEnabled(): boolean {
+  return stripeIsConfigured();
+}
+
+/**
+ * Stripe gateway provider — implements the same PaymentProvider contract the
+ * commerce core uses, but through the Stripe API (backend/stripe.ts). The
+ * "create" step is a hosted Checkout Session (card + PromptPay) and the
+ * success confirmation is driven by the /stripe/webhook (idempotent).
+ */
+class StripePaymentProvider implements PaymentProvider {
+  readonly id = "stripe" as const;
+  readonly name = "Stripe (card / PromptPay)";
+
+  async createPayment(input: {
+    orderId: string;
+    amount: number;
+    method: PaymentMethod;
+    externalRef?: string | null;
+  }): Promise<Payment> {
+    // Orders paid online always go through the Checkout Session flow created
+    // by convex/stripe.ts (createStripeCheckoutAction). This path records the
+    // pending row the same way checkout() does — the session reference is
+    // attached when the session is created.
+    return recordPayment({
+      orderId: input.orderId,
+      amount: input.amount,
+      method: input.method,
+      externalRef: input.externalRef ?? null,
+    });
+  }
+
+  async verifyPayment(orderId: string): Promise<{ payments: Payment[]; paid: boolean }> {
+    const payments = await getPaymentsForOrder(getDb(), orderId);
+    return { payments, paid: payments.some((p) => p.status === "succeeded") };
+  }
+
+  async refundPayment(input: {
+    orderId: string;
+    amount: number;
+    reason?: string | null;
+  }): Promise<Refund> {
+    return refundPayment({ orderId: input.orderId, amount: input.amount, reason: input.reason ?? null });
+  }
+}
+
+// Real gateway (Phase 14): the Stripe provider registers itself only when the
+// server secret is configured (Convex deployment env). Without keys the
+// platform keeps working exactly as before — everything falls back to manual.
+if (stripeIsConfigured()) {
+  providers.set("stripe", new StripePaymentProvider());
 }

@@ -2,6 +2,9 @@ import { Logo } from "@velnox/shared/components/Logo";
 import { MobileTabBar, type MobileTabItem } from "@velnox/shared/components/MobileTabBar";
 import { SiteSwitcher } from "@velnox/shared/components/SiteSwitcher";
 import { UserMenu } from "@velnox/shared/components/UserMenu";
+import AuditLogTab from "../components/AuditLogTab";
+import ChangePasswordScreen from "../components/ChangePasswordScreen";
+import EmployeeManager from "../components/EmployeeManager";
 import { Badge } from "@velnox/shared/components/ui/badge";
 import { Button } from "@velnox/shared/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@velnox/shared/components/ui/card";
@@ -52,6 +55,7 @@ import {
   Boxes,
   BrainCircuit,
   Crown,
+  History,
   Loader2,
   Megaphone,
   Package,
@@ -70,7 +74,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router";
 import { toast } from "sonner";
 
-type Tab = "overview" | "orders" | "intel" | "products" | "staff" | "settings";
+type Tab = "overview" | "orders" | "intel" | "products" | "staff" | "audit" | "settings";
 
 const DEPARTMENTS: { id: string; label: string }[] = [
   { id: "general", label: "ทั่วไป" },
@@ -104,6 +108,8 @@ function canSeeTab(tab: Tab, role?: string, department?: string): boolean {
       return true;
     case "staff":
       return role === "owner";
+    case "audit":
+      return role === "owner" || role === "admin";
     case "settings":
       return role === "owner" || (role === "admin" && department === "general");
   }
@@ -150,6 +156,9 @@ export default function Center() {
     { to: "/?tab=products", label: "สินค้า", icon: Package, activeMatch: (_, search) => new URLSearchParams(search).get("tab") === "products" },
     ...(isOwner
       ? [{ to: "/?tab=staff", label: "พนักงาน", icon: Users, activeMatch: (_, search) => new URLSearchParams(search).get("tab") === "staff" } as MobileTabItem]
+      : []),
+    ...(canSeeTab("audit", userRole, userDepartment)
+      ? [{ to: "/?tab=audit", label: "Audit", icon: History, activeMatch: (_, search) => new URLSearchParams(search).get("tab") === "audit" } as MobileTabItem]
       : []),
     ...(canSeeTab("settings", userRole, userDepartment)
       ? [{ to: "/?tab=settings", label: "ตั้งค่า", icon: Settings, activeMatch: (_, search) => new URLSearchParams(search).get("tab") === "settings" } as MobileTabItem]
@@ -379,6 +388,13 @@ export default function Center() {
     ];
   }, [overview, marketKpi]);
 
+  // Spec §10: an employee who was just created / reset must pick a new
+  // password before the company dashboard is usable. `users.currentUser` is
+  // reactive, so the gate unmounts itself once mustChangePassword flips false.
+  if (user?.mustChangePassword === true) {
+    return <ChangePasswordScreen />;
+  }
+
   return (
     <div className="min-h-screen bg-[#F8FAFC] text-slate-900">
       <header className="sticky top-0 z-40 border-b border-slate-200 bg-white/90 backdrop-blur">
@@ -447,6 +463,11 @@ export default function Center() {
             {isOwner && (
               <TabsTrigger value="staff" className="gap-1.5 rounded-[10px]">
                 <Users className="size-4" /> พนักงาน
+              </TabsTrigger>
+            )}
+            {canSeeTab("audit", userRole, userDepartment) && (
+              <TabsTrigger value="audit" className="gap-1.5 rounded-[10px]">
+                <History className="size-4" /> Audit Logs
               </TabsTrigger>
             )}
             {canSeeTab("settings", userRole, userDepartment) && (
@@ -1103,6 +1124,10 @@ export default function Center() {
                   </p>
                 </CardContent>
               </Card>
+
+              {/* Employee accounts: create / reset password / permissions (spec §9–§11, §42) */}
+              <EmployeeManager />
+
               <div className="hidden overflow-x-auto rounded-xl border border-slate-200 bg-white md:block">
                 <Table className="min-w-[560px]">
                   <TableHeader>
@@ -1276,6 +1301,9 @@ export default function Center() {
               </p>
             </TabsContent>
           )}
+
+          {/* ============ Audit Logs (spec §44) ============ */}
+          <AuditLogTab />
 
           {/* ============ Settings ============ */}
           {canSeeTab("settings", userRole, userDepartment) && (

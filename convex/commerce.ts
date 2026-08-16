@@ -54,6 +54,11 @@ import {
   updateOrderStatus,
 } from "../backend/orders";
 import { recordPayment, refundPayment } from "../backend/payments";
+import {
+  refundStripePayment,
+  retrieveCheckoutSession,
+  stripeIsConfigured,
+} from "../backend/stripe";
 import { audit } from "../backend/audit";
 import { AppError } from "../backend/errors";
 import { gpsSchema } from "../backend/validation";
@@ -728,6 +733,42 @@ export const refundAction = action({
   args: { orderId: v.string(), amount: v.number(), reason: v.optional(v.string()) },
   handler: async (ctx, args) => {
     await sellerOwnsOrder(ctx, args.orderId);
+    const db = getDb();
+
+    // Phase 14 — real gateway refunds: when this order was paid online
+    // (Stripe), push the money back at Stripe FIRST (idempotency key derived
+    // from order + amount so retries can never double-refund), then record
+    // the local refund row. Manual payments (COD/transfer) stay local-only.
+    if (stripeIsConfigured()) {
+      const online = await db(
+        `SELECT external_ref FROM payments
+         WHERE order_id = $1 AND method = 'online' AND status = 'succeeded' AND external_ref IS NOT NULL
+         LIMIT 1`,
+        [args.orderId],
+      );
+      if (online[0]?.external_ref) {
+        try {
+          const session = await retrieveCheckoutSession(online[0].external_ref);
+          const pi = session.payment_intent;
+          const paymentIntentId =
+            typeof pi === "string" ? pi : (pi as { id?: string } | null)?.id ?? null;
+          if (paymentIntentId) {
+            await refundStripePayment({
+              paymentIntentId,
+              amountThb: args.amount,
+              reason: args.reason ?? null,
+              idempotencyKey: `velnox-refund-${args.orderId}-${Math.round(args.amount * 100)}`,
+            });
+          }
+        } catch (err) {
+          // Gateway refund failure must NOT silently produce a local refund
+          // (money stays at the gateway) — surface it for manual handling.
+          console.error("[commerce] Stripe refund failed:", err);
+          throw new AppError("INTERNAL_ERROR", "การคืนเงินออนไลน์ล้มเหลว — ติดต่อผู้ดูแลระบบ");
+        }
+      }
+    }
+
     const refund = await refundPayment({ orderId: args.orderId, amount: args.amount, reason: args.reason ?? null });
     await recordEvent(ctx, "RefundProcessed", args.orderId, { amount: refund.amount });
     return refund;
@@ -892,6 +933,64 @@ export const processDueSubscriptions = action({
       }
     }
     return { created, skipped, sellerId: seller.id };
+  },
+});
+
+/**
+ * VelRepeat platform scheduler (spec §19, §47): runs as a Convex cron and
+ * processes EVERY seller's due subscriptions (no seller scoping — that is the
+ * point). Orders go through the same commerce core as the seller-triggered
+ * path (inventory reserve + snapshots + commission), keyed with the
+ * `velrepeat-<subId>-<nextOrderDate>` idempotency key so overlapping runs can
+ * never duplicate an order. Cron-only: crons run without a user identity, and
+ * a strict global rate limit (1 run / 6h window) prevents clients from
+ * forcing the scheduler's work.
+ */
+export const processAllDueSubscriptions = action({
+  args: {},
+  handler: async (ctx) => {
+    // Cron-only guard: Convex crons run without a user identity. Combined with
+    // the global rate limit below, a client can never force the scheduler's
+    // work (and even a forced run is idempotent per subscription + due date).
+    if (await ctx.auth.getUserIdentity()) {
+      throw new AppError("FORBIDDEN", "Cron only");
+    }
+    await enforceRateLimit(ctx, {
+      name: "velrepeat_platform_scheduler",
+      key: "scheduler",
+      max: 1,
+      windowMs: 6 * 60 * 60 * 1000, // the cron fires every 6h — one run per window
+    });
+    const db = getDb();
+    const today = new Date().toISOString().slice(0, 10);
+    const due = await getDueSubscriptions(db, today);
+
+    let created = 0;
+    let skipped = 0;
+    for (const sub of due) {
+      try {
+        const order = await createOrder({
+          customerUserId: sub.customerUserId,
+          items: [{ productId: sub.productId, quantity: sub.quantity }],
+          addressSnapshot: { recipientName: "", phone: "", line1: "VelRepeat auto-order" },
+          idempotencyKey: `velrepeat-${sub.id}-${sub.nextOrderDate}`,
+          shippingFee: 0,
+          note: "VelRepeat automatic order",
+        });
+        await advanceSubscription(db, sub.id);
+        await recordEvent(ctx, "VelRepeatOrderCreated", order.id, {
+          subscriptionId: sub.id,
+          orderNumber: order.orderNumber,
+        });
+        created++;
+      } catch (err) {
+        skipped++;
+        await recordEvent(ctx, "VelRepeatOrderSkipped", sub.id, {
+          reason: err instanceof Error ? err.message : "insufficient stock",
+        });
+      }
+    }
+    return { created, skipped };
   },
 });
 
