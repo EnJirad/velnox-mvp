@@ -4,6 +4,12 @@
 @import "tw-animate-css";
 @custom-variant dark (&:is(.dark *));
 
+/* Tailwind v4 auto-detection scans each Vite app root (apps/*) but NOT the
+   shared package, so classes used only in packages/shared components (shadcn
+   ui, MobileTabBar, ...) were missing from every app's compiled CSS. Declare
+   the shared source explicitly — this file lives in packages/shared/src. */
+@source "./";
+
 /* DO NOT CHANGE */
 @theme inline {
   --radius-sm: calc(var(--radius) - 4px);
