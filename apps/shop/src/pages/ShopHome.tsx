@@ -101,7 +101,23 @@ export default function ShopHome() {
   const publicShops = useAction(api.customer.publicShops);
   const recordInterest = useAction(api.commerce.recordInterest);
   const { track } = useTracking();
-  const settings = useQueryLegacySettings();
+  const storefrontSettings = useAction(api.storefront.settings);
+  const [settings, setSettings] = useState<{
+    shopName?: string | null;
+    tagline?: string | null;
+    phone?: string | null;
+    address?: string | null;
+    announcement?: string | null;
+  } | null>(null);
+  useEffect(() => {
+    let alive = true;
+    storefrontSettings()
+      .then((s) => alive && setSettings(s))
+      .catch(() => alive && setSettings(null));
+    return () => {
+      alive = false;
+    };
+  }, [storefrontSettings]);
   const { add } = useCart();
 
   const productsData = useCommerceData(
@@ -809,9 +825,4 @@ export default function ShopHome() {
   );
 }
 
-/** Legacy store settings (Convex storeSettings doc) — kept as-is for now. */
-import { useQuery } from "convex/react";
 
-function useQueryLegacySettings() {
-  return useQuery(api.center.getSettings);
-}

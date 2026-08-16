@@ -293,9 +293,27 @@ export default function Center() {
   };
   // Employee list returns [] for non-owners (the staff tab is owner-only anyway).
   const users = useQuery(api.users.listUsers);
-  const settings = useQuery(api.center.getSettings);
   const setUserAccess = useMutation(api.users.setUserAccess);
-  const updateSettings = useMutation(api.center.updateSettings);
+
+  // Storefront settings now live in Neon platform_settings (spec §15–16) —
+  // read/write through the center actions (owner/admin, audit-logged).
+  const getPlatformSettingsAction = useAction(api.centerAdmin.getPlatformSettings);
+  const updatePlatformSettingAction = useAction(api.centerAdmin.updatePlatformSettingAction);
+  const [settings, setSettings] = useState<Record<string, unknown> | null>(null);
+  useEffect(() => {
+    let alive = true;
+    getPlatformSettingsAction()
+      .then((res) => {
+        if (!alive) return;
+        const map: Record<string, unknown> = {};
+        for (const s of res.settings ?? []) map[s.key] = s.value;
+        setSettings(map);
+      })
+      .catch(() => alive && setSettings(null));
+    return () => {
+      alive = false;
+    };
+  }, [getPlatformSettingsAction]);
 
   // Marketplace KPIs + orders come from the Neon commerce core (velcenter used
   // to read legacy Convex tables that checkout never writes → 0/wrong numbers).
@@ -452,11 +470,11 @@ export default function Center() {
   useEffect(() => {
     if (settings && !settingsLoaded) {
       setForm({
-        shopName: settings.shopName ?? "",
-        tagline: settings.tagline ?? "",
-        phone: settings.phone ?? "",
-        address: settings.address ?? "",
-        announcement: settings.announcement ?? "",
+        shopName: (settings["store_shop_name"] as string) ?? "",
+        tagline: (settings["store_tagline"] as string) ?? "",
+        phone: (settings["store_phone"] as string) ?? "",
+        address: (settings["store_address"] as string) ?? "",
+        announcement: (settings["store_announcement"] as string) ?? "",
       });
       setSettingsLoaded(true);
     }
@@ -466,13 +484,18 @@ export default function Center() {
     event.preventDefault();
     setSavingSettings(true);
     try {
-      await updateSettings({
-        shopName: form.shopName || undefined,
-        tagline: form.tagline || undefined,
-        phone: form.phone || undefined,
-        address: form.address || undefined,
-        announcement: form.announcement || undefined,
-      });
+      // Each save is a separate audited platform-setting update (Neon).
+      await Promise.all(
+        (
+          [
+            ["store_shop_name", form.shopName],
+            ["store_tagline", form.tagline],
+            ["store_phone", form.phone],
+            ["store_address", form.address],
+            ["store_announcement", form.announcement],
+          ] as [string, string][]
+        ).map(([key, value]) => updatePlatformSettingAction({ key, value: value.trim() })),
+      );
       toast.success("บันทึกตั้งค่าร้านแล้ว");
     } catch (error) {
       console.error("Update settings error:", error);
