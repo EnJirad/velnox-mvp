@@ -294,6 +294,42 @@ cron VelRepeat + settlement, staff permission UI, variants UI, categories ผู
 
 Env ใหม่ที่ต้องตั้ง (Convex deployment env / Keys UI): `BOOTSTRAP_OWNER_SECRET` — ดู docs/ENVIRONMENT.md
 
+## Round 16 — Convex production mismatch + Neon migrations (2026-08-16)
+
+**Root cause ของ `users:ownerBootstrapStatus` not found (production):**
+- ฟังก์ชันมีอยู่ใน source ถูกต้อง (`convex/users.ts`, public query, ชื่อตรงกับ
+  frontend `api.users.ownerBootstrapStatus`) และ codegen ผ่าน
+- สาเหตุคือ **production Convex deployment เก่า** — frontend (velcenter.vercel.app)
+  ถูก deploy จาก commit ใหม่แล้ว แต่ Convex deployment ยังไม่มีฟังก์ชันใหม่
+  (ขั้นตอน `npx convex deploy` ใน Vercel build ไม่ได้ push หรือ push ไม่ทัน)
+- วิธีแก้ (ต้องรันจากเครื่องของผู้ใช้ เพราะ sandbox นี้ Convex เป็น local/anonymous):
+  ```bash
+  npx convex login
+  npx convex deploy          # push ฟังก์ชันล่าสุดไป production deployment
+  npx convex run users:ownerBootstrapStatus   # ตรวจว่ามีจริง
+  ```
+  หรือตั้ง `CONVEX_DEPLOY_KEY` ใน Vercel env แล้ว redeploy velcenter
+
+**Smart Reorder บน Neon (#14):**
+- ใหม่ `backend/reorder.ts` + `api.commerce.sellerReorderSuggestionsAction` —
+  คำนวณจาก Neon `order_items` + `orders` (ยอดขายจริง รอบการซื้อเฉลี่ย
+  คาดการณ์รอบถัดไป ความมั่นใจ high/medium/low/not_enough_data) + inventory
+- Reorder.tsx เขียนใหม่: ใช้ข้อมูลจริง ไม่มี fake prediction (ข้อมูลไม่พอ = "ข้อมูลไม่พอ")
+  ลบ dependency `api.products.*` (legacy Convex) ออกจากหน้า — CRUD สินค้าอยู่ที่ MyShop
+
+**Storefront settings บน Neon (#15–16):**
+- เพิ่ม keys `store_shop_name/tagline/phone/address/announcement` ใน
+  `platform_settings` (Neon) + `storefrontSettings()` (public subset เท่านั้น)
+- ใหม่ `api.storefront.settings` (public action) — velshop ShopHome อ่านจากนี้แทน
+  legacy Convex `storeSettings`
+- VelCenter settings tab เขียน/อ่านผ่าน `centerAdmin.getPlatformSettings` +
+  `updatePlatformSettingAction` (Neon, owner/admin, audit-logged) แทน
+  `api.center.updateSettings` (Convex storeSettings) — legacy storeSettings
+  ไม่มี production read/write เหลือแล้ว (ยกเว้นในโค้ด legacy ที่ไม่ได้ใช้)
+
+**Security sweep (#18/#22):** grep mock/dummy/fake/placeholder ใน production code
+สะอาด; ไม่มี becomeSeller/becomeOwner หลงเหลือ; ไม่มี Math.random ใน dashboard
+
 ## ไฟล์ที่ตรวจแล้ว (สำหรับอ้างอิง)
 
 - Docs: README.md, docs/ARCHITECTURE.md, docs/GAP_ANALYSIS.md, docs/PHASE_PLAN.md, docs/Velnox-CPNS.md, docs/CUSTOMER_MEMORY.md, docs/PHASE-10/11/12/13-REPORT.md, docs/PRODUCTION.md, docs/SECURITY.md

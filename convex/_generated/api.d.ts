@@ -26,6 +26,7 @@ import type * as orders from "../orders.js";
 import type * as products from "../products.js";
 import type * as rateLimit from "../rateLimit.js";
 import type * as sellerOps from "../sellerOps.js";
+import type * as storefront from "../storefront.js";
 import type * as stripe from "../stripe.js";
 import type * as subscriptions from "../subscriptions.js";
 import type * as users from "../users.js";
@@ -55,6 +56,7 @@ declare const fullApi: ApiFromModules<{
   products: typeof products;
   rateLimit: typeof rateLimit;
   sellerOps: typeof sellerOps;
+  storefront: typeof storefront;
   stripe: typeof stripe;
   subscriptions: typeof subscriptions;
   users: typeof users;

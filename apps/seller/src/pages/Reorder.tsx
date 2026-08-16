@@ -1,764 +1,290 @@
 import { AppHeader } from "@velnox/shared/components/AppHeader";
-import { ProductFormDialog } from "@velnox/shared/components/reorder/ProductFormDialog";
-import { ReorderDialog } from "@velnox/shared/components/reorder/ReorderDialog";
-import { StockDialog } from "@velnox/shared/components/reorder/StockDialog";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@velnox/shared/components/ui/alert-dialog";
 import { Badge } from "@velnox/shared/components/ui/badge";
 import { Button } from "@velnox/shared/components/ui/button";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@velnox/shared/components/ui/dropdown-menu";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@velnox/shared/components/ui/table";
 import { api } from "@convex/_generated/api";
-import {
-  PRODUCT_CATEGORY_META,
-  STATUS_META,
-  effectiveCycleDays,
-  formatDays,
-  formatNumber,
-  formatThaiDate,
-  reorderInfo,
-  type Product,
-} from "@velnox/shared/lib/reorder";
-import { formatBaht } from "@velnox/shared/lib/shop";
-import { useMutation, useQuery } from "convex/react";
+import { PRODUCT_CATEGORY_META, formatBaht } from "@velnox/shared/lib/commerce";
+import { useAction } from "convex/react";
 import {
   AlertTriangle,
-  Boxes,
   CalendarClock,
   CheckCircle2,
-  Eye,
-  EyeOff,
-  MinusCircle,
-  MoreHorizontal,
+  Loader2,
   Package,
-  Pencil,
-  Plus,
   RefreshCw,
-  Trash2,
+  ShoppingBag,
+  Store,
+  TrendingUp,
 } from "lucide-react";
-import { useMemo, useState } from "react";
-import { toast } from "sonner";
+import { useEffect, useMemo, useState } from "react";
+
+interface ReorderSuggestion {
+  product: {
+    id: string;
+    name: string;
+    category: string;
+    price: number;
+    unit: string;
+    status: string;
+    primaryImage?: { thumbUrl?: string; url: string } | null;
+    inventory?: { available: number; quantity: number; reorderLevel: number };
+  };
+  available: number;
+  reorderLevel: number;
+  lowStock: boolean;
+  outOfStock: boolean;
+  purchaseCount: number;
+  unitsSold: number;
+  lastPurchaseAt: string | null;
+  avgCycleDays: number | null;
+  estimatedNextPurchase: string | null;
+  confidence: "high" | "medium" | "low" | "not_enough_data";
+  due: boolean;
+}
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+function shortDate(isoDate: string | null): string {
+  if (!isoDate) return "—";
+  const d = new Date(isoDate);
+  return d.toLocaleDateString("th-TH", { day: "numeric", month: "short" });
+}
+
+const CONFIDENCE_META: Record<
+  ReorderSuggestion["confidence"],
+  { label: string; className: string }
+> = {
+  high: { label: "มั่นใจสูง", className: "bg-emerald-50 text-emerald-700 ring-emerald-600/15" },
+  medium: { label: "มั่นใจปานกลาง", className: "bg-sky-50 text-sky-700 ring-sky-600/15" },
+  low: { label: "ข้อมูลน้อย", className: "bg-amber-50 text-amber-700 ring-amber-600/15" },
+  not_enough_data: { label: "ข้อมูลไม่พอ", className: "bg-slate-100 text-slate-500 ring-slate-600/10" },
+};
 
 export default function Reorder() {
-  const products = useQuery(api.products.list);
-  const purchases = useQuery(api.products.listPurchases, { limit: 10 });
-  const removeProduct = useMutation(api.products.remove);
-  const togglePublished = useMutation(api.products.togglePublished);
+  const sellerReorder = useAction(api.commerce.sellerReorderSuggestionsAction);
+  const [suggestions, setSuggestions] = useState<ReorderSuggestion[] | null>(null);
 
-  const [formOpen, setFormOpen] = useState(false);
-  const [editingProduct, setEditingProduct] = useState<Product | null>(null);
-  const [reorderProduct, setReorderProduct] = useState<Product | null>(null);
-  const [saleProduct, setSaleProduct] = useState<Product | null>(null);
-  const [deleteProduct, setDeleteProduct] = useState<Product | null>(null);
-  const [deleting, setDeleting] = useState(false);
-
-  const { due, upcoming, lowStock, attention, byId } = useMemo(() => {
-    const list = products ?? [];
-    const dueList: Product[] = [];
-    const upcomingList: Product[] = [];
-    const lowList: Product[] = [];
-    const attentionList: Product[] = [];
-    const map = new Map<string, Product>();
-
-    for (const p of list) {
-      map.set(p._id, p);
-      const info = reorderInfo(p);
-      if (info.status === "due") dueList.push(p);
-      if (info.status === "upcoming") upcomingList.push(p);
-      if (info.lowStock) lowList.push(p);
-      if (info.status === "due" || info.lowStock) attentionList.push(p);
-    }
-
-    const sortByUrgency = (a: Product, b: Product) => {
-      const aInfo = reorderInfo(a);
-      const bInfo = reorderInfo(b);
-      const aDue = aInfo.status === "due" ? 0 : 1;
-      const bDue = bInfo.status === "due" ? 0 : 1;
-      if (aDue !== bDue) return aDue - bDue;
-      const aLeft = aInfo.daysUntilDue ?? Number.MAX_SAFE_INTEGER;
-      const bLeft = bInfo.daysUntilDue ?? Number.MAX_SAFE_INTEGER;
-      return aLeft - bLeft;
-    };
-
-    return {
-      due: dueList,
-      upcoming: upcomingList,
-      lowStock: lowList,
-      attention: attentionList.sort(sortByUrgency),
-      byId: map,
-    };
-  }, [products]);
-
-  const recentPurchases = useMemo(() => {
-    const list = purchases ?? [];
-    return list
-      .filter((p) => byId.has(p.productId))
-      .map((p) => ({ purchase: p, product: byId.get(p.productId)! }))
-      .slice(0, 6);
-  }, [purchases, byId]);
-
-  const handleTogglePublish = async (product: Product) => {
-    try {
-      await togglePublished({
-        productId: product._id,
-        published: !product.published,
+  useEffect(() => {
+    let alive = true;
+    sellerReorder()
+      .then((rows) => alive && setSuggestions(rows as unknown as ReorderSuggestion[]))
+      .catch((error) => {
+        console.error("Reorder load error:", error);
+        alive && setSuggestions([]);
       });
-      toast.success(product.published ? "ปิดการขายหน้าร้านแล้ว" : "ประกาศขายหน้าร้านแล้ว 🛍️");
-    } catch (error) {
-      console.error("Toggle publish error:", error);
-      toast.error(error instanceof Error ? error.message : "ไม่สำเร็จ กรุณาลองอีกครั้ง");
+    return () => {
+      alive = false;
+    };
+  }, [sellerReorder]);
+
+  const { due, upcoming, noData } = useMemo(() => {
+    const list = suggestions ?? [];
+    const dueList: ReorderSuggestion[] = [];
+    const upcomingList: ReorderSuggestion[] = [];
+    const noDataList: ReorderSuggestion[] = [];
+    for (const s of list) {
+      if (s.due) {
+        dueList.push(s);
+      } else if (
+        s.estimatedNextPurchase !== null &&
+        new Date(s.estimatedNextPurchase).getTime() - Date.now() <= 14 * DAY_MS
+      ) {
+        upcomingList.push(s);
+      } else if (s.purchaseCount === 0) {
+        noDataList.push(s);
+      }
     }
+    return { due: dueList, upcoming: upcomingList, noData: noDataList };
+  }, [suggestions]);
+
+  if (suggestions === null) {
+    return (
+      <div className="min-h-screen bg-[#F8FAFC] text-slate-900">
+        <AppHeader />
+        <main className="flex min-h-[60vh] items-center justify-center px-4">
+          <Loader2 className="size-6 animate-spin text-slate-300" />
+        </main>
+      </div>
+    );
+  }
+
+  const stats = [
+    { icon: AlertTriangle, label: "ต้องสั่งซื้อซ้ำ", value: due.length, accent: "text-rose-600", chip: "bg-rose-50" },
+    { icon: CalendarClock, label: "กำลังจะถึงกำหนด", value: upcoming.length, accent: "text-amber-600", chip: "bg-amber-50" },
+    { icon: Package, label: "สินค้าทั้งหมด", value: suggestions.length, accent: "text-slate-700", chip: "bg-slate-100" },
+    { icon: ShoppingBag, label: "สินค้าที่มีประวัติขาย", value: suggestions.filter((s) => s.purchaseCount > 0).length, accent: "text-emerald-600", chip: "bg-emerald-50" },
+  ];
+
+  const Card = ({ s }: { s: ReorderSuggestion }) => {
+    const meta = PRODUCT_CATEGORY_META[s.product.category as keyof typeof PRODUCT_CATEGORY_META] ?? PRODUCT_CATEGORY_META.general;
+    const conf = CONFIDENCE_META[s.confidence];
+    return (
+      <div className="rounded-xl border border-slate-200 bg-white p-4 transition-all duration-200">
+        <div className="flex items-start gap-3">
+          {s.product.primaryImage ? (
+            <img
+              src={s.product.primaryImage.thumbUrl || s.product.primaryImage.url}
+              alt={s.product.name}
+              className="size-12 shrink-0 rounded-[10px] object-cover"
+              loading="lazy"
+            />
+          ) : (
+            <span className="flex size-12 shrink-0 items-center justify-center rounded-[10px] bg-slate-100">
+              <Package className="size-5 text-slate-300" />
+            </span>
+          )}
+          <div className="min-w-0 flex-1">
+            <p className="truncate font-medium text-slate-900">{s.product.name}</p>
+            <p className="mt-0.5 text-xs text-slate-400">
+              {meta.label} · {formatBaht(s.product.price)}/{s.product.unit}
+            </p>
+            <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+              <Badge className={`gap-1 rounded-full ring-1 ring-inset ${conf.className}`}>{conf.label}</Badge>
+              {s.outOfStock ? (
+                <Badge className="gap-1 rounded-full bg-rose-50 text-rose-700 ring-1 ring-inset ring-rose-600/15">
+                  <AlertTriangle className="size-3" /> สินค้าหมด
+                </Badge>
+              ) : s.lowStock ? (
+                <Badge className="gap-1 rounded-full bg-amber-50 text-amber-700 ring-1 ring-inset ring-amber-600/15">
+                  <AlertTriangle className="size-3" /> ต่ำกว่าจุดสั่งซื้อ
+                </Badge>
+              ) : (
+                <Badge className="gap-1 rounded-full bg-emerald-50 text-emerald-700 ring-1 ring-inset ring-emerald-600/15">
+                  <CheckCircle2 className="size-3" /> สต็อกปกติ
+                </Badge>
+              )}
+            </div>
+          </div>
+        </div>
+
+        <div className="mt-3 grid grid-cols-2 gap-2 rounded-[10px] bg-slate-50 p-3 text-xs sm:grid-cols-4">
+          <div>
+            <p className="text-slate-400">สต็อกคงเหลือ</p>
+            <p className="mt-0.5 font-semibold tabular-nums text-slate-900">
+              {s.available} <span className="font-normal text-slate-400">/ จุดสั่ง {s.reorderLevel}</span>
+            </p>
+          </div>
+          <div>
+            <p className="text-slate-400">ขายแล้ว</p>
+            <p className="mt-0.5 font-semibold tabular-nums text-slate-900">
+              {s.unitsSold} {s.product.unit}
+            </p>
+          </div>
+          <div>
+            <p className="text-slate-400">รอบการซื้อเฉลี่ย</p>
+            <p className="mt-0.5 font-semibold tabular-nums text-slate-900">
+              {s.avgCycleDays !== null ? `${s.avgCycleDays} วัน` : "—"}
+            </p>
+          </div>
+          <div>
+            <p className="text-slate-400">คาดว่าต้องสั่ง</p>
+            <p className="mt-0.5 font-semibold tabular-nums text-slate-900">
+              {s.estimatedNextPurchase ? shortDate(s.estimatedNextPurchase) : "ยังไม่พอประมาณ"}
+            </p>
+          </div>
+        </div>
+
+        <div className="mt-3 flex items-center justify-between gap-2">
+          <p className="text-xs text-slate-400">
+            {s.purchaseCount > 0
+              ? `สั่งซื้อ ${s.purchaseCount} ครั้ง · ล่าสุด ${shortDate(s.lastPurchaseAt)}`
+              : "ยังไม่มีประวัติการขาย — เริ่มขายเพื่อให้ระบบคาดการณ์ได้"}
+          </p>
+          <Button size="sm" variant="outline" className="shrink-0 gap-1.5 border-slate-200 text-slate-600" asChild>
+            <a href="/seller/shop">
+              <Store className="size-3.5" />
+              จัดการสต็อก
+            </a>
+          </Button>
+        </div>
+      </div>
+    );
   };
 
-  const handleDelete = async () => {
-    if (!deleteProduct) return;
-    setDeleting(true);
-    try {
-      await removeProduct({ productId: deleteProduct._id });
-      toast.success("ลบสินค้าแล้ว");
-      setDeleteProduct(null);
-    } catch (error) {
-      console.error("Product delete error:", error);
-      toast.error("ลบไม่สำเร็จ กรุณาลองอีกครั้ง");
-    } finally {
-      setDeleting(false);
-    }
-  };
+  const Section = ({ title, items, empty }: { title: string; items: ReorderSuggestion[]; empty: string }) => (
+    <section className="mt-8">
+      <div className="flex items-center gap-2">
+        <h2 className="text-base font-semibold text-slate-900">{title}</h2>
+        <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-500">
+          {items.length} รายการ
+        </span>
+      </div>
+      {items.length === 0 ? (
+        <div className="mt-3 flex flex-col items-center rounded-2xl border border-dashed border-slate-300 bg-white px-6 py-10 text-center">
+          <CheckCircle2 className="size-7 text-emerald-500" />
+          <p className="mt-3 text-sm text-slate-500">{empty}</p>
+        </div>
+      ) : (
+        <div className="mt-3 grid gap-3 lg:grid-cols-2">
+          {items.map((s) => (
+            <Card key={s.product.id} s={s} />
+          ))}
+        </div>
+      )}
+    </section>
+  );
 
   return (
     <div className="min-h-screen bg-[#F8FAFC] text-slate-900">
       <AppHeader />
-
       <main className="mx-auto w-full max-w-6xl px-4 py-8 sm:px-6 sm:py-10">
-        {/* Page header */}
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-          <div>
-            <p className="flex items-center gap-1.5 text-sm font-medium text-slate-400">
-              <RefreshCw className="size-4 text-[#10B981]" />
-              Velnox จำแทนคุณ · Smart Reorder
-            </p>
-            <h1 className="mt-1 text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl">
-              สินค้าที่ต้องสั่งซื้อซ้ำ
-            </h1>
-            <p className="mt-1.5 max-w-lg text-sm leading-6 text-slate-500">
-              ระบบจดจำรอบการซื้อของคุณ และเตือนเมื่อถึงเวลาที่ต้องสั่งของ —
-              กดสั่งซื้อซ้ำได้ในคลิกเดียว ไม่ต้องจำเองอีกต่อไป
-            </p>
-          </div>
-          <Button
-            className="gap-1.5 bg-slate-900 text-white hover:bg-slate-800"
-            onClick={() => {
-              setEditingProduct(null);
-              setFormOpen(true);
-            }}
-          >
-            <Plus className="size-4" />
-            เพิ่มสินค้า
-          </Button>
+        <div>
+          <p className="flex items-center gap-1.5 text-sm font-medium text-slate-400">
+            <RefreshCw className="size-4 text-[#10B981]" />
+            velseller · Smart Reorder
+          </p>
+          <h1 className="mt-1 text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl">
+            สั่งซื้อซ้ำอย่างชาญฉลาด
+          </h1>
+          <p className="mt-1.5 max-w-2xl text-sm leading-6 text-slate-500">
+            คำนวณจากประวัติออเดอร์จริงในระบบ — รอบการซื้อของลูกค้า สต็อกคงเหลือ และจุดสั่งซื้อซ้ำของสินค้า
+            (ข้อมูลไม่พอจะไม่คาดการณ์ล่วงหน้า)
+          </p>
         </div>
 
-        {/* KPI row */}
-        <div className="mt-7 grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
-          <div className="rounded-xl border border-slate-200 bg-white p-4 sm:p-5">
-            <div className="flex items-center gap-2 text-rose-500">
-              <AlertTriangle className="size-4" />
-              <p className="text-xs font-medium uppercase tracking-wide">ต้องสั่งตอนนี้</p>
+        <div className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
+          {stats.map((s) => (
+            <div key={s.label} className="rounded-xl border border-slate-200 bg-white p-4">
+              <span className={`flex size-9 items-center justify-center rounded-[10px] ${s.chip}`}>
+                <s.icon className={`size-4.5 ${s.accent}`} />
+              </span>
+              <p className="mt-3 text-xl font-bold tabular-nums text-slate-900">{s.value}</p>
+              <p className="text-xs text-slate-400">{s.label}</p>
             </div>
-            <p className="mt-2 text-2xl font-bold tabular-nums tracking-tight text-slate-900 sm:text-3xl">
-              {due.length}
-            </p>
-            <p className="mt-1 text-xs text-slate-400">เลยรอบการสั่งแล้ว</p>
-          </div>
-
-          <div className="rounded-xl border border-slate-200 bg-white p-4 sm:p-5">
-            <div className="flex items-center gap-2 text-amber-500">
-              <CalendarClock className="size-4" />
-              <p className="text-xs font-medium uppercase tracking-wide">ใกล้ถึงรอบสั่ง</p>
-            </div>
-            <p className="mt-2 text-2xl font-bold tabular-nums tracking-tight text-slate-900 sm:text-3xl">
-              {upcoming.length}
-            </p>
-            <p className="mt-1 text-xs text-slate-400">อีกไม่เกิน 30% ของรอบ</p>
-          </div>
-
-          <div className="rounded-xl border border-slate-200 bg-white p-4 sm:p-5">
-            <div className="flex items-center gap-2 text-slate-400">
-              <Boxes className="size-4" />
-              <p className="text-xs font-medium uppercase tracking-wide">สต็อกต่ำ</p>
-            </div>
-            <p className="mt-2 text-2xl font-bold tabular-nums tracking-tight text-slate-900 sm:text-3xl">
-              {lowStock.length}
-            </p>
-            <p className="mt-1 text-xs text-slate-400">ถึงหรือต่ำกว่าจุดสั่งซื้อซ้ำ</p>
-          </div>
-
-          <div className="rounded-xl border border-slate-200 bg-white p-4 sm:p-5">
-            <div className="flex items-center gap-2 text-slate-400">
-              <Package className="size-4" />
-              <p className="text-xs font-medium uppercase tracking-wide">สินค้าทั้งหมด</p>
-            </div>
-            <p className="mt-2 text-2xl font-bold tabular-nums tracking-tight text-slate-900 sm:text-3xl">
-              {products?.length ?? 0}
-            </p>
-            <p className="mt-1 text-xs text-slate-400">ในคลังของคุณ</p>
-          </div>
+          ))}
         </div>
 
-        {products === undefined ? (
-          <div className="mt-8 space-y-4">
-            {Array.from({ length: 2 }).map((_, i) => (
-              <div key={i} className="h-24 animate-pulse rounded-xl border border-slate-200 bg-white" />
-            ))}
-          </div>
-        ) : products.length === 0 ? (
-          <div className="mt-8 flex flex-col items-center rounded-2xl border border-dashed border-slate-300 bg-white px-6 py-16 text-center">
+        <Section title="ถึงเวลาสั่งซื้อซ้ำ" items={due} empty="ไม่มีสินค้าที่ต้องสั่งซื้อตอนนี้ 🎉" />
+
+        <Section
+          title="คาดว่าจะถึงกำหนดใน 14 วัน"
+          items={upcoming}
+          empty="ไม่มีสินค้าใกล้ถึงกำหนดสั่งซื้อ"
+        />
+
+        <Section
+          title="สินค้าที่ข้อมูลยังไม่พอ"
+          items={noData}
+          empty="สินค้าทุกตัวมีประวัติการขายแล้ว"
+        />
+
+        {suggestions.length === 0 && (
+          <div className="mt-10 flex flex-col items-center rounded-2xl border border-dashed border-slate-300 bg-white px-6 py-16 text-center">
             <span className="flex size-14 items-center justify-center rounded-2xl bg-[#ECFDF5]">
-              <Package className="size-7 text-[#10B981]" />
+              <TrendingUp className="size-7 text-[#10B981]" />
             </span>
-            <h2 className="mt-5 text-lg font-semibold text-slate-900">
-              ยังไม่มีสินค้าในคลัง
-            </h2>
+            <h3 className="mt-5 text-lg font-semibold text-slate-900">ยังไม่มีสินค้าในร้าน</h3>
             <p className="mt-1.5 max-w-sm text-sm leading-6 text-slate-500">
-              เพิ่มสินค้าที่คุณสั่งซื้อเป็นประจำ พร้อมจุดสั่งซื้อซ้ำ
-              แล้ว Velnox จะเรียนรู้รอบการสั่งและเตือนคุณเอง
+              เพิ่มสินค้าและตั้งจุดสั่งซื้อซ้ำที่หน้า "ร้านของฉัน" — เมื่อมีออเดอร์จริง ระบบจะเริ่มคาดการณ์รอบถัดไปให้
             </p>
-            <Button
-              className="mt-6 gap-1.5 bg-slate-900 text-white hover:bg-slate-800"
-              onClick={() => {
-                setEditingProduct(null);
-                setFormOpen(true);
-              }}
-            >
-              <Plus className="size-4" />
-              เพิ่มสินค้าแรก
+            <Button className="mt-6 gap-1.5 bg-slate-900 text-white hover:bg-slate-800" asChild>
+              <a href="/seller/shop">
+                <Store className="size-4" />
+                ไปที่ร้านของฉัน
+              </a>
             </Button>
           </div>
-        ) : (
-          <>
-            {/* Attention list */}
-            <section className="mt-8">
-              <div className="flex items-center justify-between">
-                <h2 className="text-base font-semibold text-slate-900">
-                  ถึงเวลาสั่งซื้อแล้ว
-                </h2>
-                <span className="text-xs text-slate-400">
-                  {attention.length} รายการที่ต้องการความสนใจ
-                </span>
-              </div>
-
-              {attention.length === 0 ? (
-                <div className="mt-3 flex items-center gap-3 rounded-xl border border-slate-200 bg-white p-5">
-                  <span className="flex size-9 items-center justify-center rounded-[10px] bg-[#ECFDF5]">
-                    <CheckCircle2 className="size-4 text-[#10B981]" />
-                  </span>
-                  <p className="text-sm text-slate-500">
-                    ไม่มีสินค้าที่ต้องสั่งตอนนี้ — ทุกอย่างอยู่ในรอบที่ Velnox จำไว้ 🎉
-                  </p>
-                </div>
-              ) : (
-                <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                  {attention.map((product) => {
-                    const meta = PRODUCT_CATEGORY_META[product.category];
-                    const info = reorderInfo(product);
-                    const statusMeta = STATUS_META[info.status];
-                    const cycle = effectiveCycleDays(product);
-                    const Icon = meta.icon;
-                    return (
-                      <div
-                        key={product._id}
-                        className="flex flex-col gap-3 rounded-xl border border-slate-200 bg-white p-5 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-[0_12px_30px_rgba(15,23,42,0.06)]"
-                      >
-                        <div className="flex items-start justify-between gap-3">
-                          <div className="flex items-center gap-3">
-                            <span
-                              className={`flex size-9 items-center justify-center rounded-[10px] ring-1 ring-inset ${meta.chip}`}
-                            >
-                              <Icon className={`size-4 ${meta.iconClass}`} />
-                            </span>
-                            <div>
-                              <p className="text-sm font-semibold text-slate-900">{product.name}</p>
-                              <p className="mt-0.5 text-xs text-slate-400">{meta.label}</p>
-                            </div>
-                          </div>
-                          <Badge
-                            className={`gap-1 rounded-full ring-1 ring-inset ${statusMeta.badge}`}
-                          >
-                            <span className={`size-1.5 rounded-full ${statusMeta.dot}`} />
-                            {statusMeta.label}
-                          </Badge>
-                        </div>
-
-                        <div className="flex items-center justify-between rounded-[10px] bg-slate-50 px-3 py-2.5 text-xs">
-                          <span className="text-slate-500">
-                            สต็อก{" "}
-                            <span className="font-semibold text-slate-900">
-                              {formatNumber(product.currentStock)} {product.unit}
-                            </span>
-                          </span>
-                          <span className="text-slate-400">
-                            จุดสั่งซื้อซ้ำ {formatNumber(product.reorderLevel)} {product.unit}
-                          </span>
-                        </div>
-
-                        <p className="flex items-center gap-1.5 text-xs text-slate-400">
-                          <RefreshCw className="size-3.5 text-[#10B981]" />
-                          {cycle !== undefined ? (
-                            <>
-                              รอบการซื้อเฉลี่ย {formatDays(cycle)}
-                              {info.daysUntilDue !== undefined &&
-                                (info.daysUntilDue > 0 ? (
-                                  <span>· เหลืออีก {formatDays(info.daysUntilDue)}</span>
-                                ) : (
-                                  <span className="font-medium text-rose-600">
-                                    · เลยกำหนด {formatDays(-info.daysUntilDue)}
-                                  </span>
-                                ))}
-                            </>
-                          ) : (
-                            "ยังไม่มีรอบการซื้อ — สั่งครั้งแรกเพื่อให้ระบบเรียนรู้"
-                          )}
-                        </p>
-
-                        <div className="mt-auto flex gap-2">
-                          <Button
-                            className="flex-1 gap-1.5 bg-slate-900 text-white hover:bg-slate-800"
-                            onClick={() => setReorderProduct(product)}
-                          >
-                            <RefreshCw className="size-4" />
-                            สั่งซื้อซ้ำ
-                          </Button>
-                          <Button
-                            variant="outline"
-                            size="icon"
-                            className="border-slate-200 text-slate-500 hover:border-slate-300 hover:text-slate-700"
-                            onClick={() => setSaleProduct(product)}
-                            aria-label={`บันทึกการขาย ${product.name}`}
-                          >
-                            <MinusCircle className="size-4" />
-                          </Button>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-            </section>
-
-            {/* Inventory table */}
-            <section className="mt-8">
-              <div className="flex items-center justify-between">
-                <h2 className="text-base font-semibold text-slate-900">คลังสินค้าทั้งหมด</h2>
-                <span className="text-xs text-slate-400">{products.length} รายการ</span>
-              </div>
-
-              <div className="mt-3 hidden overflow-x-auto rounded-xl border border-slate-200 bg-white md:block">
-                <Table className="min-w-[720px]">
-                  <TableHeader>
-                    <TableRow className="hover:bg-transparent">
-                      <TableHead className="pl-5 text-slate-400">สินค้า</TableHead>
-                      <TableHead className="text-slate-400">สต็อก</TableHead>
-                      <TableHead className="text-slate-400">รอบการซื้อ</TableHead>
-                      <TableHead className="text-slate-400">สั่งล่าสุด</TableHead>
-                      <TableHead className="text-slate-400">สถานะ</TableHead>
-                      <TableHead className="pr-5 text-right text-slate-400">การจัดการ</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {products.map((product) => {
-                      const meta = PRODUCT_CATEGORY_META[product.category];
-                      const info = reorderInfo(product);
-                      const statusMeta = STATUS_META[info.status];
-                      const cycle = effectiveCycleDays(product);
-                      const Icon = meta.icon;
-                      return (
-                        <TableRow key={product._id} className="hover:bg-slate-50/60">
-                          <TableCell className="pl-5">
-                            <div className="flex items-center gap-3">
-                              <span
-                                className={`flex size-8 shrink-0 items-center justify-center rounded-[10px] ring-1 ring-inset ${meta.chip}`}
-                              >
-                                <Icon className={`size-4 ${meta.iconClass}`} />
-                              </span>
-                              <div>
-                                <p className="font-medium text-slate-900">{product.name}</p>
-                                <p className="text-xs text-slate-400">
-                                  {meta.label}
-                                  {product.price !== undefined && ` · ${formatBaht(product.price)}`}
-                                  {product.supplier && ` · ${product.supplier}`}
-                                </p>
-                              </div>
-                            </div>
-                          </TableCell>
-                          <TableCell>
-                            <p className="font-medium tabular-nums text-slate-900">
-                              {formatNumber(product.currentStock)}{" "}
-                              <span className="text-xs font-normal text-slate-400">{product.unit}</span>
-                            </p>
-                            <p className="text-xs text-slate-400">
-                              จุดสั่งซื้อซ้ำ {formatNumber(product.reorderLevel)}
-                            </p>
-                          </TableCell>
-                          <TableCell>
-                            {cycle !== undefined ? (
-                              <p className="font-medium tabular-nums text-slate-900">
-                                {formatDays(cycle)}
-                              </p>
-                            ) : (
-                              <p className="text-slate-400">—</p>
-                            )}
-                            <p className="text-xs text-slate-400">
-                              {product.purchaseCount > 0
-                                ? `เรียนรู้จาก ${product.purchaseCount} ครั้ง`
-                                : product.estimatedCycleDays
-                                  ? "คาดการณ์จากที่ตั้งไว้"
-                                  : "ยังไม่มีการสั่ง"}
-                            </p>
-                          </TableCell>
-                          <TableCell>
-                            {product.lastOrderedAt !== undefined ? (
-                              <p className="text-sm text-slate-600">
-                                {formatThaiDate(product.lastOrderedAt)}
-                              </p>
-                            ) : (
-                              <p className="text-slate-400">—</p>
-                            )}
-                          </TableCell>
-                          <TableCell>
-                            <div className="flex flex-col items-start gap-1">
-                              <Badge
-                                className={`gap-1 rounded-full ring-1 ring-inset ${statusMeta.badge}`}
-                              >
-                                <span className={`size-1.5 rounded-full ${statusMeta.dot}`} />
-                                {statusMeta.label}
-                              </Badge>
-                              {info.lowStock && (
-                                <Badge className="gap-1 rounded-full bg-rose-50 text-rose-700 ring-1 ring-inset ring-rose-600/15 hover:bg-rose-50">
-                                  สต็อกต่ำ
-                                </Badge>
-                              )}
-                              {product.published && (
-                                <Badge className="gap-1 rounded-full bg-emerald-50 text-emerald-700 ring-1 ring-inset ring-emerald-600/15 hover:bg-emerald-50">
-                                  ขายหน้าร้าน
-                                </Badge>
-                              )}
-                            </div>
-                          </TableCell>
-                          <TableCell className="pr-5 text-right">
-                            <DropdownMenu>
-                              <DropdownMenuTrigger asChild>
-                                <Button
-                                  variant="ghost"
-                                  size="icon"
-                                  className="size-8 text-slate-400 hover:bg-slate-100 hover:text-slate-700"
-                                >
-                                  <MoreHorizontal className="size-4" />
-                                  <span className="sr-only">การจัดการ {product.name}</span>
-                                </Button>
-                              </DropdownMenuTrigger>
-                              <DropdownMenuContent align="end" className="w-48">
-                                <DropdownMenuItem
-                                  className="cursor-pointer"
-                                  onClick={() => setReorderProduct(product)}
-                                >
-                                  <RefreshCw className="size-4" />
-                                  สั่งซื้อซ้ำ
-                                </DropdownMenuItem>
-                                <DropdownMenuItem
-                                  className="cursor-pointer"
-                                  onClick={() => setSaleProduct(product)}
-                                >
-                                  <MinusCircle className="size-4" />
-                                  บันทึกการขาย / ใช้ไป
-                                </DropdownMenuItem>
-                                <DropdownMenuItem
-                                  className="cursor-pointer"
-                                  onClick={() => handleTogglePublish(product)}
-                                >
-                                  {product.published ? (
-                                    <EyeOff className="size-4" />
-                                  ) : (
-                                    <Eye className="size-4" />
-                                  )}
-                                  {product.published
-                                    ? "ปิดการขายหน้าร้าน"
-                                    : "ประกาศขายหน้าร้าน"}
-                                </DropdownMenuItem>
-                                <DropdownMenuSeparator />
-                                <DropdownMenuItem
-                                  className="cursor-pointer"
-                                  onClick={() => {
-                                    setEditingProduct(product);
-                                    setFormOpen(true);
-                                  }}
-                                >
-                                  <Pencil className="size-4" />
-                                  แก้ไขสินค้า
-                                </DropdownMenuItem>
-                                <DropdownMenuItem
-                                  className="cursor-pointer text-red-600 focus:bg-red-50 focus:text-red-600"
-                                  onClick={() => setDeleteProduct(product)}
-                                >
-                                  <Trash2 className="size-4" />
-                                  ลบสินค้า
-                                </DropdownMenuItem>
-                              </DropdownMenuContent>
-                            </DropdownMenu>
-                          </TableCell>
-                        </TableRow>
-                      );
-                    })}
-                  </TableBody>
-                </Table>
-              </div>
-
-              {/* Mobile: app-like inventory cards */}
-              <div className="mt-3 space-y-3 md:hidden">
-                {products.map((product) => {
-                  const meta = PRODUCT_CATEGORY_META[product.category];
-                  const info = reorderInfo(product);
-                  const statusMeta = STATUS_META[info.status];
-                  const cycle = effectiveCycleDays(product);
-                  const Icon = meta.icon;
-                  return (
-                    <div
-                      key={product._id}
-                      className="rounded-xl border border-slate-200 bg-white p-4 transition-all duration-200 active:scale-[0.99]"
-                    >
-                      <div className="flex items-start justify-between gap-3">
-                        <div className="flex min-w-0 items-center gap-3">
-                          <span
-                            className={`flex size-9 shrink-0 items-center justify-center rounded-[10px] ring-1 ring-inset ${meta.chip}`}
-                          >
-                            <Icon className={`size-4 ${meta.iconClass}`} />
-                          </span>
-                          <div className="min-w-0">
-                            <p className="truncate text-sm font-semibold text-slate-900">{product.name}</p>
-                            <p className="truncate text-xs text-slate-400">
-                              {meta.label}
-                              {product.supplier ? ` · ${product.supplier}` : ""}
-                            </p>
-                          </div>
-                        </div>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="size-9 shrink-0 text-slate-400 hover:bg-slate-100 hover:text-slate-700"
-                          onClick={() => setReorderProduct(product)}
-                          aria-label={`สั่งซื้อซ้ำ ${product.name}`}
-                        >
-                          <RefreshCw className="size-4" />
-                        </Button>
-                      </div>
-
-                      <div className="mt-3 grid grid-cols-2 gap-2 rounded-[10px] bg-slate-50 p-3 text-xs">
-                        <div>
-                          <p className="text-slate-400">สต็อก</p>
-                          <p className="mt-0.5 font-semibold tabular-nums text-slate-900">
-                            {formatNumber(product.currentStock)} {product.unit}
-                          </p>
-                        </div>
-                        <div>
-                          <p className="text-slate-400">จุดสั่งซื้อซ้ำ</p>
-                          <p className="mt-0.5 font-semibold tabular-nums text-slate-900">
-                            {formatNumber(product.reorderLevel)} {product.unit}
-                          </p>
-                        </div>
-                        <div>
-                          <p className="text-slate-400">รอบการซื้อ</p>
-                          <p className="mt-0.5 font-semibold tabular-nums text-slate-900">
-                            {cycle !== undefined ? formatDays(cycle) : "—"}
-                          </p>
-                        </div>
-                        <div>
-                          <p className="text-slate-400">สั่งล่าสุด</p>
-                          <p className="mt-0.5 font-medium text-slate-700">
-                            {product.lastOrderedAt !== undefined ? formatThaiDate(product.lastOrderedAt) : "—"}
-                          </p>
-                        </div>
-                      </div>
-
-                      <div className="mt-3 flex flex-wrap items-center gap-1.5">
-                        <Badge className={`gap-1 rounded-full ring-1 ring-inset ${statusMeta.badge}`}>
-                          <span className={`size-1.5 rounded-full ${statusMeta.dot}`} />
-                          {statusMeta.label}
-                        </Badge>
-                        {info.lowStock && (
-                          <Badge className="gap-1 rounded-full bg-rose-50 text-rose-700 ring-1 ring-inset ring-rose-600/15 hover:bg-rose-50">
-                            สต็อกต่ำ
-                          </Badge>
-                        )}
-                        {product.published && (
-                          <Badge className="gap-1 rounded-full bg-emerald-50 text-emerald-700 ring-1 ring-inset ring-emerald-600/15 hover:bg-emerald-50">
-                            ขายหน้าร้าน
-                          </Badge>
-                        )}
-                        {product.price !== undefined && (
-                          <span className="ml-auto text-sm font-bold tabular-nums text-slate-900">
-                            {formatBaht(product.price)}
-                          </span>
-                        )}
-                      </div>
-
-                      <div className="mt-3 flex items-center gap-2 border-t border-slate-100 pt-3">
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          className="flex-1 gap-1.5 border-slate-200 text-slate-600"
-                          onClick={() => setSaleProduct(product)}
-                        >
-                          <MinusCircle className="size-3.5" />
-                          ขาย / ใช้ไป
-                        </Button>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          className="flex-1 gap-1.5 border-slate-200 text-slate-600"
-                          onClick={() => handleTogglePublish(product)}
-                        >
-                          {product.published ? (
-                            <EyeOff className="size-3.5" />
-                          ) : (
-                            <Eye className="size-3.5" />
-                          )}
-                          {product.published ? "ปิดขาย" : "ประกาศขาย"}
-                        </Button>
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="size-9 shrink-0 text-slate-400 hover:bg-slate-100 hover:text-slate-700"
-                              aria-label={`จัดการเพิ่มเติม ${product.name}`}
-                            >
-                              <MoreHorizontal className="size-4" />
-                            </Button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end" className="w-48">
-                            <DropdownMenuItem
-                              className="cursor-pointer"
-                              onClick={() => {
-                                setEditingProduct(product);
-                                setFormOpen(true);
-                              }}
-                            >
-                              <Pencil className="size-4" />
-                              แก้ไขสินค้า
-                            </DropdownMenuItem>
-                            <DropdownMenuItem
-                              className="cursor-pointer text-red-600 focus:bg-red-50 focus:text-red-600"
-                              onClick={() => setDeleteProduct(product)}
-                            >
-                              <Trash2 className="size-4" />
-                              ลบสินค้า
-                            </DropdownMenuItem>
-                          </DropdownMenuContent>
-                        </DropdownMenu>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </section>
-
-            {/* Recent reorder history */}
-            {recentPurchases.length > 0 && (
-              <section className="mt-8">
-                <h2 className="text-base font-semibold text-slate-900">ประวัติการสั่งซื้อล่าสุด</h2>
-                <div className="mt-3 space-y-2">
-                  {recentPurchases.map(({ purchase, product }) => (
-                    <div
-                      key={purchase._id}
-                      className="flex items-center justify-between gap-4 rounded-xl border border-slate-200 bg-white px-4 py-3"
-                    >
-                      <div className="flex items-center gap-3">
-                        <span className="flex size-8 items-center justify-center rounded-[10px] bg-slate-100">
-                          <RefreshCw className="size-3.5 text-slate-500" />
-                        </span>
-                        <div>
-                          <p className="text-sm font-medium text-slate-900">{product.name}</p>
-                          <p className="text-xs text-slate-400">{formatThaiDate(purchase.orderedAt)}</p>
-                        </div>
-                      </div>
-                      <div className="text-right">
-                        <p className="text-sm font-semibold tabular-nums text-slate-900">
-                          +{formatNumber(purchase.quantity)} {product.unit}
-                        </p>
-                        {purchase.cost !== undefined && (
-                          <p className="text-xs text-slate-400">
-                            ฿{formatNumber(purchase.cost)}
-                          </p>
-                        )}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </section>
-            )}
-          </>
         )}
       </main>
-
-      {/* Dialogs */}
-      <ProductFormDialog open={formOpen} onOpenChange={setFormOpen} product={editingProduct} />
-      <ReorderDialog
-        product={reorderProduct}
-        open={reorderProduct !== null}
-        onOpenChange={(open) => {
-          if (!open) setReorderProduct(null);
-        }}
-      />
-      <StockDialog
-        product={saleProduct}
-        open={saleProduct !== null}
-        onOpenChange={(open) => {
-          if (!open) setSaleProduct(null);
-        }}
-      />
-
-      <AlertDialog
-        open={deleteProduct !== null}
-        onOpenChange={(open) => !open && setDeleteProduct(null)}
-      >
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>ลบสินค้านี้?</AlertDialogTitle>
-            <AlertDialogDescription>
-              “{deleteProduct?.name}” และประวัติการสั่งซื้อทั้งหมดจะถูกลบถาวร
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel disabled={deleting}>ยกเลิก</AlertDialogCancel>
-            <AlertDialogAction
-              className="bg-red-600 text-white hover:bg-red-700"
-              onClick={handleDelete}
-              disabled={deleting}
-            >
-              {deleting ? "กำลังลบ..." : "ลบสินค้า"}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
     </div>
   );
 }

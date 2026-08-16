@@ -40,9 +40,50 @@ const ALLOWED_KEYS = [
   "payment_promptpay",
   "payment_bank_transfer",
   "payment_cod",
+  // storefront settings (Neon source of truth — replaces the legacy Convex
+  // storeSettings doc, spec §15–16)
+  "store_shop_name",
+  "store_tagline",
+  "store_phone",
+  "store_address",
+  "store_announcement",
 ] as const;
 
 export const PLATFORM_SETTING_KEYS: readonly string[] = ALLOWED_KEYS;
+
+export interface StorefrontSettings {
+  shopName: string | null;
+  tagline: string | null;
+  phone: string | null;
+  address: string | null;
+  announcement: string | null;
+}
+
+/**
+ * Public storefront settings (velshop display) — the PUBLIC subset of
+ * platform_settings. Never returns internal keys, secrets or numbers.
+ */
+export async function storefrontSettings(db: Db): Promise<StorefrontSettings> {
+  const rows = await db(
+    `SELECT key, value FROM platform_settings WHERE key IN
+       ('store_shop_name','store_tagline','store_phone','store_address','store_announcement')`,
+  );
+  const values = new Map<string, unknown>();
+  for (const r of rows) {
+    values.set(r.key, typeof r.value === "string" ? JSON.parse(r.value) : r.value);
+  }
+  const str = (key: string): string | null => {
+    const v = values.get(key);
+    return typeof v === "string" && v.trim() ? v : null;
+  };
+  return {
+    shopName: str("store_shop_name"),
+    tagline: str("store_tagline"),
+    phone: str("store_phone"),
+    address: str("store_address"),
+    announcement: str("store_announcement"),
+  };
+}
 
 /**
  * Update a setting (admin/owner only — enforced by the caller). Every change

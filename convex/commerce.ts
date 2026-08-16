@@ -69,6 +69,7 @@ import {
 } from "../backend/moderation";
 import { gpsSchema } from "../backend/validation";
 import { resolveRules } from "../backend/rules";
+import { sellerReorderSuggestions } from "../backend/reorder";
 import { enforceRateLimit } from "./rateLimit";
 import {
   advanceSubscription,
@@ -869,6 +870,19 @@ export const refundAction = action({
     const refund = await refundPayment({ orderId: args.orderId, amount: args.amount, reason: args.reason ?? null });
     await recordEvent(ctx, "RefundProcessed", args.orderId, { amount: refund.amount });
     return refund;
+  },
+});
+
+/**
+ * velseller Smart Reorder (spec §14): real reorder suggestions computed from
+ * the seller's Neon catalog + inventory + customer order history. Never
+ * invented — returns NOT_ENOUGH_DATA confidence when history is thin.
+ */
+export const sellerReorderSuggestionsAction = action({
+  args: {},
+  handler: async (ctx) => {
+    const { seller } = await requireSeller(ctx);
+    return sellerReorderSuggestions(getDb(), seller.id);
   },
 });
 
