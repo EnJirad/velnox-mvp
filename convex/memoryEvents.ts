@@ -176,6 +176,26 @@ export const _recentEventsForUser = query({
   },
 });
 
+/**
+ * Internal: events created at/after `since` (epoch ms), ascending — the scan
+ * window used by the Convex → Neon durable-flush cron. The caller passes a
+ * small overlap (`since - 60_000`) so boundary events are re-read; Neon dedupes
+ * by source_event_id so overlap is harmless.
+ */
+export const _recentEventsSince = query({
+  args: { since: v.number(), limit: v.optional(v.number()) },
+  handler: async (ctx, args) => {
+    // No index starts with createdAt, so this is a filtered scan ordered by
+    // _creationTime. Fine for the MVP flush volume; the Neon side dedupes by
+    // source_event_id so overlaps are harmless.
+    return ctx.db
+      .query("customerEvents")
+      .filter((q) => q.gte(q.field("createdAt"), args.since))
+      .order("asc")
+      .take(args.limit ?? 2000);
+  },
+});
+
 /** Internal: recent PRODUCT_VIEW events across the marketplace. */
 export const _popularEntities = query({
   args: {},
