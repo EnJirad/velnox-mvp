@@ -7,6 +7,9 @@ import { defineConfig } from "vite";
 // Public, content-only company site: no Convex client, no auth.
 export default defineConfig({
   root: __dirname,
+  // Load env files (.env, .env.local, ...) from the monorepo root — that's
+  // where Freebuff's Keys/API-keys UI writes VITE_* vars.
+  envDir: path.resolve(__dirname, "../.."),
   plugins: [react(), tailwindcss()],
   resolve: {
     alias: [
