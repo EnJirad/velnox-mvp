@@ -1,3 +1,21 @@
+/**
+ * @deprecated LEGACY Convex-table product module (V3 migration).
+ *
+ * Neon is the authoritative product/inventory store (`backend/products.ts`,
+ * `backend/inventory.ts`); the storefront and the seller product pages use
+ * `convex/commerce.ts` node actions (`listProducts`, `createProductAction`,
+ * `updateProductAction`, `setProductStatusAction`, `deleteProductAction`,
+ * `setStockAction`, `setReorderLevelAction`).
+ *
+ * Still referenced ONLY by:
+ *   - apps/seller/src/pages/Reorder.tsx   (Smart Reorder — uses the Convex
+ *     cycle-learning fields avgCycleDays/estimatedCycleDays/lastOrderedAt,
+ *     see docs/production-audit.md §legacy)
+ *   - apps/center/src/pages/Center.tsx    (listAll)
+ *
+ * Migration plan: docs/neon-migration-report.md §3. Do not extend this module
+ * for new business logic.
+ */
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
 import { Doc, Id } from "./_generated/dataModel";

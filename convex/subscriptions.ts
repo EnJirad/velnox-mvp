@@ -1,3 +1,13 @@
+/**
+ * @deprecated LEGACY Convex-table subscription module (V3 migration).
+ *
+ * VelRepeat subscriptions are authoritative in Neon (`backend/subscriptions.ts`);
+ * `convex/commerce.ts` exposes the live actions (`createVelRepeat`,
+ * `mySubscriptions`, `sellerSubscriptions`, `pauseSubscription`,
+ * `updateSubscriptionAction`, `processDueSubscriptions`). No frontend
+ * references this module (verified 2026-08-16). Safe to delete after `_generated`
+ * is regenerated without these functions.
+ */
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
 import { Doc, Id } from "./_generated/dataModel";

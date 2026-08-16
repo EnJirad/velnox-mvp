@@ -1,3 +1,16 @@
+/**
+ * @deprecated LEGACY Convex-table center module (V3 migration).
+ *
+ * The center's Neon-backed actions live in `convex/centerAdmin.ts`
+ * (`ordersListAction`, `marketOverviewAction`, `updateOrderStatusAction`) and
+ * `convex/users.ts` (role/access management on the Convex Auth users table).
+ * Still referenced by:
+ *   - apps/center/src/pages/Center.tsx  (overview / getSettings / updateSettings)
+ *   - apps/shop/src/pages/ShopHome.tsx  (getSettings — storefront settings)
+ * Store settings should move to the Neon `shops` table (see
+ * docs/neon-migration-report.md §3); the overview should be derived from
+ * Neon commerce data (backend/orders.ts, backend/products.ts).
+ */
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
 import { canAccessCenter, canSell, getCurrentUser } from "./users";

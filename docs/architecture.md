@@ -47,7 +47,7 @@ Browser (any of the 4 apps)
    ├── commerce.ts / customer.ts / sellerOps.ts / centerAdmin.ts   ← node actions ("use node")
    │        └── ownership checks (User→Seller→Shop→Product) then call backend/*
    ├── memory.ts / memoryEvents.ts / intelligence.ts                ← events + customer memory
-   └── crons.ts / behavioralEvents.ts                               ← durable event flush
+   └── crons.ts / memory.ts (flushToNeon)                            ← durable event flush
         │  server-side only (DATABASE_URL / CLOUDINARY_* live in Convex deployment env)
         ▼
    Neon PostgreSQL (Commerce Core — authoritative)   +   Cloudinary (product images)
