@@ -373,7 +373,7 @@ export default function ShopProductDetail() {
 
             {/* Mobile: sticky bottom action bar (above the app tab bar), like a
                 native commerce app. Desktop keeps the inline buttons. */}
-            <div className="sticky bottom-[calc(4rem+env(safe-area-inset-bottom))] z-40 -mx-4 mt-5 space-y-2.5 border-t border-slate-200 bg-white/95 px-4 py-3 pb-4 backdrop-blur md:static md:mx-0 md:mt-5 md:border-0 md:bg-transparent md:p-0 md:pb-0 md:backdrop-blur-none">
+            <div className="sticky bottom-[calc(4.75rem+env(safe-area-inset-bottom))] z-40 -mx-4 mt-5 space-y-2.5 border-t border-slate-200 bg-white/95 px-4 py-3 pb-4 backdrop-blur md:static md:mx-0 md:mt-5 md:border-0 md:bg-transparent md:p-0 md:pb-0 md:backdrop-blur-none">
               {outOfStock ? (
                 <Button className="w-full gap-1.5 bg-slate-100 text-slate-400 hover:bg-slate-100" disabled>
                   {t("product.outOfStock")}
