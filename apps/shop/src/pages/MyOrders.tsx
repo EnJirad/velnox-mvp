@@ -209,7 +209,7 @@ export default function MyOrders() {
               <h2 className="mt-5 text-lg font-semibold text-slate-900">{t("orders.emptyTitle")}</h2>
               <p className="mt-1.5 max-w-sm text-sm leading-6 text-slate-500">{t("orders.emptyDesc")}</p>
               <Button className="mt-6 gap-1.5 bg-slate-900 text-white hover:bg-slate-800" asChild>
-                <Link to="/shop">
+                <Link to="/">
                   <ShoppingBag className="size-4" />
                   {t("orders.goShopping")}
                 </Link>
@@ -223,7 +223,7 @@ export default function MyOrders() {
                 return (
                   <Link
                     key={order.id}
-                    to={`/shop/orders/${order.id}`}
+                    to={`/orders/${order.id}`}
                     className="block rounded-xl border border-slate-200 bg-white p-5 transition-all duration-200 hover:-translate-y-0.5 hover:border-[#10B981]/40 hover:shadow-[0_12px_30px_rgba(15,23,42,0.06)]"
                   >
                     <div className="flex flex-wrap items-center justify-between gap-3">

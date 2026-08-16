@@ -105,7 +105,7 @@ export default function ShopWishlist() {
             <h2 className="mt-5 text-lg font-semibold text-slate-900">{t("wishlist.emptyTitle")}</h2>
             <p className="mt-1.5 max-w-sm text-sm leading-6 text-slate-500">{t("wishlist.emptyDesc")}</p>
             <Button className="mt-6 gap-1.5 bg-slate-900 text-white hover:bg-slate-800" asChild>
-              <Link to="/shop">
+              <Link to="/">
                 <ShoppingBag className="size-4" />
                 {t("wishlist.goShopping")}
               </Link>
@@ -118,7 +118,7 @@ export default function ShopWishlist() {
                 key={product!.id}
                 className="flex flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white transition-all duration-200 hover:-translate-y-0.5 hover:shadow-[0_12px_30px_rgba(15,23,42,0.07)]"
               >
-                <Link to={`/shop/products/${product!.id}`} className="block aspect-square w-full overflow-hidden bg-slate-50">
+                <Link to={`/products/${product!.id}`} className="block aspect-square w-full overflow-hidden bg-slate-50">
                   {product!.primaryImage ? (
                     <img
                       src={product!.primaryImage.displayUrl}
@@ -133,7 +133,7 @@ export default function ShopWishlist() {
                   )}
                 </Link>
                 <div className="flex flex-1 flex-col p-4">
-                  <Link to={`/shop/products/${product!.id}`} className="line-clamp-2 text-sm font-semibold leading-5 text-slate-900 hover:text-[#10B981]">
+                  <Link to={`/products/${product!.id}`} className="line-clamp-2 text-sm font-semibold leading-5 text-slate-900 hover:text-[#10B981]">
                     {product!.name}
                   </Link>
                   <p className="mt-1 text-xs text-slate-400">{product!.shopName ?? t("wishlist.defaultShop")}</p>

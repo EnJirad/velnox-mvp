@@ -285,7 +285,7 @@ export default function ShopOrderDetail() {
           <h1 className="mt-5 text-xl font-bold text-slate-900">{t("orderDetail.notFound")}</h1>
           <p className="mt-2 text-sm text-slate-500">{error ?? t("orderDetail.notFoundDesc")}</p>
           <Button className="mt-6 gap-1.5 bg-slate-900 text-white hover:bg-slate-800" asChild>
-            <Link to="/shop/orders">
+            <Link to="/orders">
               <ArrowLeft className="size-4" />
               {t("tracking.backToOrders")}
             </Link>
@@ -385,7 +385,7 @@ export default function ShopOrderDetail() {
                 {t("orderDetail.shipmentTitle")}
               </h2>
               <Button variant="outline" size="sm" className="gap-1.5 border-slate-200 text-slate-600" asChild>
-                <Link to={`/shop/orders/${order.id}/tracking`}>
+                <Link to={`/orders/${order.id}/tracking`}>
                   <Truck className="size-3.5" />
                   {t("orderDetail.fullTimeline")}
                 </Link>
@@ -502,7 +502,7 @@ export default function ShopOrderDetail() {
         {/* Actions */}
         <div className="mt-8 flex flex-col gap-2 sm:flex-row sm:flex-wrap">
           <Button variant="outline" className="border-slate-200 text-slate-700" asChild>
-            <Link to="/shop/orders">
+            <Link to="/orders">
               <ArrowLeft className="size-4" />
               {t("orderDetail.backToOrders")}
             </Link>

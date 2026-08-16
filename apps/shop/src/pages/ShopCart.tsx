@@ -47,10 +47,10 @@ export default function ShopCart() {
 
   const handleCheckout = () => {
     if (!isAuthenticated) {
-      navigate("/auth?returnTo=/shop/checkout");
+      navigate("/auth?returnTo=/checkout");
       return;
     }
-    navigate("/shop/checkout");
+    navigate("/checkout");
   };
 
   return (
@@ -60,7 +60,7 @@ export default function ShopCart() {
       <main className="mx-auto w-full max-w-6xl flex-1 px-4 py-8 sm:px-6 sm:py-10">
         <div className="flex items-center gap-3">
           <Button variant="ghost" size="icon" className="size-10 text-slate-500" asChild>
-            <Link to="/shop" aria-label={t("cartPage.ariaBack")}>
+            <Link to="/" aria-label={t("cartPage.ariaBack")}>
               <ArrowLeft className="size-4" />
             </Link>
           </Button>
@@ -89,7 +89,7 @@ export default function ShopCart() {
             <h2 className="mt-5 text-lg font-semibold text-slate-900">{t("cartPage.emptyTitle")}</h2>
             <p className="mt-1.5 max-w-sm text-sm leading-6 text-slate-500">{t("cartDrawer.emptyDesc")}</p>
             <Button className="mt-6 gap-1.5 bg-slate-900 text-white hover:bg-slate-800" asChild>
-              <Link to="/shop">
+              <Link to="/">
                 <ShoppingBag className="size-4" />
                 {t("cartPage.goShopping")}
               </Link>
@@ -122,7 +122,7 @@ export default function ShopCart() {
                         )}
                         <div className="min-w-0 flex-1">
                           <Link
-                            to={`/shop/products/${line.productId}`}
+                            to={`/products/${line.productId}`}
                             className="block truncate text-sm font-semibold text-slate-900 hover:text-[#10B981]"
                           >
                             {line.name}

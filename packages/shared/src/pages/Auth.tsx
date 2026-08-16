@@ -44,10 +44,11 @@ function roleHome(role: string | undefined): string {
   // velseller: merchants land on their goals dashboard; company staff go to velcenter.
   if (site === "velseller") return isCenterRole ? SITE_URLS.velcenter : "/seller/goals";
   // velshop (and the portal): customers stay in the shop; send merchants and
-  // company staff to the site that matches their role.
+  // company staff to the site that matches their role. The shop's own routes
+  // live at the domain root (standalone deploy), so the home is "/".
   if (isCenterRole) return SITE_URLS.velcenter;
   if (role === "seller") return SITE_URLS.velseller;
-  return "/shop";
+  return "/";
 }
 
 function Auth() {

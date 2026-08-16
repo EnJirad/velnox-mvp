@@ -19,30 +19,29 @@ import { useCart } from "@/lib/cart";
 import { Home, Package, ReceiptText, ShoppingCart, User } from "lucide-react";
 import { lazy } from "react";
 import { createRoot } from "react-dom/client";
-import { BrowserRouter, Navigate, Route, Routes } from "react-router";
+import { BrowserRouter, Route, Routes } from "react-router";
 import "../../../packages/shared/src/index.css";
 
-/** App-like bottom navigation for mobile (velshop). */
+/**
+ * VelShop mobile bottom navigation — app-like fixed tab bar (5 items).
+ * Routes are the standalone VelShop paths; the bar is hidden on md+ where the
+ * desktop header navigation takes over.
+ */
 function ShopTabBar() {
   const { count } = useCart();
   const { t } = useLanguage();
   const items: MobileTabItem[] = [
+    { to: "/", label: t("nav.home"), icon: Home, activeMatch: (p) => p === "/" },
+    { to: "/products", label: t("nav.products"), icon: Package },
     {
-      to: "/shop",
-      label: t("nav.home"),
-      icon: Home,
-      activeMatch: (p) => p === "/shop" || p === "/",
-    },
-    { to: "/shop/products", label: t("nav.products"), icon: Package },
-    {
-      to: "/shop/cart",
+      to: "/cart",
       label: t("nav.cart"),
       icon: ShoppingCart,
       badge: count,
-      activeMatch: (p) => p.startsWith("/shop/cart") || p.startsWith("/shop/checkout"),
+      activeMatch: (p) => p.startsWith("/cart") || p.startsWith("/checkout"),
     },
-    { to: "/shop/orders", label: t("nav.orders"), icon: ReceiptText },
-    { to: "/shop/profile", label: t("nav.profile"), icon: User },
+    { to: "/orders", label: t("nav.orders"), icon: ReceiptText },
+    { to: "/profile", label: t("nav.profile"), icon: User },
   ];
   return <MobileTabBar items={items} />;
 }
@@ -75,18 +74,17 @@ createRoot(document.getElementById("root")!).render(
         <BrowserRouter basename={siteBasename("velshop")}>
         <RouteSyncer />
         <CartProvider>
-          <div className="site-app pb-16 md:pb-0">
+          <div className="site-app">
           <SiteSuspense>
             <Routes>
-              <Route path="/" element={<Navigate to="/shop" replace />} />
-              <Route path="/shop" element={<ShopHome />} />
-              <Route path="/shop/products" element={<ShopProducts />} />
-              <Route path="/shop/categories" element={<ShopCategories />} />
-              <Route path="/shop/products/:productId" element={<ShopProductDetail />} />
-              <Route path="/shop/shops/:shopId" element={<ShopDetail />} />
-              <Route path="/shop/cart" element={<ShopCart />} />
+              <Route path="/" element={<ShopHome />} />
+              <Route path="/products" element={<ShopProducts />} />
+              <Route path="/categories" element={<ShopCategories />} />
+              <Route path="/products/:productId" element={<ShopProductDetail />} />
+              <Route path="/shops/:shopId" element={<ShopDetail />} />
+              <Route path="/cart" element={<ShopCart />} />
               <Route
-                path="/shop/checkout"
+                path="/checkout"
                 element={
                   <RequireAuth>
                     <ShopCheckout />
@@ -94,7 +92,7 @@ createRoot(document.getElementById("root")!).render(
                 }
               />
               <Route
-                path="/shop/orders"
+                path="/orders"
                 element={
                   <RequireAuth>
                     <MyOrders />
@@ -102,7 +100,7 @@ createRoot(document.getElementById("root")!).render(
                 }
               />
               <Route
-                path="/shop/orders/:orderId"
+                path="/orders/:orderId"
                 element={
                   <RequireAuth>
                     <ShopOrderDetail />
@@ -110,7 +108,7 @@ createRoot(document.getElementById("root")!).render(
                 }
               />
               <Route
-                path="/shop/orders/:orderId/tracking"
+                path="/orders/:orderId/tracking"
                 element={
                   <RequireAuth>
                     <ShopTracking />
@@ -118,7 +116,7 @@ createRoot(document.getElementById("root")!).render(
                 }
               />
               <Route
-                path="/shop/velrepeat"
+                path="/velrepeat"
                 element={
                   <RequireAuth>
                     <VelRepeatPage />
@@ -126,7 +124,7 @@ createRoot(document.getElementById("root")!).render(
                 }
               />
               <Route
-                path="/shop/wishlist"
+                path="/wishlist"
                 element={
                   <RequireAuth>
                     <ShopWishlist />
@@ -134,7 +132,7 @@ createRoot(document.getElementById("root")!).render(
                 }
               />
               <Route
-                path="/shop/addresses"
+                path="/addresses"
                 element={
                   <RequireAuth>
                     <ShopAddresses />
@@ -142,7 +140,7 @@ createRoot(document.getElementById("root")!).render(
                 }
               />
               <Route
-                path="/shop/profile"
+                path="/profile"
                 element={
                   <RequireAuth>
                     <ShopProfile />
@@ -150,7 +148,7 @@ createRoot(document.getElementById("root")!).render(
                 }
               />
               <Route
-                path="/shop/notifications"
+                path="/notifications"
                 element={
                   <RequireAuth>
                     <ShopNotifications />

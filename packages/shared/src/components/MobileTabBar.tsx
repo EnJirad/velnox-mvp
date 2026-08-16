@@ -9,7 +9,7 @@ export interface MobileTabItem {
   icon: LucideIcon;
   /**
    * Custom active check. Default: exact path or `pathname.startsWith(to + "/")`
-   * (e.g. /shop/orders matches the /shop/orders tab).
+   * (e.g. /orders matches the /orders tab).
    */
   activeMatch?: (pathname: string, search: string) => boolean;
   /** Optional badge count (e.g. cart item count). Hidden when 0 / null. */
@@ -22,7 +22,7 @@ export interface MobileTabItem {
  * with iOS/Android safe-area inset support.
  *
  * Every site entry renders one of these inside its router:
- *   velshop    → หน้าแรก / สินค้า / ตะกร้า / ออเดอร์ / โปรไฟล์
+ *   velshop    → / · /products · /cart · /orders · /profile
  *   velseller  → เป้าหมาย / ร้านของฉัน / ออเดอร์ / รายได้ / สั่งซื้อซ้ำ
  *   velcenter  → rendered inside Center.tsx so it respects role permissions
  */

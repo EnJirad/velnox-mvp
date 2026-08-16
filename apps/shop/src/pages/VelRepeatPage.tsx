@@ -195,7 +195,7 @@ export default function VelRepeatPage() {
             <h2 className="mt-5 text-lg font-semibold text-slate-900">{t("velrepeat.emptyTitle")}</h2>
             <p className="mt-1.5 max-w-sm text-sm leading-6 text-slate-500">{t("velrepeat.emptyDesc")}</p>
             <Button className="mt-6 gap-1.5 bg-slate-900 text-white hover:bg-slate-800" asChild>
-              <Link to="/shop">{t("velrepeat.pickProducts")}</Link>
+              <Link to="/">{t("velrepeat.pickProducts")}</Link>
             </Button>
           </div>
         ) : (
@@ -209,7 +209,7 @@ export default function VelRepeatPage() {
                   key={sub.id}
                   className="flex flex-col gap-4 rounded-2xl border border-slate-200 bg-white p-5 sm:flex-row sm:items-center"
                 >
-                  <Link to={`/shop/products/${sub.productId}`} className="shrink-0">
+                  <Link to={`/products/${sub.productId}`} className="shrink-0">
                     {sub.productImageUrl ? (
                       <img
                         src={sub.productImageUrl}
@@ -227,7 +227,7 @@ export default function VelRepeatPage() {
                   <div className="min-w-0 flex-1">
                     <div className="flex flex-wrap items-center gap-2">
                       <Link
-                        to={`/shop/products/${sub.productId}`}
+                        to={`/products/${sub.productId}`}
                         className="truncate text-sm font-semibold text-slate-900 hover:text-[#10B981]"
                       >
                         {sub.productName ?? t("velrepeat.product")}

@@ -457,7 +457,7 @@ export default function ShopProducts() {
                           className="flex flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white transition-all duration-200 hover:-translate-y-0.5 hover:shadow-[0_12px_30px_rgba(15,23,42,0.07)]"
                         >
                           <Link
-                            to={`/shop/products/${product.id}`}
+                            to={`/products/${product.id}`}
                             className="block aspect-square w-full overflow-hidden bg-slate-50"
                             aria-label={t("product.ariaViewDetail", { name: product.name })}
                             onClick={() =>
