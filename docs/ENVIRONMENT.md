@@ -30,8 +30,8 @@ Version: 1.0 · Phase 7
 | `CLOUDINARY_API_KEY` | `src/backend/storage.ts` | `123...` | |
 | `CLOUDINARY_API_SECRET` | `src/backend/storage.ts` | `abc...` | |
 | `SITE_URL` | (auth/SEO อนาคต) | `https://velnox.com` | ตั้งที่ hosting platform |
-| `FREEBUFF_EMAIL_API_KEY` | `src/convex/auth/emailOtp.ts` | `fb_email_...` | **จำเป็นสำหรับ OTP email** — key จาก Keys/API keys UI ของ Freebuff; ถ้าไม่มี key นี้ การส่ง OTP จะ fail ทันที (ไม่ silent) |
-| `VLY_APP_NAME` | `src/convex/auth/emailOtp.ts` | `velnox` | แสดงใน OTP email (มี default แล้ว) |
+| `FREEBUFF_EMAIL_API_KEY` | `convex/auth/emailOtp.ts` | `re_...` | **จำเป็นสำหรับ OTP email** — ตั้งค่าเป็น **Resend API key** (ชื่อตัวแปรคงเดิมเพื่อความเข้ากันได้) ถ้าไม่มี key นี้ การส่ง OTP จะ fail และผู้ใช้เห็นข้อความ generic (รายละเอียด technical อยู่ใน server log เท่านั้น) |
+| `EMAIL_FROM` | `convex/auth/emailOtp.ts` | `Velnox <no-reply@velnox.com>` | (optional) ผู้ส่งอีเมล OTP — ต้องเป็น domain ที่ verify กับ Resend แล้ว; ถ้าไม่ตั้ง จะ fallback เป็น sandbox sender `Velnox <onboarding@resend.dev>` (ส่งได้เฉพาะอีเมลของตัวเอง — เหมาะสำหรับทดสอบ) |
 | `STRIPE_SECRET_KEY` | `backend/stripe.ts` | `sk_test_...` | **ชำระเงินออนไลน์ (วิธี "online" — บัตร/PromptPay)** — ถ้าไม่มี key นี้ วิธีชำระออนไลน์จะซ่อนใน checkout และทุกอย่าง fallback เป็น manual เหมือนเดิม |
 | `STRIPE_WEBHOOK_SECRET` | `backend/stripeVerify.ts` | `whsec_...` | จำเป็นเมื่อเปิดชำระเงินออนไลน์ — ใช้ verify signature ของ webhook `/stripe/webhook` (ตั้ง webhook endpoint ใน Stripe Dashboard ชี้ `<convex-url>/stripe/webhook`, event: `checkout.session.completed` + `checkout.session.async_payment_succeeded/failed`) |
 | `BOOTSTRAP_OWNER_SECRET` | `convex/users.ts` + `backend/bootstrap.ts` | `รหัสยาว ≥16 ตัวอักษร` | **รหัสเปิดใช้งานเจ้าของบริษัท (ครั้งเดียว)** — velcenter ยังไม่มี owner: คนแรกที่ป้อนรหัสนี้ได้เป็น COMPANY_OWNER แล้วกลไกถูกปิดถาวร (เจ้าของที่มีอยู่แล้ว = ใช้ซ้ำไม่ได้) ตั้งที่ Keys/API keys UI เท่านั้น ห้ามใส่ในซอร์ส |
@@ -48,7 +48,7 @@ Version: 1.0 · Phase 7
 1. **Convex env (backend)**: หน้า Keys/API keys UI ของโปรเจกต์ → paste `DATABASE_URL`, `CLOUDINARY_*`
 2. **Frontend env**: hosting platform (Vercel project env) → `VITE_CONVEX_URL` ต่อโปรเจกต์ทั้ง 4
 3. **อย่าแก้ `.env.example` ผ่าน code** — platform ล็อกไฟล์ (ตัวแปรทั้งหมดอธิบายไว้ใน `INSTALL_AND_USAGE.md` §6.7)
-4. **OTP email (velshop sign-in)**: ตั้ง `FREEBUFF_EMAIL_API_KEY` ใน Keys/API keys UI — คีย์นี้อยู่ฝั่ง server เท่านั้น ห้ามขึ้น frontend/`VITE_*`
+4. **OTP email (velshop sign-in)**: ตั้ง `FREEBUFF_EMAIL_API_KEY` ใน Keys/API keys UI โดยใส่ค่าเป็น **Resend API key** (`re_...`) — คีย์นี้อยู่ฝั่ง server เท่านั้น ห้ามขึ้น frontend/`VITE_*`; ตั้ง `EMAIL_FROM` (optional) ด้วย sender ที่ verify domain แล้ว (เช่น `Velnox <no-reply@velnox.com>`) เพื่อส่งอีเมลจาก domain จริง
 5. **ชำระเงินออนไลน์ (velshop checkout)**: ตั้ง `STRIPE_SECRET_KEY` + `STRIPE_WEBHOOK_SECRET` + `SITE_URL` (สำหรับ return URL หลังชำระเงิน) — ทั้งหมดอยู่ฝั่ง server เท่านั้น
 
    **VelCenter — ตั้งเจ้าของบริษัท**: ตั้ง `BOOTSTRAP_OWNER_SECRET` (รหัสเปิดใช้งานครั้งเดียว ≥16 ตัว) ใน Keys/API keys UI → คนแรกที่เข้าหน้า velcenter และป้อนรหัสถูกต้องได้สิทธิ์ COMPANY_OWNER (กลไกใช้ครั้งเดียว — ตั้ง owner แล้วรหัสใช้ไม่ได้อีก) เจ้าของสร้างพนักงาน/สิทธิ์ต่อที่หน้า "พนักงาน"
@@ -58,7 +58,8 @@ Version: 1.0 · Phase 7
 - [ ] `VITE_CONVEX_URL` ชี้ production deployment ใน 4 เว็บ
 - [ ] `DATABASE_URL` = Neon production (ไม่ใช่ local)
 - [ ] `CLOUDINARY_*` ตั้งครบ (ถ้าเปิด upload)
-- [ ] `FREEBUFF_EMAIL_API_KEY` ตั้งแล้ว (OTP email ทำงาน)
+- [ ] `FREEBUFF_EMAIL_API_KEY` ตั้งแล้ว (ค่าเป็น Resend API key `re_...` — OTP email ทำงาน)
+- [ ] (production) `EMAIL_FROM` ตั้งแล้ว และ domain ของ sender verify กับ Resend แล้ว (ไม่ใช้ sandbox `onboarding@resend.dev`)
 - [ ] (ถ้าเปิดชำระเงินออนไลน์) `STRIPE_SECRET_KEY` + `STRIPE_WEBHOOK_SECRET` + `SITE_URL` ตั้งครบ และ webhook endpoint ลงทะเบียนใน Stripe Dashboard
 - [ ] ไม่มี `.env*` ใน git (`git status` สะอาด)
 - [ ] ไม่มี secret ใน git history (ถ้าเคย leak → rotate ทันที §35)

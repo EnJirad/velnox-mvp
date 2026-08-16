@@ -400,7 +400,7 @@ Vercel → Project → **Settings → Rewrites & Redirects** → Rewrites → **
 | Typecheck error เกี่ยวกับ `_generated` | ไฟล์ codegen เก่า/หาย → รัน `bun convex dev --once` (ห้ามแก้ `_generated` ด้วยมือ) |
 | ล็อกอินแล้วพาไปผิดที่ / ตก 404 | ตรวจ `VITE_*_URL` — การข้ามเว็บใช้การโหลดหน้าใหม่ทั้งหน้า (ต้องเป็น URL จริง) |
 | คลิกไปเว็บอื่นแล้ว 404 | กำลัง preview ใน repo เดียวกันต้องใช้ path default (`/velshop.html` ฯลฯ) — deploy จริงต้องตั้ง `VITE_*_URL` |
-| กดส่ง OTP แล้วไม่ได้รับอีเมล | ตรวจ backend env `SITE_URL` + ตั้ง `FREEBUFF_EMAIL_API_KEY` ใน Keys/API keys UI (key ฝั่ง server — อย่า hard-code ลงซอร์ส) |
+| กดส่ง OTP แล้วไม่ได้รับอีเมล | ตั้ง `FREEBUFF_EMAIL_API_KEY` ใน Keys/API keys UI โดยใส่ค่าเป็น **Resend API key** (`re_...`); ถ้าตั้ง `EMAIL_FROM` ต้องเป็น domain ที่ verify กับ Resend แล้ว (ไม่ตั้ง = ใช้ sandbox `onboarding@resend.dev` ส่งได้เฉพาะอีเมลเจ้าของบัญชี) — key ฝั่ง server ห้ามขึ้น frontend |
 | เปิด root โดเมนแล้วเจอหน้า portal (landing) แทนเว็บของตัวเอง | ยังไม่ได้ตั้ง Rewrite ใน 6.5 — ให้ `/(.*)` → `/velshop.html` (หรือ entry ของเว็บนั้น) |
 | route ลึก (เช่น `/shop`) 404 หลัง deploy | Rewrite `/(.*)` ยังไม่ได้ตั้ง หรือตั้งผิด entry |
 | Build บน Vercel fail ตอน codegen / push Convex | ตรวจ `CONVEX_DEPLOY_KEY` ตั้งครบ และ Environment ต้องติ๊ก **Production** (uncheck Preview/Development) |
