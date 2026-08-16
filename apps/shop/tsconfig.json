@@ -1,0 +1,15 @@
+{
+  "extends": "../../tsconfig.node.json",
+  "compilerOptions": {
+    "composite": false,
+    "tsBuildInfoFile": "./node_modules/.tmp/tsconfig.shop.tsbuildinfo",
+    "baseUrl": ".",
+    "paths": {
+      // VelShop source lives in the shared repo root (documented decision —
+      // see docs/RESTRUCTURE_INVENTORY.md §16). Keep @/* pointing there so any
+      // code under apps/shop that uses the app alias resolves the real source.
+      "@/*": ["../../src/*"]
+    }
+  },
+  "include": ["vite.config.ts"]
+}

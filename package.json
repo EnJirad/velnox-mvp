@@ -1,8 +1,9 @@
 {
-  "name": "vite-template",
+  "name": "velnox",
   "private": true,
   "version": "0.0.0",
   "type": "module",
+  "workspaces": ["apps/shop"],
   "scripts": {
     "dev": "vite",
     "build": "convex codegen && tsc -b && vite build",
