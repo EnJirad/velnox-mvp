@@ -15,7 +15,7 @@ import {
   invalidInput,
   invalidTransition,
   notFound,
-} from "../src/backend/errors";
+} from "../backend/errors";
 
 const ALL_CODES = [
   "AUTH_REQUIRED",

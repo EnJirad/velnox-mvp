@@ -34,7 +34,7 @@
   "rewrites": [
     {
       "source": "/(.*)",
-      "destination": "/velshop.html"
+      "destination": "/"
     }
   ]
 }

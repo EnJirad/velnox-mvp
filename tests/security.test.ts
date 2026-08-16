@@ -6,8 +6,8 @@
  * staff_profiles.permissions grant; customers/sellers none.
  */
 import { describe, expect, it } from "vitest";
-import { hasPermission } from "../src/backend/permissions";
-import { PERMISSIONS, type Permission, type Role } from "../src/backend/types";
+import { hasPermission } from "../backend/permissions";
+import { PERMISSIONS, type Permission, type Role } from "../backend/types";
 
 const APPROVE_SELLERS: Permission = "APPROVE_SELLERS";
 const MANAGE_PLATFORM_SETTINGS: Permission = "MANAGE_PLATFORM_SETTINGS";

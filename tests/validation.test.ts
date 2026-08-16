@@ -12,7 +12,7 @@ import {
   longitudeSchema,
   priceSchema,
   ratingSchema,
-} from "../src/backend/validation";
+} from "../backend/validation";
 
 describe("§62 — GPS validation", () => {
   it("rejects latitude out of range (−90..90)", () => {

@@ -6,7 +6,7 @@
  * shipped/delivered/completed → cancelled NOT allowed (use refund flow)
  */
 import { describe, expect, it } from "vitest";
-import { canTransitionOrderStatus } from "../src/backend/orders";
+import { canTransitionOrderStatus } from "../backend/orders";
 
 describe("§18 — order status transitions", () => {
   it("happy path pending → confirmed → shipped → delivered → completed", () => {

@@ -1,24 +1,52 @@
-# apps/center — VelCenter (center.velnox.com)
+# VelCenter
 
-ศูนย์กลางธุรกิจภายในของ Velnox (spec §10) — **ไม่ใช่หน้าสาธารณะ**
-เข้าถึงได้เฉพาะผู้ที่ auth + มี role/permission (owner / admin / staff + department scope)
-— บังคับฝั่ง server ใน `src/convex/centerAdmin.ts` ทุก action
+Internal Velnox operator / administration platform — company KPIs, order
+management, seller & staff operations, purchase-cycle intelligence, role-based
+access (owner / admin / staff). Internal only: noindex, auth required, and
+authorization is enforced server-side in Convex.
 
-## จุดเชื่อม (mapping)
+**Production domain:** https://center.velnox.com
 
-- Entry: `velcenter.html` (มี `<meta robots=noindex>` — ห้าม index)
-- Bootstrap: `src/sites/velcenter/main.tsx` (`RequireRole role="center"`)
-- Page: `src/pages/Center.tsx` — อ่านข้อมูลจริงจาก Neon ผ่าน `centerAdmin.ts` actions
-  (marketOverview / ordersList / updateOrderStatus)
-- RBAC: `src/backend/permissions.ts` + `src/backend/identity.ts`
+## What's here
 
-## Build & Deploy (Vercel)
+| Piece | Location |
+|---|---|
+| Entry HTML | `index.html` (`<meta robots=noindex>`) |
+| Bootstrap / router | `src/main.tsx` |
+| Operator page | `src/pages/Center.tsx` |
+| Shared UI/lib/hooks/auth + seller tooling components | `@velnox/shared` → `../../packages/shared/src/` |
+| Shared Convex backend | `../../convex/` (one deployment for all Velnox apps) |
+| Shared Neon commerce core | `../../backend/` + `../../db/` |
+
+## Development
 
 ```bash
-bun run build:center     # vite build --config vite.config.velcenter.ts
-bun run dev:center
+bun install              # at the repo root (Bun workspace)
+bun run dev:center       # from the repo root → http://localhost:5173
+# or, from this folder:
+bun run dev
 ```
 
-- Vercel project: `velnox-center` · Root `/` · Domain `center.velnox.com`
-- ความปลอดภัย: auth → identity → company authorization → permission → audit log
-  (ห้ามเปิด public self-registration)
+## Build
+
+```bash
+bun run build            # from this folder → static output in apps/center/dist
+```
+
+## Deploy (Vercel)
+
+- Repository: `EnJirad/velnox-mvp`
+- **Root Directory:** `apps/center`
+- **Framework:** Vite · **Build:** `bun run build` · **Install:** `bun install` · **Output:** `dist`
+- `vercel.json` applies security headers + SPA rewrite to `index.html`.
+- Access: `RequireRole role="center"` (owner/admin/staff) + server-side
+  permission checks in `convex/centerAdmin.ts` / `backend/permissions.ts`.
+
+## Environment variables (client / Vite)
+
+- `VITE_CONVEX_URL` — Convex deployment URL (**required**)
+- `VITE_VELSHOP_URL` / `VITE_VELSELLER_URL` / `VITE_VELCENTER_URL` / `VITE_CORPORATE_URL` — live domains
+- `VITE_SITE_BASENAME` — empty for standalone domain deploy
+
+Backend secrets (`DATABASE_URL`, `CLOUDINARY_*`, `JWT_PRIVATE_KEY`, `SITE_URL`,
+`VLY_CONVEX_AUTH_ISSUER`) are Convex deployment env vars.

@@ -12,12 +12,12 @@ import {
   getShippingProvider,
   quoteShipping,
   trackingStatusLabel,
-} from "../src/backend/shipping";
+} from "../backend/shipping";
 import {
   PAYMENT_METHODS,
   getPaymentProvider,
   paymentMethodMeta,
-} from "../src/backend/payment";
+} from "../backend/payment";
 
 describe("§22 — ShippingProvider abstraction", () => {
   it("registry resolves the manual provider by default (no hard-coded courier)", () => {

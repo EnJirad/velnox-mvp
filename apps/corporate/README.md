@@ -1,28 +1,44 @@
-# apps/corporate — Velnox Group (velnox.com)
+# Velnox Corporate
 
-เว็บไซต์องค์กรของ Velnox Group — **public, content-only** (ไม่มี auth, ไม่มี dashboard,
-ไม่มี cart/checkout — ตาม spec §5)
+Velnox Group corporate website (velnox.com) — company information, vision,
+business, ecosystem, careers, news and contact. Public and informational only:
+**no** Convex client, **no** auth, **no** dashboards. It links out to the real
+applications (VelShop / VelSeller / VelCenter) via `SITE_URLS`.
 
-## จุดเชื่อม (mapping)
+**Production domain:** https://velnox.com
 
-- Entry: `corporate.html`
-- Bootstrap: `src/sites/corporate/main.tsx`
-- Pages: `src/pages/corporate/` (Home, StaticPage data-driven, Contact)
-- Layout/theme: `src/pages/corporate/CorporateLayout.tsx` + shared tokens (`src/index.css`)
-- Cross-site links: `SITE_URLS` ใน `src/lib/sites.ts`
+## What's here
 
-## Routes
+| Piece | Location |
+|---|---|
+| Entry HTML | `index.html` |
+| Bootstrap / router | `src/main.tsx` |
+| Corporate pages | `src/pages/corporate/` (`CorporateHome`, `CorporateLayout`, `StaticPage`, `Contact`, `content`) |
+| Shared UI/lib | `@velnox/shared` → `../../packages/shared/src/` (Logo, `lib/utils`, `lib/sites`, theme CSS) |
 
-`/` (home) · `/about` · `/vision` · `/business` · `/ecosystem` · `/technology`
-· `/careers` · `/news` · `/privacy` · `/terms` · `/contact`
-
-## Build & Deploy (Vercel)
+## Development
 
 ```bash
-bun run build:corporate      # vite build --config vite.config.corporate.ts
-bun run dev:corporate        # vite --config vite.config.corporate.ts
+bun install                # at the repo root (Bun workspace)
+bun run dev:corporate      # from the repo root → http://localhost:5173
+# or, from this folder:
+bun run dev
 ```
 
-- Vercel project: `velnox-corporate` · Root `/` · Domain `velnox.com`
-- SEO: meta description + OpenGraph + JSON-LD Organization อยู่ใน `corporate.html`
-- robots: corporate ต้อง **index ได้** (ห้ามใส่ noindex)
+## Build
+
+```bash
+bun run build              # from this folder → static output in apps/corporate/dist
+```
+
+## Deploy (Vercel)
+
+- Repository: `EnJirad/velnox-mvp`
+- **Root Directory:** `apps/corporate`
+- **Framework:** Vite · **Build:** `bun run build` · **Install:** `bun install` · **Output:** `dist`
+- `vercel.json` applies security headers + SPA rewrite to `index.html`.
+
+## Environment variables (client / Vite)
+
+- `VITE_VELSHOP_URL` / `VITE_VELSELLER_URL` / `VITE_VELCENTER_URL` — live domains for cross-site links
+- `VITE_SITE_BASENAME` — empty for standalone domain deploy

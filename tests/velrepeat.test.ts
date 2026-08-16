@@ -5,7 +5,7 @@
  * frontend) and must always land in the future based on the chosen frequency.
  */
 import { describe, expect, it } from "vitest";
-import { computeNextOrderDate } from "../src/backend/subscriptions";
+import { computeNextOrderDate } from "../backend/subscriptions";
 
 describe("§33 — VelRepeat next order date", () => {
   const anchor = new Date("2026-08-15T12:00:00Z");

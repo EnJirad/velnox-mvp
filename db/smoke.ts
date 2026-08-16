@@ -8,7 +8,7 @@
  * Usage:
  *   DATABASE_URL=<neon-connection-string> bun run db:smoke
  */
-import { getPool } from "../src/backend/db";
+import { getPool } from "../backend/db";
 
 const REQUIRED_TABLES = [
   // base Commerce Core (schema.sql)

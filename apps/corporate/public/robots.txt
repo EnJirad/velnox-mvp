@@ -1,0 +1,6 @@
+User-agent: *
+Allow: /
+
+# VelShop (public marketplace) — crawlable
+# VelSeller / VelCenter — private dashboards, NOINDEX via <meta robots> per entry
+Sitemap: https://velnox.com/sitemap.xml

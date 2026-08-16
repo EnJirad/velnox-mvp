@@ -14,9 +14,9 @@ import {
   calcSellerNet,
   calcSellerReturnCost,
   round2,
-} from "../src/backend/rules";
-import { validateValue } from "../src/backend/platformSettings";
-import { priceSchema } from "../src/backend/validation";
+} from "../backend/rules";
+import { validateValue } from "../backend/platformSettings";
+import { priceSchema } from "../backend/validation";
 
 describe("§60 — platform commission (default 3%)", () => {
   it("1000 THB × 3% → platform fee 30 THB", () => {

@@ -12,7 +12,7 @@
  * Exits 0 when every check passes, 1 when any issue is found (CI-friendly).
  * Run AFTER a migration and before/after every production deploy.
  */
-import { getPool } from "../src/backend/db";
+import { getPool } from "../backend/db";
 
 const pool = getPool();
 

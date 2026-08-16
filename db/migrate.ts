@@ -17,7 +17,7 @@
  */
 import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
-import { getPool } from "../src/backend/db";
+import { getPool } from "../backend/db";
 
 const pool = getPool();
 
