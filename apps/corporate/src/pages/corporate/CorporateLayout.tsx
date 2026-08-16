@@ -152,9 +152,8 @@ export function CorporateLayout() {
             <div>
               <p className="text-xs font-semibold uppercase tracking-wider text-slate-400">เว็บไซต์ของ Velnox</p>
               <ul className="mt-4 space-y-2.5">
-                <li><FooterLink to={SITE_URLS.velshop} external>VelShop — หน้าร้านลูกค้า</FooterLink></li>
-                <li><FooterLink to={SITE_URLS.velseller} external>VelSeller — เครื่องมือร้านค้า</FooterLink></li>
-                <li><FooterLink to={SITE_URLS.velcenter} external>VelCenter — ศูนย์กลางธุรกิจ</FooterLink></li>
+                <li><FooterLink to={SITE_URLS.velshop} external>VelShop — สำหรับลูกค้า</FooterLink></li>
+                <li><FooterLink to={SITE_URLS.velseller} external>VelSeller — สำหรับร้านค้า</FooterLink></li>
               </ul>
             </div>
             <div>

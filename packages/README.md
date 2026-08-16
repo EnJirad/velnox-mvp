@@ -7,7 +7,7 @@ Shared frontend code for all four apps lives in one Bun workspace package:
 | Area | Location | Contents |
 |---|---|---|
 | UI kit | `packages/shared/src/components/ui/` | 60+ shadcn/ui primitives (button, dialog, table, form, …) — no business logic |
-| App shell & shared components | `packages/shared/src/components/` | `AppHeader`, `RequireAuth`, `RequireRole`, `SiteSwitcher`, `UserMenu`, `MobileTabBar`, seller/goals/reorder dialogs |
+| App shell & shared components | `packages/shared/src/components/` | `AppHeader`, `RequireAuth`, `RequireRole`, `UserMenu`, `MobileTabBar`, seller/goals/reorder dialogs |
 | Hooks | `packages/shared/src/hooks/` | `use-auth`, `use-mobile` |
 | Lib | `packages/shared/src/lib/` | `sites` (SITE_URLS / basename), `utils` (cn), `commerce` types, `shop`/`goals`/`reorder` helpers, `customer-memory-core`, `track`, `monitoring`, `app-shell`, `vly-integrations` |
 | Auth pages | `packages/shared/src/pages/` | `Auth`, `NotFound` |

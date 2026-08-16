@@ -279,6 +279,21 @@ cron VelRepeat + settlement, staff permission UI, variants UI, categories ผู
 | — | Required env: `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET` (+ `SITE_URL` สำหรับ return URL) — ตั้งใน Keys/API keys UI; ไม่ตั้ง = วิธีออนไลน์ถูกซ่อน ระบบ fallback manual | `docs/ENVIRONMENT.md`, `docs/production/environment.md`, `INSTALL_AND_USAGE.md` |
 | — | tests: conversion THB↔satang, signature verify (tamper/expiry/wrong-secret), session metadata gating, registry fallback — **113 ผ่าน / 0 fail** | `tests/stripe.test.ts` |
 
+## Phase 15 — Production Hardening (2026-08-16)
+
+รอบนี้ตอบ spec "FINAL PRODUCTION HARDENING":
+
+- **ลบ app switcher (SiteSwitcher)** ออกจากทุกเว็บ — แต่ละเว็บมี identity ของตัวเอง, ไม่มี dropdown สลับ app ใกล้โลโก้
+- **Corporate ปลอดข้อมูลภายใน**: เอา link velcenter ออกจาก footer สาธารณะ + เรียบเรียง content.ts ใหม่ ไม่พูดถึง Neon/Convex/DB/API/schema/RBAC — พูดแค่แบรนด์/สินค้า/บริการ/ติดต่อ
+- **Owner bootstrap ที่ปลอดภัย (spec §31)**: ลบ `becomeOwner` (first-come-first-served) → `claimOwner({ bootstrapCode })` ตรวจ `BOOTSTRAP_OWNER_SECRET` (env ฝั่ง server, ≥16 ตัว, เทียบ digest แบบ constant-time ผ่าน Web Crypto), ใช้แล้วปิดถาวร (มี owner แล้วทุกครั้งถูกปฏิเสธ), บันทึก business event `OwnerBootstrapped`; UI velcenter แสดงช่องป้อนรหัสแทนปุ่ม self-claim
+- **Seller application (spec §11–13)**: ลบ `becomeSeller` (self-promotion) → `createSellerApplication`/`openShop` สร้าง application สถานะ `pending` (re-submit ของ `rejected` กลับเป็น `pending` ใหม่; `suspended` โดนบล็อก); `requireSeller` ฝั่ง server อนุญาตเฉพาะ `approved` เท่านั้น (ทุก action เขียนข้อมูล); center approve/reject/suspend → sync Convex role ผ่าน `setSellerRoleInternal` (owner/admin เท่านั้น) + notification; RequireRole ฝั่ง seller อ่าน Neon `mySellerStatus` — ยังไม่ approved = เห็นสถานะ/แบบฟอร์มสมัคร ไม่ใช่หน้าจัดการ
+- **Product moderation (spec §16–17, §37)**: status ใหม่ `pending_review`/`rejected` + คอลัมน์ `rejection_reason` (migration 013 + schema.sql); publish intent → review pipeline (auto-approve ตาม rule `auto_approve_products`); center tab "สินค้า" กลายเป็น moderation queue จริง (อนุมัติ/ปฏิเสธ/ระงับ + เหตุผลบังคับก่อนปฏิเสธ + แจ้งเตือนพ่อค้า); พ่อค้าเห็น rejection reason + ปุ่มส่งตรวจสอบใหม่ใน velseller
+- **VelCenter tab "พ่อค้า" ใหม่**: review seller application (อนุมัติ/ปฏิเสธ/ระงับ) — ก่อนหน้านี้มีแต่ backend action ไม่มี UI
+- **i18n**: keys ใหม่ `gate.*` + `productModeration.*` ครบ th/en/my + test parity (ทุก locale ต้องมี key set เท่ากัน)
+- **Tests ใหม่**: bootstrap secret, seller/product moderation rules, locale parity → **127 pass / 0 fail**
+
+Env ใหม่ที่ต้องตั้ง (Convex deployment env / Keys UI): `BOOTSTRAP_OWNER_SECRET` — ดู docs/ENVIRONMENT.md
+
 ## ไฟล์ที่ตรวจแล้ว (สำหรับอ้างอิง)
 
 - Docs: README.md, docs/ARCHITECTURE.md, docs/GAP_ANALYSIS.md, docs/PHASE_PLAN.md, docs/Velnox-CPNS.md, docs/CUSTOMER_MEMORY.md, docs/PHASE-10/11/12/13-REPORT.md, docs/PRODUCTION.md, docs/SECURITY.md

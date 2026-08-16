@@ -358,7 +358,7 @@ Vercel → Project → **Settings → Rewrites & Redirects** → Rewrites → **
 3. ตรวจ:
    - `https://velshop.vercel.app` → หน้าตลาด (ดูสินค้า/สั่งซื้อ)
    - `https://velseller.vercel.app` → หลังบ้านพ่อค้า (เปิดร้าน/สินค้า/รายได้)
-   - `https://velcenter.vercel.app` → หลังบ้านบริษัท (ล็อกอิน → รับสิทธิ์ owner คนแรก)
+   - `https://velcenter.vercel.app` → หลังบ้านบริษัท (ล็อกอิน → ป้อน `BOOTSTRAP_OWNER_SECRET` ครั้งเดียว → ได้สิทธิ์ owner → สร้างพนักงานต่อ)
 4. (optional) **Custom domain**: Project → Settings → Domains → เพิ่ม `velshop.com` → ตั้ง DNS ตามที่ Vercel ให้ (A record `76.76.21.21` หรือ CNAME) แล้วแก้ `VITE_VEL*_URL` ใน Vercel env ให้เป็น domain จริง
 
 ---
@@ -373,6 +373,7 @@ Vercel → Project → **Settings → Rewrites & Redirects** → Rewrites → **
 | `DATABASE_URL` (Neon) | — | ✅ |
 | `CLOUDINARY_CLOUD_NAME` / `_API_KEY` / `_API_SECRET` | — | ✅ |
 | `SITE_URL` | — | ✅ |
+| `BOOTSTRAP_OWNER_SECRET` | — | ✅ (ตั้งก่อนเปิด velcenter ครั้งแรก — ใช้ครั้งเดียว แล้วปิดถาวร) |
 
 ---
 

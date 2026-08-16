@@ -624,5 +624,63 @@ export const en: Dict = {
       "Couldn't get your current location — please pick a location on the map instead (drag the pin or tap the map)",
   },
 
+  gate: {
+    sellerTitle: "VelSeller area",
+    sellerDesc:
+      "VelSeller is the toolkit for merchants selling on Velnox — manage your products, income and orders.",
+    sellerApply: "Become a Seller",
+    sellerApplyShort: "Apply",
+    sellerShopName: "Shop name *",
+    sellerShopNamePlaceholder: "e.g. Herb Home Shop",
+    sellerShopNameRequired: "Please enter a shop name",
+    sellerApplySuccess: "Application submitted 🎉 — our team is reviewing it",
+    sellerPendingTitle: "Application under review",
+    sellerPendingDesc:
+      "Your application has been submitted — the Velnox team will review and approve your shop.",
+    sellerRejectedTitle: "Application rejected",
+    sellerRejectedReason: "Reason: {reason}",
+    sellerRejectedDesc:
+      "Your application wasn't approved — fix the details and re-apply, or contact the Velnox team.",
+    sellerSuspendedTitle: "Store suspended",
+    sellerSuspendedDesc:
+      "Your store has been suspended — contact the Velnox team for details.",
+    sellerNotApproved:
+      "You don't have VelSeller access yet — you need to be an approved Seller first.",
+    sellerBackToShop: "← Back to the store",
+    centerTitle: "VelCenter area",
+    centerLockedTitle: "VelCenter is company-only",
+    centerLockedDesc:
+      "Only employees granted access by the company owner can enter — contact the company owner to request access.",
+    centerBootstrapTitle: "Set up the company owner (one-time)",
+    centerBootstrapDesc:
+      "VelCenter has no owner yet — enter the one-time bootstrap code (BOOTSTRAP_OWNER_SECRET) configured by the operator to claim company owner access.",
+    centerBootstrapCode: "One-time bootstrap code",
+    centerBootstrapCodePlaceholder: "Enter the bootstrap code",
+    centerBootstrapSubmit: "Claim company owner",
+    centerBootstrapMissing:
+      "The bootstrap code isn't configured yet — the operator must set BOOTSTRAP_OWNER_SECRET in the project Keys/API keys first.",
+    centerBootstrapSuccess: "You are now the Velnox company owner 🏆",
+    centerBootstrapInvalid: "Invalid bootstrap code",
+    centerBackToShop: "← Back to the store",
+    authRequired: "Please sign in to continue",
+  },
+
+  productModeration: {
+    statusDraft: "Draft",
+    statusPendingReview: "Under review",
+    statusPublished: "Published",
+    statusRejected: "Rejected",
+    statusArchived: "Archived",
+    rejectedReason: "Rejection reason: {reason}",
+    submitForReview: "Submit for review",
+    submitting: "Submitting...",
+    submittedToast: "Submitted for review — the team will approve it 🛍️",
+    unpublishedToast: "Unpublished",
+    republishToast: "Re-submitted for review",
+    sellerPendingTitle: "Products under review",
+    sellerPendingDesc:
+      "Your product was submitted to the review team — once approved it will appear in the shop storefront.",
+  },
+
   // __APPEND__
 };

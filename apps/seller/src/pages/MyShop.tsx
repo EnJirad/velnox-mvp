@@ -1,4 +1,5 @@
 import { AppHeader } from "@velnox/shared/components/AppHeader";
+import { SITE_URLS } from "@velnox/shared/lib/sites";
 import { ProductFormDialog } from "@velnox/shared/components/seller/ProductFormDialog";
 import { Badge } from "@velnox/shared/components/ui/badge";
 import { Button } from "@velnox/shared/components/ui/button";
@@ -24,6 +25,7 @@ import {
   TableRow,
 } from "@velnox/shared/components/ui/table";
 import { api } from "@convex/_generated/api";
+import { useLanguage } from "@velnox/shared/lib/i18n";
 import {
   PRODUCT_CATEGORY_META,
   formatBaht,
@@ -34,6 +36,7 @@ import {
 import { useAction } from "convex/react";
 import {
   BadgePercent,
+  Clock,
   Eye,
   EyeOff,
   ImageOff,
@@ -45,6 +48,7 @@ import {
   ShieldCheck,
   Store,
   Trash2,
+  XCircle,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
@@ -52,6 +56,7 @@ import { toast } from "sonner";
 const EMPTY_ONBOARD = { shopName: "", slug: "", description: "", taxId: "" };
 
 export default function MyShop() {
+  const { t } = useLanguage();
   const mySellerProfile = useAction(api.commerce.mySellerProfile);
   const openShop = useAction(api.commerce.openShop);
   const listProducts = useAction(api.commerce.listProducts);
@@ -78,7 +83,8 @@ export default function MyShop() {
   }, [products, query]);
 
   const publishedCount = products.filter((p) => p.status === "published").length;
-  const draftCount = products.length - publishedCount;
+  const pendingCount = products.filter((p) => p.status === "pending_review").length;
+  const rejectedCount = products.filter((p) => p.status === "rejected").length;
 
   const reloadProducts = useCallback(async () => {
     try {
@@ -130,9 +136,20 @@ export default function MyShop() {
   const handleTogglePublish = async (product: StoreProduct) => {
     setTogglingId(product.id);
     try {
-      const next = product.status === "published" ? "draft" : "published";
-      const updated = await setStatus({ productId: product.id, status: next });
-      toast.success(next === "published" ? "ประกาศขายหน้าร้านแล้ว 🛍️" : "ปิดการขายแล้ว");
+      if (product.status === "published") {
+        const updated = await setStatus({ productId: product.id, status: "draft" });
+        toast.success(t("productModeration.unpublishedToast"));
+        if (updated) {
+          setProducts((prev) => prev.map((p) => (p.id === updated.id ? updated : p)));
+        }
+        return;
+      }
+      // Publish intent -> product moderation (spec §16–17): the backend sends
+      // it to review (or publishes instantly when the platform rule is on).
+      const updated = await setStatus({ productId: product.id, status: "published" });
+      toast.success(
+        updated?.status === "published" ? "ประกาศขายหน้าร้านแล้ว 🛍️" : t("productModeration.submittedToast"),
+      );
       if (updated) {
         setProducts((prev) => prev.map((p) => (p.id === updated.id ? updated : p)));
       }
@@ -158,6 +175,47 @@ export default function MyShop() {
     } finally {
       setDeletingBusy(false);
     }
+  };
+
+  /** Moderation-aware status badge (spec §16–17, §37). */
+  const renderStatus = (product: StoreProduct) => {
+    if (product.status === "published") {
+      return (
+        <Badge className="gap-1 rounded-full bg-emerald-50 text-emerald-700 ring-1 ring-inset ring-emerald-600/15 hover:bg-emerald-50">
+          <span className="size-1.5 rounded-full bg-emerald-500" />
+          {t("productModeration.statusPublished")}
+        </Badge>
+      );
+    }
+    if (product.status === "pending_review") {
+      return (
+        <Badge className="gap-1 rounded-full bg-amber-50 text-amber-700 ring-1 ring-inset ring-amber-600/15 hover:bg-amber-50">
+          <span className="size-1.5 rounded-full bg-amber-500" />
+          {t("productModeration.statusPendingReview")}
+        </Badge>
+      );
+    }
+    if (product.status === "rejected") {
+      return (
+        <Badge className="gap-1 rounded-full bg-rose-50 text-rose-700 ring-1 ring-inset ring-rose-600/15 hover:bg-rose-50">
+          <XCircle className="size-3" />
+          {t("productModeration.statusRejected")}
+        </Badge>
+      );
+    }
+    return (
+      <Badge className="gap-1 rounded-full bg-slate-100 text-slate-500 ring-1 ring-inset ring-slate-600/10 hover:bg-slate-100">
+        <span className="size-1.5 rounded-full bg-slate-400" />
+        {product.status === "archived" ? t("productModeration.statusArchived") : t("productModeration.statusDraft")}
+      </Badge>
+    );
+  };
+
+  const toggleLabel = (product: StoreProduct) => {
+    if (product.status === "published") return "ปิดขาย";
+    if (product.status === "pending_review") return t("productModeration.statusPendingReview");
+    if (product.status === "rejected") return t("productModeration.submitForReview");
+    return t("productModeration.submitForReview");
   };
 
   // ---------------------------------------------------------------- onboarding
@@ -237,6 +295,56 @@ export default function MyShop() {
                 เปิดร้านค้า
               </Button>
             </form>
+          </div>
+        </main>
+      </div>
+    );
+  }
+
+  // ------------------------------------------------ approval gate (spec §11)
+  if (profile.seller.status !== "approved") {
+    const pending = profile.seller.status === "pending";
+    const rejected = profile.seller.status === "rejected";
+    return (
+      <div className="min-h-screen bg-[#F8FAFC] text-slate-900">
+        <AppHeader />
+        <main className="mx-auto w-full max-w-xl px-4 py-12 sm:px-6">
+          <div className="rounded-2xl border border-slate-200 bg-white p-8 text-center shadow-[0_12px_30px_rgba(15,23,42,0.06)]">
+            <span
+              className={`mx-auto flex size-14 items-center justify-center rounded-2xl ${
+                pending ? "bg-amber-50" : "bg-rose-50"
+              }`}
+            >
+              {pending ? (
+                <Clock className="size-7 text-amber-500" />
+              ) : (
+                <XCircle className="size-7 text-rose-500" />
+              )}
+            </span>
+            <h1 className="mt-5 text-xl font-bold tracking-tight text-slate-900">
+              {pending ? t("gate.sellerPendingTitle") : t("gate.sellerRejectedTitle")}
+            </h1>
+            <p className="mt-2 text-sm leading-6 text-slate-500">
+              {pending ? t("gate.sellerPendingDesc") : t("gate.sellerRejectedDesc")}
+            </p>
+            {rejected && profile.seller.rejectionReason && (
+              <p className="mt-4 rounded-[10px] bg-rose-50 px-3 py-2.5 text-sm font-medium text-rose-700">
+                {t("gate.sellerRejectedReason", { reason: profile.seller.rejectionReason })}
+              </p>
+            )}
+            {profile.seller.status === "suspended" && (
+              <>
+                <h1 className="mt-5 text-xl font-bold tracking-tight text-slate-900">
+                  {t("gate.sellerSuspendedTitle")}
+                </h1>
+                <p className="mt-2 text-sm leading-6 text-slate-500">
+                  {t("gate.sellerSuspendedDesc")}
+                </p>
+              </>
+            )}
+            <Button variant="ghost" className="mt-6 w-full text-slate-500" asChild>
+              <a href={SITE_URLS.velshop}>{t("gate.sellerBackToShop")}</a>
+            </Button>
           </div>
         </main>
       </div>
@@ -330,7 +438,7 @@ export default function MyShop() {
           </div>
 
           {/* quick stats */}
-          <div className="mt-4 grid grid-cols-3 gap-2 sm:max-w-md">
+          <div className="mt-4 grid grid-cols-2 gap-2 sm:max-w-lg sm:grid-cols-4">
             <div className="rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-center">
               <p className="text-lg font-bold tabular-nums text-slate-900">{products.length}</p>
               <p className="text-[11px] text-slate-400">ทั้งหมด</p>
@@ -340,8 +448,12 @@ export default function MyShop() {
               <p className="text-[11px] text-slate-400">ขายหน้าร้าน</p>
             </div>
             <div className="rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-center">
-              <p className="text-lg font-bold tabular-nums text-slate-500">{draftCount}</p>
-              <p className="text-[11px] text-slate-400">ฉบับร่าง</p>
+              <p className="text-lg font-bold tabular-nums text-amber-600">{pendingCount}</p>
+              <p className="text-[11px] text-slate-400">รอตรวจสอบ</p>
+            </div>
+            <div className="rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-center">
+              <p className="text-lg font-bold tabular-nums text-rose-600">{rejectedCount}</p>
+              <p className="text-[11px] text-slate-400">ถูกปฏิเสธ</p>
             </div>
           </div>
 
@@ -352,7 +464,8 @@ export default function MyShop() {
               </span>
               <h3 className="mt-5 text-lg font-semibold text-slate-900">ยังไม่มีสินค้า</h3>
               <p className="mt-1.5 max-w-sm text-sm leading-6 text-slate-500">
-                เพิ่มสินค้าตัวแรกพร้อมอัปโหลดรูป — เมื่อประกาศขาย ลูกค้าจะเห็นที่หน้าร้าน velshop ทันที
+                เพิ่มสินค้าตัวแรกพร้อมอัปโหลดรูป — เมื่อประกาศขาย สินค้าจะถูกส่งตรวจสอบ แล้วแสดงที่หน้าร้าน
+                velshop เมื่อทีมงานอนุมัติ
               </p>
               <Button
                 className="mt-6 gap-1.5 bg-slate-900 text-white hover:bg-slate-800"
@@ -433,26 +546,20 @@ export default function MyShop() {
                           </p>
                         </TableCell>
                         <TableCell>
-                          {product.status === "published" ? (
-                            <Badge className="gap-1 rounded-full bg-emerald-50 text-emerald-700 ring-1 ring-inset ring-emerald-600/15 hover:bg-emerald-50">
-                              <span className="size-1.5 rounded-full bg-emerald-500" />
-                              ขายหน้าร้าน
-                            </Badge>
-                          ) : (
-                            <Badge className="gap-1 rounded-full bg-slate-100 text-slate-500 ring-1 ring-inset ring-slate-600/10 hover:bg-slate-100">
-                              <span className="size-1.5 rounded-full bg-slate-400" />
-                              ฉบับร่าง
-                            </Badge>
+                          {renderStatus(product)}
+                          {product.status === "rejected" && product.rejectionReason && (
+                            <p className="mt-1 text-xs font-medium text-rose-600">
+                              {t("productModeration.rejectedReason", { reason: product.rejectionReason })}
+                            </p>
                           )}
                         </TableCell>
                         <TableCell className="pr-5 text-right">
-                          <div className="flex items-center justify-end gap-1.5">
-                            <Button
+                          <div className="flex items-center justify-end gap-1.5">                              <Button
                               variant="outline"
                               size="sm"
                               className="gap-1.5 border-slate-200 text-slate-600"
                               onClick={() => handleTogglePublish(product)}
-                              disabled={togglingId === product.id}
+                              disabled={togglingId === product.id || product.status === "pending_review"}
                             >
                               {togglingId === product.id ? (
                                 <Loader2 className="size-3.5 animate-spin" />
@@ -461,7 +568,7 @@ export default function MyShop() {
                               ) : (
                                 <Eye className="size-3.5" />
                               )}
-                              {product.status === "published" ? "ปิดขาย" : "ประกาศขาย"}
+                              {toggleLabel(product)}
                             </Button>
                             <Button
                               variant="outline"
@@ -527,16 +634,11 @@ export default function MyShop() {
                             <span className="text-xs font-normal text-slate-400"> / {product.unit}</span>
                           </p>
                           <span className="text-xs text-slate-400">· สต็อก {available}</span>
-                          {published ? (
-                            <Badge className="gap-1 rounded-full bg-emerald-50 text-emerald-700 ring-1 ring-inset ring-emerald-600/15 hover:bg-emerald-50">
-                              <span className="size-1.5 rounded-full bg-emerald-500" />
-                              ขายหน้าร้าน
-                            </Badge>
-                          ) : (
-                            <Badge className="gap-1 rounded-full bg-slate-100 text-slate-500 ring-1 ring-inset ring-slate-600/10 hover:bg-slate-100">
-                              <span className="size-1.5 rounded-full bg-slate-400" />
-                              ฉบับร่าง
-                            </Badge>
+                          {renderStatus(product)}
+                          {product.status === "rejected" && product.rejectionReason && (
+                            <p className="mt-1 text-xs font-medium text-rose-600">
+                              {t("productModeration.rejectedReason", { reason: product.rejectionReason })}
+                            </p>
                           )}
                         </div>
                       </div>
@@ -546,16 +648,16 @@ export default function MyShop() {
                         size="sm"
                         className="flex-1 gap-1.5 bg-slate-900 text-white hover:bg-slate-800"
                         onClick={() => handleTogglePublish(product)}
-                        disabled={togglingId === product.id}
+                        disabled={togglingId === product.id || product.status === "pending_review"}
                       >
                         {togglingId === product.id ? (
                           <Loader2 className="size-3.5 animate-spin" />
-                        ) : published ? (
+                        ) : product.status === "published" ? (
                           <EyeOff className="size-3.5" />
                         ) : (
                           <Eye className="size-3.5" />
                         )}
-                        {published ? "ปิดขาย" : "ประกาศขาย"}
+                        {toggleLabel(product)}
                       </Button>
                       <Button
                         variant="outline"

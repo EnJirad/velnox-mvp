@@ -1,5 +1,4 @@
 import { Logo } from "@velnox/shared/components/Logo";
-import { SiteSwitcher } from "@velnox/shared/components/SiteSwitcher";
 import { UserMenu } from "@velnox/shared/components/UserMenu";
 import { RefreshCw, ShoppingBag, Store, Target, Wallet } from "lucide-react";
 import { Link, useLocation, useNavigate } from "react-router";
@@ -23,7 +22,6 @@ export function AppHeader() {
           <button type="button" onClick={() => navigate("/")} aria-label="Velnox">
             <Logo />
           </button>
-          <SiteSwitcher />
           <nav className="hidden items-center gap-1 lg:flex">
             {NAV_ITEMS.map((item) => {
               const active = location.pathname.startsWith(item.to);

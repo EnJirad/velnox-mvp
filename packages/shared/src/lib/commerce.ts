@@ -36,7 +36,7 @@ export interface StoreInventory {
   available: number;
 }
 
-export type StoreProductStatus = "draft" | "published" | "archived";
+export type StoreProductStatus = "draft" | "pending_review" | "published" | "rejected" | "archived";
 export type StoreProductCategory = "general" | "food" | "daily" | "beauty" | "packaging" | "other";
 
 export interface StoreProduct {
@@ -50,6 +50,7 @@ export interface StoreProduct {
   price: number;
   currency: string;
   status: StoreProductStatus;
+  rejectionReason: string | null;
   supplier: string | null;
   createdAt: string;
   updatedAt: string;
@@ -83,6 +84,7 @@ export interface SellerProfile {
     name: string;
     taxId: string | null;
     status: "pending" | "approved" | "rejected" | "suspended";
+    rejectionReason: string | null;
     refundPolicyLimit: number;
     createdAt: string;
   };

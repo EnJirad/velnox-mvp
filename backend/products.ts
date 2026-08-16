@@ -39,6 +39,7 @@ function mapProduct(r: Record<string, any>): Product {
     price: Number(r.price),
     currency: r.currency,
     status: r.status,
+    rejectionReason: r.rejection_reason ?? null,
     supplier: r.supplier ?? null,
     createdAt: r.created_at,
     updatedAt: r.updated_at,
@@ -152,7 +153,7 @@ export async function getProduct(db: Db, productId: string): Promise<Product | n
 export async function updateProduct(
   db: Db,
   productId: string,
-  patch: Partial<Pick<Product, "name" | "description" | "category" | "unit" | "price" | "status" | "supplier">>,
+  patch: Partial<Pick<Product, "name" | "description" | "category" | "unit" | "price" | "status" | "rejectionReason" | "supplier">>,
 ): Promise<Product | null> {
   if (patch.price !== undefined) validatePrice(patch.price);
   const sets: string[] = [];
@@ -164,6 +165,7 @@ export async function updateProduct(
     unit: "unit",
     price: "price",
     status: "status",
+    rejectionReason: "rejection_reason",
     supplier: "supplier",
   };
   for (const [key, col] of Object.entries(allowed)) {

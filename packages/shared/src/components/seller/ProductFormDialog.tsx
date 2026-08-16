@@ -267,10 +267,12 @@ function ProductFormInner({ shop, product, onClose, onSaved }: InnerProps) {
         <div className="flex items-center gap-2 rounded-[10px] border border-slate-200 px-3 py-2.5">
           <Store className="size-4 shrink-0 text-[#10B981]" />
           <div className="flex-1">
-            <p className="text-sm font-medium text-slate-900">ประกาศขายที่หน้าร้าน velshop</p>
-            <p className="text-xs text-slate-400">ต้องตั้งราคาและสต็อกก่อนจึงจะประกาศขายได้</p>
+            <p className="text-sm font-medium text-slate-900">ส่งตรวจสอบเพื่อขายที่หน้าร้าน velshop</p>
+            <p className="text-xs text-slate-400">
+              ต้องตั้งราคาและสต็อกก่อน — หลังส่งแล้วทีมงานตรวจสอบก่อนประกาศขายจริง
+            </p>
           </div>
-          <Switch checked={form.published} onCheckedChange={(v) => set("published", v)} aria-label="ประกาศขาย" />
+          <Switch checked={form.published} onCheckedChange={(v) => set("published", v)} aria-label="ส่งตรวจสอบ" />
         </div>
 
         {current && (

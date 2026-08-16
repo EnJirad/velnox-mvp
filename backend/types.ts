@@ -12,7 +12,7 @@ export type Role = "customer" | "seller" | "staff" | "admin" | "owner";
 export type Department = "marketing" | "sales" | "operations" | "finance" | "general";
 export type SellerStatus = "pending" | "approved" | "rejected" | "suspended";
 export type ShopStatus = "active" | "suspended" | "closed";
-export type ProductStatus = "draft" | "published" | "archived";
+export type ProductStatus = "draft" | "pending_review" | "published" | "rejected" | "archived";
 export type ProductCategory = "general" | "food" | "daily" | "beauty" | "packaging" | "other";
 export type OrderStatus = "pending" | "confirmed" | "shipped" | "delivered" | "completed" | "cancelled";
 export type PaymentStatus = "unpaid" | "pending" | "paid" | "partially_refunded" | "refunded" | "failed";
@@ -41,6 +41,8 @@ export interface Seller {
   name: string;
   taxId: string | null;
   status: SellerStatus;
+  /** reason shown when the application was rejected (null otherwise) */
+  rejectionReason: string | null;
   /** 0.10 = platform pays at most 10% of sales if the return rate exceeds it */
   refundPolicyLimit: number;
   createdAt: string;
@@ -97,6 +99,8 @@ export interface Product {
   price: number;
   currency: string;
   status: ProductStatus;
+  /** moderation rejection reason (null unless status === 'rejected') */
+  rejectionReason: string | null;
   supplier: string | null;
   createdAt: string;
   updatedAt: string;

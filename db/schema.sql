@@ -61,7 +61,11 @@ CREATE TABLE IF NOT EXISTS sellers (
   name                 TEXT NOT NULL,
   tax_id               TEXT,
   status               TEXT NOT NULL DEFAULT 'pending'
-                       CHECK (status IN ('pending','approved','suspended')),
+                       CHECK (status IN ('pending','approved','rejected','suspended')),
+  approved_at          TIMESTAMPTZ,
+  approved_by          UUID REFERENCES users (id),
+  -- reason shown to the seller when the application was rejected
+  rejection_reason     TEXT,
   -- 0.10 = Velnox covers returns up to 10% of sales; beyond that the seller pays
   refund_policy_limit  NUMERIC(6,4) NOT NULL DEFAULT 0.10,
   created_at           TIMESTAMPTZ NOT NULL DEFAULT now()
@@ -104,7 +108,9 @@ CREATE TABLE IF NOT EXISTS products (
   price       NUMERIC(12,2) NOT NULL DEFAULT 0,
   currency    TEXT NOT NULL DEFAULT 'THB',
   status      TEXT NOT NULL DEFAULT 'draft'
-              CHECK (status IN ('draft','published','archived')),
+              CHECK (status IN ('draft','pending_review','published','rejected','archived')),
+  -- moderation rejection reason (only set when status = 'rejected')
+  rejection_reason TEXT,
   supplier    TEXT,
   created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at  TIMESTAMPTZ NOT NULL DEFAULT now()

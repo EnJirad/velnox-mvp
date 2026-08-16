@@ -29,6 +29,7 @@ function mapSeller(r: Record<string, any>): Seller {
     name: r.name,
     taxId: r.tax_id ?? null,
     status: r.status,
+    rejectionReason: r.rejection_reason ?? null,
     refundPolicyLimit: Number(r.refund_policy_limit),
     createdAt: r.created_at,
   };

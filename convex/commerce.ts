@@ -25,6 +25,7 @@ import { getDb } from "../backend/db";
 import {
   findOrCreateUser,
   getSellerByOwner,
+  getSellerById,
   createSeller,
   getShopById,
   createShop,
@@ -61,6 +62,11 @@ import {
 } from "../backend/stripe";
 import { audit } from "../backend/audit";
 import { AppError } from "../backend/errors";
+import {
+  resolveProductPublishStatus,
+  SELLER_SETTABLE_PRODUCT_STATUSES,
+  sellerCanOperate,
+} from "../backend/moderation";
 import { gpsSchema } from "../backend/validation";
 import { resolveRules } from "../backend/rules";
 import { enforceRateLimit } from "./rateLimit";
@@ -100,7 +106,13 @@ async function requireIdentity(ctx: ActionCtx) {
 async function requireSeller(ctx: ActionCtx) {
   const { identity, user } = await requireIdentity(ctx);
   const seller = await getSellerByOwner(getDb(), user.id);
-  if (!seller) throw new AppError("FORBIDDEN", "ไม่พบร้านค้าของคุณ — กรุณาเปิดร้านก่อน");
+  if (!seller) throw new AppError("FORBIDDEN", "ไม่พบร้านค้าของคุณ — กรุณาสมัครเป็น Seller ก่อน");
+  // Server-side approval gate (spec §11–12): only APPROVED sellers may use
+  // the merchant tools. Pending/rejected/suspended are rejected here — the
+  // frontend role/localStorage is never trusted for seller functionality.
+  if (!sellerCanOperate(seller.status)) {
+    throw new AppError("FORBIDDEN", "ร้านค้ายังไม่ผ่านการอนุมัติ — รอทีมงาน Velnox ตรวจสอบก่อนใช้งาน");
+  }
   return { identity, user, seller };
 }
 
@@ -160,7 +172,65 @@ export const syncUser = action({
   },
 });
 
-/** velseller: open a shop (creates seller + shop if not yet open). */
+/**
+ * Seller application (spec §13): Customer -> Application (PENDING) -> Center
+ * review -> APPROVED -> seller activated. Never self-promotes: the seller
+ * row is created with status 'pending' and only velcenter (or the platform
+ * auto_approve_sellers rule / the company's own account) can approve it.
+ */
+async function applySeller(
+  ctx: ActionCtx,
+  args: {
+    shopName: string;
+    slug?: string | null;
+    description?: string | null;
+    taxId?: string | null;
+  },
+) {
+  const { user } = await requireIdentity(ctx);
+  const db = getDb();
+
+  let seller = await getSellerByOwner(db, user.id);
+  if (!seller) {
+    seller = await createSeller(db, {
+      ownerUserId: user.id,
+      name: args.shopName,
+      taxId: args.taxId ?? null,
+    });
+  } else if (seller.status === "suspended") {
+    throw new AppError("FORBIDDEN", "ร้านค้าของคุณถูกระงับ — ติดต่อทีมงาน Velnox");
+  } else if (seller.status === "rejected") {
+    // Re-application: back to PENDING with a fresh review (old reason cleared).
+    const rows = await db(
+      `UPDATE sellers SET status = 'pending', rejection_reason = NULL WHERE id = $1 RETURNING *`,
+      [seller.id],
+    );
+    seller = await getSellerById(db, seller.id);
+    if (!seller) throw new AppError("NOT_FOUND", "Seller not found");
+  }
+
+  // Approval gate (spec §9): the application starts 'pending'. Auto-approve
+  // only when the platform rule is on, or for the company's own account
+  // (owner/admin) so the company storefront works immediately.
+  const rules = await resolveRules(db);
+  if (rules.autoApproveSellers || user.role === "owner" || user.role === "admin") {
+    await db(
+      `UPDATE sellers SET status = 'approved', approved_at = now() WHERE id = $1`,
+      [seller.id],
+    );
+    seller.status = "approved";
+  }
+  const existing = await listShopsBySeller(db, seller.id);
+  const shop = existing[0] ?? (await createShop(db, {
+    sellerId: seller.id,
+    name: args.shopName,
+    slug: args.slug ?? null,
+    description: args.description ?? null,
+  }));
+  return { user, seller, shop };
+}
+
+/** velseller: open a shop (creates the seller application + shop). */
 export const openShop = action({
   args: {
     shopName: v.string(),
@@ -168,34 +238,38 @@ export const openShop = action({
     description: v.optional(v.string()),
     taxId: v.optional(v.string()),
   },
-  handler: async (ctx, args) => {
+  handler: async (ctx, args) => applySeller(ctx, args),
+});
+
+/**
+ * Canonical seller-application entry point (spec §13): identical to
+ * openShop — creates a PENDING seller application (+ shop) and returns the
+ * resulting status. Only velcenter approval activates the seller.
+ */
+export const createSellerApplication = action({
+  args: {
+    shopName: v.string(),
+    slug: v.optional(v.string()),
+    description: v.optional(v.string()),
+    taxId: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => applySeller(ctx, args),
+});
+
+/**
+ * velseller gate: the signed-in user's seller status (Neon — authoritative).
+ * null when the user has no application yet; otherwise one of the
+ * SellerStatus values + the rejection reason when applicable.
+ */
+export const mySellerStatus = action({
+  args: {},
+  handler: async (ctx) => {
     const { user } = await requireIdentity(ctx);
-    const db = getDb();
-    const seller = await createSeller(db, {
-      ownerUserId: user.id,
-      name: args.shopName,
-      taxId: args.taxId ?? null,
-    });
-    // Approval gate (spec §9): the seller starts 'pending'. Auto-approve when
-    // platform auto_approve_sellers is on, or when the shop belongs to the
-    // company itself (owner/admin) so the company's own storefront works
-    // immediately. Third-party sellers stay pending until velcenter approves.
-    const rules = await resolveRules(db);
-    if (rules.autoApproveSellers || user.role === "owner" || user.role === "admin") {
-      await db(
-        `UPDATE sellers SET status = 'approved', approved_at = now() WHERE id = $1`,
-        [seller.id],
-      );
-      seller.status = "approved";
-    }
-    const existing = await listShopsBySeller(db, seller.id);
-    const shop = existing[0] ?? (await createShop(db, {
-      sellerId: seller.id,
-      name: args.shopName,
-      slug: args.slug ?? null,
-      description: args.description ?? null,
-    }));
-    return { user, seller, shop };
+    const seller = await getSellerByOwner(getDb(), user.id);
+    return {
+      status: seller?.status ?? null,
+      rejectionReason: seller?.rejectionReason ?? null,
+    };
   },
 });
 
@@ -288,12 +362,16 @@ export const listProducts = action({
   handler: async (ctx, args) => {
     const db = getDb();
     if (args.mine) {
-      const { seller } = await requireSeller(ctx);
+      // Soft gate: non-approved sellers read an empty list (the UI shows the
+      // pending/rejected state instead of the management screen).
+      const { user } = await requireIdentity(ctx);
+      const seller = await getSellerByOwner(db, user.id);
+      if (!seller || seller.status !== "approved") return [];
       const shops = await listShopsBySeller(db, seller.id);
       return listNeonProducts(db, {
         sellerId: seller.id,
         shopId: shops[0]?.id,
-        status: args.status as "draft" | "published" | "archived" | undefined,
+        status: args.status as "draft" | "pending_review" | "published" | "rejected" | "archived" | undefined,
         q: args.q,
         limit: args.limit ?? 100,
         offset: args.offset,
@@ -368,6 +446,12 @@ export const createProductAction = action({
     const db = getDb();
     const shops = await listShopsBySeller(db, seller.id);
     if (!shops.some((s) => s.id === args.shopId)) throw new AppError("FORBIDDEN", "ร้านนี้ไม่ใช่ของคุณ");
+    // Product moderation (spec §16): an initial "published" intent is stored
+    // as pending_review unless the platform auto-approve rule is on — the
+    // review pipeline decides what actually goes live.
+    const requestedStatus = (args.status as "draft" | "published" | "archived" | "pending_review" | undefined) ?? "draft";
+    const rules = await resolveRules(db);
+    const initialStatus = resolveProductPublishStatus(requestedStatus, rules.autoApproveProducts);
     const product = await createProduct(db, {
       shopId: args.shopId,
       name: args.name,
@@ -375,7 +459,7 @@ export const createProductAction = action({
       category: args.category as "general" | "food" | "daily" | "beauty" | "packaging" | "other" | undefined,
       unit: args.unit ?? "piece",
       price: args.price,
-      status: (args.status as "draft" | "published" | "archived" | undefined) ?? "draft",
+      status: initialStatus,
       supplier: args.supplier ?? null,
       initialStock: args.initialStock ?? 0,
     });
@@ -436,31 +520,44 @@ export const updateProductAction = action({
 export const setProductStatusAction = action({
   args: { productId: v.string(), status: v.string() },
   handler: async (ctx, args) => {
-    const { product, user, seller } = await requireSellerProduct(ctx, args.productId);
-    const status = args.status as "draft" | "published" | "archived";
-    if (!["draft", "published", "archived"].includes(status)) throw new AppError("INVALID_INPUT", "Invalid product status");
-    if (status === "published") {
-      // Seller approval gate: only approved sellers can list products for sale
-      // (spec §9/§11 — auto_approve controlled from platform settings).
-      if (seller.status !== "approved") {
-        throw new AppError("FORBIDDEN", "ร้านค้ายังไม่ผ่านการอนุมัติ — รอเจ้าของบริษัทอนุมัติก่อนประกาศขาย");
-      }
-      const full = await getProduct(getDb(), product.id);
-      if (!full?.inventory) throw new AppError("INVALID_INPUT", "ต้องตั้งสต็อกก่อนจึงจะประกาศขายได้");
-      if (full.price <= 0) throw new AppError("INVALID_INPUT", "ต้องตั้งราคาก่อนจึงจะประกาศขายได้");
+    const { product, user } = await requireSellerProduct(ctx, args.productId);
+    const db = getDb();
+    const raw = args.status as "draft" | "pending_review" | "published" | "archived";
+    if (!SELLER_SETTABLE_PRODUCT_STATUSES.has(raw)) {
+      throw new AppError("INVALID_INPUT", "Invalid product status");
     }
-    await updateProduct(getDb(), product.id, { status });
-    await audit(getDb(), {
+
+    // Product moderation (spec §16–17, §37): "publish" intent goes through
+    // review. draft -> pending_review -> (velcenter) published. With the
+    // auto_approve_products platform rule on, submitting publishes instantly.
+    const rules = await resolveRules(db);
+    const next = resolveProductPublishStatus(raw, rules.autoApproveProducts);
+
+    if (next === "published" || next === "pending_review") {
+      // requireSellerProduct already guarantees an APPROVED seller (server
+      // gate). A submission still needs a price + stock to be meaningful.
+      const full = await getProduct(db, product.id);
+      if (!full?.inventory) throw new AppError("INVALID_INPUT", "ต้องตั้งสต็อกก่อนจึงจะส่งตรวจสอบได้");
+      if (full.price <= 0) throw new AppError("INVALID_INPUT", "ต้องตั้งราคาก่อนจึงจะส่งตรวจสอบได้");
+    }
+
+    // The seller can never set 'rejected' themselves; any status change here
+    // means a fresh review/edit, so the old rejection reason is cleared.
+    const updated = await updateProduct(db, product.id, {
+      status: next,
+      rejectionReason: null,
+    });
+    await audit(db, {
       actorId: user.id,
       actorRole: "seller",
       action: "SELLER_UPDATED_PRODUCT_STATUS",
       entityType: "product",
       entityId: product.id,
-      before: { status: product.status },
-      after: { status },
+      before: { status: product.status, rejectionReason: product.rejectionReason },
+      after: { status: next, rejectionReason: null },
     });
-    await recordEvent(ctx, "ProductUpdated", product.id, { status });
-    return getProduct(getDb(), product.id);
+    await recordEvent(ctx, "ProductUpdated", product.id, { status: next });
+    return getProduct(db, product.id);
   },
 });
 
