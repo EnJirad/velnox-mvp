@@ -26,12 +26,11 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 22
-          cache: npm
 
       - name: Install Convex CLI
-        run: npm install convex
+        run: npm install -g convex
 
       - name: Deploy Convex Production
         env:
           CONVEX_DEPLOY_KEY: ${{ secrets.CONVEX_DEPLOY_KEY }}
-        run: npx convex deploy
+        run: convex deploy
