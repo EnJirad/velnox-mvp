@@ -1,0 +1,46 @@
+name: Database Migration
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "prisma/schema.prisma"
+      - "prisma/migrations/**"
+      - "package.json"
+      - "bun.lock"
+      - ".github/workflows/migrate-neon.yml"
+
+  workflow_dispatch:
+
+jobs:
+  migrate:
+    name: Deploy Database Migration
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Check Prisma
+        run: bunx prisma validate
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+
+      - name: Deploy Prisma migrations
+        run: bunx prisma migrate deploy
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+
+      - name: Verify database
+        run: bunx prisma migrate status
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
