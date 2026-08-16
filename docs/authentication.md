@@ -4,10 +4,11 @@ Version: 1.0 · Phase 10 — ตรงกับโค้ดจริง
 
 ## 1. ระบบ
 
-- **Convex Auth** (Email OTP + anonymous guest) — provider เดียวทั้ง 4 เว็บ (main, velshop, velseller, velcenter)
+- **Convex Auth** (Email OTP + anonymous guest + **Password** สำหรับพนักงาน velcenter) — provider เดียวทั้ง 4 เว็บ (main, velshop, velseller, velcenter)
 - Session = httpOnly cookie จัดการโดย Convex backend — **ไม่เก็บ token ใน localStorage**
 - OTP: อายุ 15 นาที, 6 หลัก, built-in rate limit สำหรับ sign-in/OTP
-- ไฟล์ auth เป็น platform-managed: `src/convex/auth.ts`, `src/convex/auth/emailOtp.ts`, `src/convex/auth.config.ts` — **ห้ามแก้** (read-only)
+- **Password (velcenter, spec §9–§11)**: `Password` provider ใน `convex/auth.ts` — hash scrypt เก็บใน `authAccounts` เท่านั้น; การสร้าง/รีเซ็ตพนักงาน + บังคับตั้งรหัสใหม่ (`mustChangePassword`) อยู่ใน `convex/employeeAuth.ts`; policy อยู่ใน `backend/passwords.ts`
+- `convex/auth.ts` + `convex/auth/emailOtp.ts` มีการปรับแล้ว (เพิ่ม Password provider, OTP key ผ่าน env `FREEBUFF_EMAIL_API_KEY`) — secret ยังห้าม commit; ตั้งผ่าน Keys/API keys UI เท่านั้น
 
 ## 2. Environment (Convex deployment env — ต้องครบใน prod)
 

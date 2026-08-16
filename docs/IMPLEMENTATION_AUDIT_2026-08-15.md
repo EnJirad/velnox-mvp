@@ -4,6 +4,7 @@
 > ขอบเขต: อ่าน repo ทั้งหมดก่อนแก้โค้ด ตามคำสั่ง "ห้ามเริ่ม implementation ทันที"
 > วิธีตรวจ: อ่าน README, docs/ARCHITECTURE.md, docs/GAP_ANALYSIS.md, docs/PHASE_PLAN.md, docs/Velnox-CPNS.md, docs/CUSTOMER_MEMORY.md, `src/convex/*`, `src/backend/*`, `db/schema.sql` + `db/migrations/*`, `src/pages/*`, `src/sites/*`, `tests/*`, `package.json`, `.env.example`, `vercel.json`, `convex.json`
 > สถานะการตรวจ (รันจริง): `bun tsc -b --noEmit` ✅ ผ่าน · `bun test` ✅ 58 ผ่าน / 0 fail (7 files + customer-memory-core)
+> **อัปเดต 2026-08-16:** 113 ผ่าน / 0 fail (11 files) — เพิ่ม `tests/passwords.test.ts` (employee password policy §9–§10) และ `tests/stripe.test.ts` (Stripe gateway §24/§58)
 
 ---
 
@@ -253,10 +254,30 @@ cron VelRepeat + settlement, staff permission UI, variants UI, categories ผู
 | H9 | rules cache stale | `resolveRules` อ่าน settings ครั้งเดียวต่อ call — ไม่มี cache ตาย | `src/backend/rules.ts` |
 
 ยังไม่ได้ทำ (ต้องทำต่อ):
-- **H6** — Center dashboard ยังอ่าน legacy Convex (`api.center.overview` / `api.products.listAll` / `api.orders.allOrders`) ต้องย้ายไปอ่าน Neon (กลาง) — refactor UI ใหญ่ ทำรอบถัดไป
-- **H7** — OTP API key hard-code ใน `emailOtp.ts` (ไฟล์ READ-ONLY ตาม README — ไม่แตะ; เสนอให้ย้ายเป็น env ผ่าน platform)
-- **H10** — อัปเดตตัวเลข test ใน docs (จริง 58 ไม่ใช่ 79) + จัดการโฟลเดอร์ `velnox-mvp/` ที่ซ้ำ (เสนอให้ลบ/ล้าง — ยังไม่ลบ)
-- E.1/E.4 — legacy Convex tables (orders/subscriptions) ยังเป็น dead code — เสนอให้เก็บไว้หรือลบพร้อม migration
+- ~~**H6**~~ — ✅ **ทำแล้ว (2026-08-16)**: Center dashboard อ่าน marketplace KPI + orders จาก Neon (`centerAdmin.marketOverviewAction` / `ordersListAction`) — เหลือ `api.center.overview` ไว้เฉพาะ goals + reorder intelligence (Convex-owned โดย design)
+- ~~**H7**~~ — ✅ **ทำแล้ว (2026-08-16)**: OTP API key ย้ายออกจากซอร์ส → `FREEBUFF_EMAIL_API_KEY` (Keys/API keys UI); `emailOtp.ts` fail loudly ถ้าไม่มี key
+- ~~**H10**~~ — ✅ **ทำแล้ว (2026-08-16)**: โฟลเดอร์ `velnox-mvp/` ที่ซ้ำถูกลบแล้ว; ตัวเลข test อัปเดตเป็น 113 ใน docs ปัจจุบัน
+- **Phase 14 #1 (Payment จริง)** — ✅ **ทำแล้ว (2026-08-16)**: Stripe hosted Checkout (บัตร/PromptPay) + webhook verify + idempotent confirm — ดูตาราง Phase 14 ด้านล่าง
+- E.1 — legacy Convex tables (orders/subscriptions) ยังเป็น dead code — เสนอให้เก็บไว้หรือลบพร้อม migration
+
+## งานที่ทำเพิ่มหลัง audit (2026-08-16)
+
+| # | รายการ | ไฟล์ |
+|---|---|---|
+| §9–§11 | **Employee password auth (velcenter)**: `Password` provider (scrypt hash ใน authAccounts), create/reset พนักงานโดย owner, temp password แสดงครั้งเดียว, `mustChangePassword` บังคับตั้งรหัสใหม่, resolve employee-id/email → email, list/active toggle | `convex/auth.ts`, `convex/employeeAuth.ts`, `convex/employeeAuthHelpers.ts`, `backend/passwords.ts`, `db/migrations/012_employee_auth.sql`, `apps/center/src/components/EmployeeManager.tsx`, `ChangePasswordScreen.tsx`, `packages/shared/src/pages/Auth.tsx` |
+| §44 | **Audit Logs tab** ใน velcenter (owner/admin) — อ่าน `audit_logs` (Neon, append-only) | `apps/center/src/components/AuditLogTab.tsx`, `convex/centerAdmin.ts` (`auditLogs`) |
+| §19/§47 | **VelRepeat platform cron**: ทุก 6 ชม. ประมวลผล subscription ครบกำหนดทั้งหมด (idempotent ต่อ sub+due date, cron-only + rate limit 1/6h) | `convex/commerce.ts` (`processAllDueSubscriptions`), `convex/crons.ts` |
+| H7/§69 | OTP key → env (`FREEBUFF_EMAIL_API_KEY`) | `convex/auth/emailOtp.ts` |
+| — | script `build:prod` (typecheck + build shop → `dist/`) สำหรับ hosting | `package.json` |
+| §10 | tests password policy | `tests/passwords.test.ts` |
+
+## Phase 14 — การชำระเงินจริง (Stripe) — 2026-08-16
+
+| # | รายการ | ไฟล์ |
+|---|---|---|
+| §24/§58 | **Payment gateway จริง (Stripe)**: วิธีชำระ "ออนไลน์ (บัตร/PromptPay)" ผ่าน hosted Checkout Session — amount สร้างฝั่ง server จาก pending payment rows (client ส่งแค่ orderId + return path) · webhook `/stripe/webhook` verify signature (Web Crypto, replay-proof) แล้ว confirm ทั้ง parent order แบบ idempotent + ตรวจยอดเงินตรง (ไม่ trust ตัวเลขจาก gateway เกิน server math) · PromptPay async: รองรับ `async_payment_succeeded/failed` · fallback `stripePaymentStatusAction` เมื่อกลับจาก Stripe ก่อน webhook ลง · UI: วิธีชำระใน checkout (ซ่อนถ้ายังไม่ตั้งคีย์), ปุ่ม "ชำระเงินทันที" ที่หน้า success + order detail, toast สถานะที่ /orders | `backend/stripe.ts`, `backend/stripeVerify.ts`, `backend/payment.ts`, `backend/payments.ts` (`confirmPaymentsForParentOrder`/`failPaymentsForParentOrder`), `convex/stripe.ts`, `convex/http.ts`, `apps/shop/src/pages/{ShopCheckout,ShopOrderDetail,MyOrders}.tsx`, i18n en/my/th |
+| — | Required env: `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET` (+ `SITE_URL` สำหรับ return URL) — ตั้งใน Keys/API keys UI; ไม่ตั้ง = วิธีออนไลน์ถูกซ่อน ระบบ fallback manual | `docs/ENVIRONMENT.md`, `docs/production/environment.md`, `INSTALL_AND_USAGE.md` |
+| — | tests: conversion THB↔satang, signature verify (tamper/expiry/wrong-secret), session metadata gating, registry fallback — **113 ผ่าน / 0 fail** | `tests/stripe.test.ts` |
 
 ## ไฟล์ที่ตรวจแล้ว (สำหรับอ้างอิง)
 
@@ -265,5 +286,5 @@ cron VelRepeat + settlement, staff permission UI, variants UI, categories ผู
 - Convex: src/convex/{schema,auth,auth.config,auth/emailOtp,users,commerce,customer,center,centerAdmin,sellerOps,orders,products,subscriptions,goals,memory,memoryEvents,intelligence,rateLimit,http}.ts
 - Frontend: src/pages/*, src/sites/*/main.tsx, src/components/{MobileTabBar,RequireAuth,RequireRole,shop/*,seller/*,reorder/*}, src/lib/{sites,track,customer-memory-core,cart,app-shell,commerce}.ts(x)
 - DB: db/schema.sql, db/migrations/002–010
-- Tests: tests/* (7 files) + src/lib/customer-memory-core.test.ts — 58 pass
+- Tests: tests/* (10 files) + src/lib/customer-memory-core.test.ts — 98 pass
 - Config: package.json, vercel.json, convex.json, vite.config.ts, .env.example, .gitignore

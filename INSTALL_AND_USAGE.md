@@ -181,7 +181,9 @@ bun run build           # build production (ได้ไฟล์แยก 4 ent
 | `CLOUDINARY_CLOUD_NAME` / `_API_KEY` / `_API_SECRET` | ✅ (อัปโหลดรูป) | Cloudinary — เก็บรูปสินค้า (upload ตรงจากเบราว์เซอร์ ผ่าน signed params) |
 | `JWKS` | ✅ | คีย์ของ Convex Auth (สร้างอัตโนมัติใน Freebuff) |
 | `JWT_PRIVATE_KEY` | ✅ | คีย์ JWT ของ Convex Auth (สร้างอัตโนมัติใน Freebuff) |
-| `SITE_URL` | ❌ | โดเมนของเว็บ (ใช้สร้างลิงก์ในอีเมล) เช่น `http://localhost:5173` |
+| `SITE_URL` | ❌ | โดเมนของเว็บ (ใช้สร้างลิงก์ในอีเมล + return URL หลังชำระเงินออนไลน์) เช่น `http://localhost:5173` |
+| `STRIPE_SECRET_KEY` | ❌ (เปิดชำระออนไลน์) | คีย์ลับ Stripe (sk_test_/sk_live_) — วิธีชำระ "ออนไลน์ (บัตร/PromptPay)" ใน checkout; ถ้าไม่ตั้ง วิธีนี้จะถูกซ่อนและระบบทำงานแบบ manual เหมือนเดิม |
+| `STRIPE_WEBHOOK_SECRET` | ❌ (เปิดชำระออนไลน์) | ใช้ verify signature ของ webhook `/stripe/webhook` — ตั้ง endpoint ใน Stripe Dashboard (events: `checkout.session.completed`, `checkout.session.async_payment_succeeded/failed`) |
 | `VLY_INTEGRATION_KEY` | ❌ | คีย์สำหรับ AI / Email / Payment integrations (ดู `integrations.md`) |
 
 ---
@@ -397,7 +399,7 @@ Vercel → Project → **Settings → Rewrites & Redirects** → Rewrites → **
 | Typecheck error เกี่ยวกับ `_generated` | ไฟล์ codegen เก่า/หาย → รัน `bun convex dev --once` (ห้ามแก้ `_generated` ด้วยมือ) |
 | ล็อกอินแล้วพาไปผิดที่ / ตก 404 | ตรวจ `VITE_*_URL` — การข้ามเว็บใช้การโหลดหน้าใหม่ทั้งหน้า (ต้องเป็น URL จริง) |
 | คลิกไปเว็บอื่นแล้ว 404 | กำลัง preview ใน repo เดียวกันต้องใช้ path default (`/velshop.html` ฯลฯ) — deploy จริงต้องตั้ง `VITE_*_URL` |
-| กดส่ง OTP แล้วไม่ได้รับอีเมล | ตรวจ backend env `SITE_URL` + ตั้งค่า email provider ของ Convex Auth (ดู `src/convex/auth/emailOtp.ts` — ห้ามแก้ไฟล์นี้) |
+| กดส่ง OTP แล้วไม่ได้รับอีเมล | ตรวจ backend env `SITE_URL` + ตั้ง `FREEBUFF_EMAIL_API_KEY` ใน Keys/API keys UI (key ฝั่ง server — อย่า hard-code ลงซอร์ส) |
 | เปิด root โดเมนแล้วเจอหน้า portal (landing) แทนเว็บของตัวเอง | ยังไม่ได้ตั้ง Rewrite ใน 6.5 — ให้ `/(.*)` → `/velshop.html` (หรือ entry ของเว็บนั้น) |
 | route ลึก (เช่น `/shop`) 404 หลัง deploy | Rewrite `/(.*)` ยังไม่ได้ตั้ง หรือตั้งผิด entry |
 | Build บน Vercel fail ตอน codegen / push Convex | ตรวจ `CONVEX_DEPLOY_KEY` ตั้งครบ และ Environment ต้องติ๊ก **Production** (uncheck Preview/Development) |

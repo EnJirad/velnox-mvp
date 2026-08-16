@@ -18,7 +18,9 @@ import { Logo } from "@velnox/shared/components/Logo";
 import { SITE_URLS } from "@velnox/shared/lib/sites";
 import { useLanguage } from "@velnox/shared/lib/i18n";
 import { useAuth } from "@velnox/shared/hooks/use-auth";
-import { ArrowRight, Loader2, Mail, UserX } from "lucide-react";
+import { api } from "@convex/_generated/api";
+import { useAction } from "convex/react";
+import { ArrowRight, KeyRound, Loader2, LockKeyhole, Mail, UserX } from "lucide-react";
 import { Suspense, useEffect, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router";
 
@@ -61,6 +63,13 @@ function Auth() {
   const [otp, setOtp] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Employee password sign-in (spec §11): employee ID / email → canonical
+  // email → password. Only users with an active staff profile can resolve.
+  const resolveLoginEmail = useAction(api.employeeAuth.resolveLoginEmailAction);
+  const [empIdentifier, setEmpIdentifier] = useState("");
+  const [empPassword, setEmpPassword] = useState("");
+  const [empError, setEmpError] = useState<string | null>(null);
 
   useEffect(() => {
     if (authLoading || !isAuthenticated) return;
@@ -121,6 +130,23 @@ function Auth() {
       console.error("Guest login error:", error);
       console.error("Error details:", JSON.stringify(error, null, 2));
       setError(t("auth.guestError", { message: error instanceof Error ? error.message : "unknown" }));
+      setIsLoading(false);
+    }
+  };
+
+  const handleEmployeeSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setIsLoading(true);
+    setEmpError(null);
+    try {
+      const identifier = empIdentifier.trim();
+      // Resolve employee-id / email to the canonical account email (only
+      // active staff profiles resolve — shop customers never do).
+      const { email } = await resolveLoginEmail({ identifier });
+      await signIn("password", { email, password: empPassword });
+    } catch (error) {
+      console.error("Employee sign-in error:", error);
+      setEmpError(error instanceof Error ? error.message : t("auth.employeeError"));
       setIsLoading(false);
     }
   };
@@ -288,6 +314,55 @@ function Auth() {
           )}
 
           <div className="py-4 px-6 text-xs text-center text-muted-foreground bg-muted border-t rounded-b-lg">
+              {step === "signIn" && (
+                <div className="border-t px-6 py-4">
+                  <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                    {t("auth.employeeLabel")}
+                  </p>
+                  <form onSubmit={handleEmployeeSubmit} className="grid gap-2">
+                    <Input
+                      placeholder={t("auth.employeeId")}
+                      autoComplete="username"
+                      value={empIdentifier}
+                      onChange={(e) => setEmpIdentifier(e.target.value)}
+                      disabled={isLoading}
+                      required
+                    />
+                    <div className="relative">
+                      <LockKeyhole className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+                      <Input
+                        name="password"
+                        type="password"
+                        placeholder={t("auth.employeePassword")}
+                        autoComplete="current-password"
+                        value={empPassword}
+                        onChange={(e) => setEmpPassword(e.target.value)}
+                        className="pl-9"
+                        disabled={isLoading}
+                        required
+                      />
+                    </div>
+                    {empError && <p className="text-sm text-red-500">{empError}</p>}
+                    <Button
+                      type="submit"
+                      variant="outline"
+                      className="w-full"
+                      disabled={isLoading}
+                    >
+                      {isLoading ? (
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      ) : (
+                        <KeyRound className="mr-2 h-4 w-4" />
+                      )}
+                      {t("auth.employeeSubmit")}
+                    </Button>
+                    <p className="text-[11px] leading-4 text-muted-foreground">
+                      {t("auth.employeeDesc")}
+                    </p>
+                  </form>
+                </div>
+              )}
+
             Secured by{" "}
             <a
               href="https://freebuff.com"

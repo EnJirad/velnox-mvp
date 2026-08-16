@@ -96,7 +96,7 @@ export const cartItemInputSchema = z.object({
  *  (spec §58: เงินคำนวณจาก backend เท่านั้น). */
 export const checkoutInputSchema = z.object({
   addressId: idSchema,
-  paymentMethod: z.enum(["cod", "transfer", "card", "promptpay", "wallet"]).default("cod"),
+  paymentMethod: z.enum(["cod", "transfer", "card", "promptpay", "wallet", "online"]).default("cod"),
   shippingMethod: z.enum(["standard", "express"]).default("standard"),
   note: z.string().trim().max(500).nullish(),
 });
