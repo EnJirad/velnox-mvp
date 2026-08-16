@@ -1,6 +1,13 @@
 import { getAuthUserId } from "@convex-dev/auth/server";
 import { v } from "convex/values";
+import { api } from "./_generated/api";
 import { mutation, query, QueryCtx } from "./_generated/server";
+import type { Id } from "./_generated/dataModel";
+import {
+  BOOTSTRAP_ENV_VAR,
+  bootstrapConfigured,
+  bootstrapSecretMatches,
+} from "../backend/bootstrap";
 import { ROLES, departmentValidator, roleValidator } from "./schema";
 
 /**
@@ -49,21 +56,7 @@ export const canAccessCenter = (role: string | undefined) =>
 /** Only the company owner can manage employees / roles. */
 export const canManageStaff = (role: string | undefined) => role === ROLES.OWNER;
 
-/**
- * Self-serve "open your shop": promotes the signed-in user to seller.
- * (MVP — production would gate this behind approval.)
- */
-export const becomeSeller = mutation({
-  args: {},
-  handler: async (ctx) => {
-    const user = await getCurrentUser(ctx);
-    if (user === null) throw new Error("Not authenticated");
-    if (canSell(user.role)) return;
-    await ctx.db.patch(user._id, { role: ROLES.SELLER });
-  },
-});
-
-/** True while the company still has no owner (the first one claims it). */
+/** True while the company still has no owner (only the bootstrap secret can create one). */
 export const ownerExists = query({
   args: {},
   handler: async (ctx) => {
@@ -76,21 +69,88 @@ export const ownerExists = query({
 });
 
 /**
- * Claim the velcenter as company owner. Only possible while no owner exists
- * yet — after that, access is granted exclusively by the owner.
+ * Whether the one-time owner bootstrap is available (no owner yet AND the
+ * operator configured BOOTSTRAP_OWNER_SECRET). The frontend uses this to
+ * decide between the bootstrap-code form and the locked gate.
  */
-export const becomeOwner = mutation({
+export const ownerBootstrapStatus = query({
   args: {},
   handler: async (ctx) => {
-    const user = await getCurrentUser(ctx);
-    if (user === null) throw new Error("Not authenticated");
-    if (canManageStaff(user.role)) return;
     const owners = await ctx.db
       .query("users")
       .filter((q) => q.eq(q.field("role"), ROLES.OWNER))
       .take(1);
-    if (owners.length > 0) throw new Error("เจ้าของบริษัทถูกตั้งไว้แล้ว");
+    return {
+      ownerExists: owners.length > 0,
+      configured: bootstrapConfigured(),
+    };
+  },
+});
+
+/**
+ * Claim the velcenter as company owner with the one-time bootstrap code
+ * (spec §31). Requirements, all enforced server-side:
+ *   - signed in
+ *   - no owner exists yet (after first use the mechanism is permanently
+ *     invalidated — an owner can only be created by this path once)
+ *   - the presented code matches BOOTSTRAP_OWNER_SECRET (constant-time
+ *     compare; the secret itself is never logged or returned)
+ * The claim is recorded as a business event for the audit trail.
+ */
+export const claimOwner = mutation({
+  args: { bootstrapCode: v.string() },
+  handler: async (ctx, { bootstrapCode }) => {
+    const user = await getCurrentUser(ctx);
+    if (user === null) throw new Error("Not authenticated");
+    if (canManageStaff(user.role)) return;
+    if (!bootstrapConfigured()) {
+      throw new Error(
+        `ยังไม่พร้อมใช้งาน — ผู้ดูแลระบบต้องตั้งค่า ${BOOTSTRAP_ENV_VAR} (รหัสเปิดใช้งานครั้งเดียว) ใน Keys/API keys ก่อน`,
+      );
+    }
+    const owners = await ctx.db
+      .query("users")
+      .filter((q) => q.eq(q.field("role"), ROLES.OWNER))
+      .take(1);
+    if (owners.length > 0) {
+      throw new Error("เจ้าของบริษัทถูกตั้งไว้แล้ว — กลไกเปิดใช้งานถูกปิดถาวร");
+    }
+    const valid = await bootstrapSecretMatches(bootstrapCode);
+    if (!valid) throw new Error("รหัสเปิดใช้งานไม่ถูกต้อง");
+
     await ctx.db.patch(user._id, { role: ROLES.OWNER });
+    // Audit trail (never logs the code — only that a claim happened).
+    try {
+      await ctx.runMutation(api.intelligence.recordBusinessEvent, {
+        type: "OwnerBootstrapped",
+        entityId: user._id,
+        payload: { at: Date.now() },
+      });
+    } catch (err) {
+      console.error("[users] OwnerBootstrapped event failed:", err);
+    }
+  },
+});
+
+/**
+ * Sync the Convex role for a seller's auth account (owner/admin only — the
+ * mutation checks the ACTOR's Convex role server-side, so a customer can
+ * never promote themselves). Called by the center seller-review action after
+ * an approval/suspension; Neon sellers.status stays the source of truth.
+ */
+export const setSellerRoleInternal = mutation({
+  args: { convexUserId: v.string(), activated: v.boolean() },
+  handler: async (ctx, { convexUserId, activated }) => {
+    const actor = await getCurrentUser(ctx);
+    if (actor === null || !canAdmin(actor.role)) {
+      throw new Error("Owner/Admin only");
+    }
+    const target = await ctx.db.get(convexUserId as Id<"users">);
+    if (!target) return;
+    const desired = activated ? ROLES.SELLER : ROLES.CUSTOMER;
+    if (target.role !== desired) {
+      await ctx.db.patch(target._id, { role: desired });
+    }
   },
 });
 

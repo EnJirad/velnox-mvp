@@ -626,5 +626,62 @@ export const th = {
       "ไม่สามารถดึงตำแหน่งปัจจุบันได้ — กรุณาเลือกตำแหน่งบนแผนที่แทน (ลากหมุดหรือคลิกแผนที่)",
   },
 
+  gate: {
+    sellerTitle: "พื้นที่ velseller",
+    sellerDesc:
+      "velseller เป็นเครื่องมือสำหรับพ่อค้าที่ขายกับ Velnox — จัดการสินค้า รายได้ และออเดอร์ของตัวเอง",
+    sellerApply: "สมัครเป็น Seller",
+    sellerApplyShort: "สมัคร",
+    sellerShopName: "ชื่อร้านค้า *",
+    sellerShopNamePlaceholder: "เช่น ร้านสมุนไพรบ้านนา",
+    sellerShopNameRequired: "กรุณากรอกชื่อร้านค้า",
+    sellerApplySuccess: "ส่งใบสมัครแล้ว 🎉 — รอทีมงานตรวจสอบ",
+    sellerPendingTitle: "ใบสมัครรอตรวจสอบ",
+    sellerPendingDesc:
+      "ใบสมัครของคุณถูกส่งแล้ว — ทีมงาน Velnox จะตรวจสอบและอนุมัติร้านค้าของคุณ",
+    sellerRejectedTitle: "ใบสมัครถูกปฏิเสธ",
+    sellerRejectedReason: "เหตุผล: {reason}",
+    sellerRejectedDesc:
+      "ใบสมัครของคุณไม่ผ่านการอนุมัติ — แก้ไขข้อมูลแล้วส่งใหม่ หรือติดต่อทีมงาน Velnox",
+    sellerSuspendedTitle: "ร้านค้าถูกระงับ",
+    sellerSuspendedDesc:
+      "ร้านค้าของคุณถูกระงับการใช้งาน — ติดต่อทีมงาน Velnox เพื่อขอข้อมูลเพิ่มเติม",
+    sellerNotApproved: "คุณยังไม่ได้รับอนุญาตให้ใช้ velseller — ต้องเป็น Seller ที่ได้รับการอนุมัติก่อน",
+    sellerBackToShop: "← กลับไปหน้าร้าน",
+    centerTitle: "พื้นที่ velcenter",
+    centerLockedTitle: "velcenter เป็นพื้นที่เฉพาะบริษัท",
+    centerLockedDesc:
+      "เฉพาะผู้ที่เจ้าของบริษัทกำหนดสิทธิ์ให้เท่านั้นที่เข้าได้ — ติดต่อเจ้าของบริษัทเพื่อขอสิทธิ์เข้าถึง",
+    centerBootstrapTitle: "ตั้งค่าเจ้าของบริษัท (ครั้งเดียว)",
+    centerBootstrapDesc:
+      "velcenter ยังไม่มีเจ้าของ — ป้อนรหัสเปิดใช้งานครั้งเดียว (BOOTSTRAP_OWNER_SECRET) ที่ผู้ดูแลระบบตั้งไว้ เพื่อรับสิทธิ์เจ้าของบริษัท",
+    centerBootstrapCode: "รหัสเปิดใช้งานครั้งเดียว",
+    centerBootstrapCodePlaceholder: "ป้อนรหัสเปิดใช้งาน",
+    centerBootstrapSubmit: "รับสิทธิ์เจ้าของบริษัท",
+    centerBootstrapMissing:
+      "ยังไม่ได้ตั้งค่ารหัสเปิดใช้งาน — ผู้ดูแลระบบต้องตั้ง BOOTSTRAP_OWNER_SECRET ใน Keys/API keys ก่อน",
+    centerBootstrapSuccess: "คุณคือเจ้าของบริษัท Velnox แล้ว 🏆",
+    centerBootstrapInvalid: "รหัสเปิดใช้งานไม่ถูกต้อง",
+    centerBackToShop: "← กลับไปหน้าร้าน",
+    authRequired: "กรุณาเข้าสู่ระบบก่อนเข้าใช้งาน",
+  },
+
+  productModeration: {
+    statusDraft: "ฉบับร่าง",
+    statusPendingReview: "รอตรวจสอบ",
+    statusPublished: "ประกาศขาย",
+    statusRejected: "ถูกปฏิเสธ",
+    statusArchived: "เก็บแล้ว",
+    rejectedReason: "เหตุผลที่ถูกปฏิเสธ: {reason}",
+    submitForReview: "ส่งตรวจสอบ",
+    submitting: "กำลังส่งตรวจสอบ...",
+    submittedToast: "ส่งตรวจสอบแล้ว — รอทีมงานอนุมัติ 🛍️",
+    unpublishedToast: "ปิดการขายแล้ว",
+    republishToast: "ส่งตรวจสอบใหม่อีกครั้ง",
+    sellerPendingTitle: "รอการตรวจสอบสินค้า",
+    sellerPendingDesc:
+      "สินค้าของคุณถูกส่งให้ทีมงานตรวจสอบแล้ว — เมื่ออนุมัติจะแสดงที่หน้าร้าน velshop",
+  },
+
   // __APPEND__
 };

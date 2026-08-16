@@ -34,6 +34,7 @@ Version: 1.0 · Phase 7
 | `VLY_APP_NAME` | `src/convex/auth/emailOtp.ts` | `velnox` | แสดงใน OTP email (มี default แล้ว) |
 | `STRIPE_SECRET_KEY` | `backend/stripe.ts` | `sk_test_...` | **ชำระเงินออนไลน์ (วิธี "online" — บัตร/PromptPay)** — ถ้าไม่มี key นี้ วิธีชำระออนไลน์จะซ่อนใน checkout และทุกอย่าง fallback เป็น manual เหมือนเดิม |
 | `STRIPE_WEBHOOK_SECRET` | `backend/stripeVerify.ts` | `whsec_...` | จำเป็นเมื่อเปิดชำระเงินออนไลน์ — ใช้ verify signature ของ webhook `/stripe/webhook` (ตั้ง webhook endpoint ใน Stripe Dashboard ชี้ `<convex-url>/stripe/webhook`, event: `checkout.session.completed` + `checkout.session.async_payment_succeeded/failed`) |
+| `BOOTSTRAP_OWNER_SECRET` | `convex/users.ts` + `backend/bootstrap.ts` | `รหัสยาว ≥16 ตัวอักษร` | **รหัสเปิดใช้งานเจ้าของบริษัท (ครั้งเดียว)** — velcenter ยังไม่มี owner: คนแรกที่ป้อนรหัสนี้ได้เป็น COMPANY_OWNER แล้วกลไกถูกปิดถาวร (เจ้าของที่มีอยู่แล้ว = ใช้ซ้ำไม่ได้) ตั้งที่ Keys/API keys UI เท่านั้น ห้ามใส่ในซอร์ส |
 | `STRIPE_PUBLISHABLE_KEY` | (client อนาคต) | `pk_test_...` | ยังไม่จำเป็น (ใช้ hosted Checkout) — เตรียมไว้ |
 
 ### Convex Auth (จัดการโดย Convex/Freebuff — ไม่ต้องตั้งเอง)
@@ -49,6 +50,8 @@ Version: 1.0 · Phase 7
 3. **อย่าแก้ `.env.example` ผ่าน code** — platform ล็อกไฟล์ (ตัวแปรทั้งหมดอธิบายไว้ใน `INSTALL_AND_USAGE.md` §6.7)
 4. **OTP email (velshop sign-in)**: ตั้ง `FREEBUFF_EMAIL_API_KEY` ใน Keys/API keys UI — คีย์นี้อยู่ฝั่ง server เท่านั้น ห้ามขึ้น frontend/`VITE_*`
 5. **ชำระเงินออนไลน์ (velshop checkout)**: ตั้ง `STRIPE_SECRET_KEY` + `STRIPE_WEBHOOK_SECRET` + `SITE_URL` (สำหรับ return URL หลังชำระเงิน) — ทั้งหมดอยู่ฝั่ง server เท่านั้น
+
+   **VelCenter — ตั้งเจ้าของบริษัท**: ตั้ง `BOOTSTRAP_OWNER_SECRET` (รหัสเปิดใช้งานครั้งเดียว ≥16 ตัว) ใน Keys/API keys UI → คนแรกที่เข้าหน้า velcenter และป้อนรหัสถูกต้องได้สิทธิ์ COMPANY_OWNER (กลไกใช้ครั้งเดียว — ตั้ง owner แล้วรหัสใช้ไม่ได้อีก) เจ้าของสร้างพนักงาน/สิทธิ์ต่อที่หน้า "พนักงาน"
 
 ## 4. Checklist ก่อน Production
 

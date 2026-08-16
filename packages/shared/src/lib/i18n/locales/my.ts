@@ -339,6 +339,64 @@ export const my: Dict = {
     backHome: "ဆိုင်ရှေ့သို့ ပြန်သွားရန်",
   },
 
+  gate: {
+    sellerTitle: "VelSeller နေရာ",
+    sellerDesc:
+      "VelSeller သည် Velnox တွင် ရောင်းချသူများအတွက် ကိရိယာများ — ကုန်ပစ္စည်း၊ ဝင်ငွေနှင့် မှာယူမှုများ စီမံပါ",
+    sellerApply: "Seller အဖြစ် လျှောက်ထားရန်",
+    sellerApplyShort: "လျှောက်ရန်",
+    sellerShopName: "ဆိုင် အမည် *",
+    sellerShopNamePlaceholder: "ဥပမာ အိမ်တွင်းဆေးဖက်ဝင်ပင်",
+    sellerShopNameRequired: "ဆိုင်အမည် ထည့်ပါ",
+    sellerApplySuccess: "လျှောက်လွှာ တင်ပြီးပါပြီ 🎉 — အဖွဲ့ စစ်ဆေးနေသည်",
+    sellerPendingTitle: "လျှောက်လွှာ စစ်ဆေးဆဲ",
+    sellerPendingDesc:
+      "သင့်လျှောက်လွှာ တင်ပြီးပါပြီ — Velnox အဖွဲ့ စစ်ဆေး၍ အတည်ပြုပေးပါမည်",
+    sellerRejectedTitle: "လျှောက်လွှာ ပယ်ချခံရသည်",
+    sellerRejectedReason: "အကြောင်းရင်း: {reason}",
+    sellerRejectedDesc:
+      "သင့်လျှောက်လွှာ အတည်မပြုခဲ့ပါ — အချက်အလက် ပြင်ဆင်၍ ပြန်လျှောက်ပါ သို့မဟုတ် Velnox အဖွဲ့သို့ ဆက်သွယ်ပါ",
+    sellerSuspendedTitle: "ဆိုင် ရပ်ဆိုင်းထားသည်",
+    sellerSuspendedDesc:
+      "သင့်ဆိုင်ကို ရပ်ဆိုင်းထားသည် — အသေးစိတ်အတွက် Velnox အဖွဲ့သို့ ဆက်သွယ်ပါ",
+    sellerNotApproved:
+      "VelSeller သုံးခွင့် မရသေးပါ — ဦးစွာ အတည်ပြုထားသော Seller ဖြစ်ရန် လိုအပ်သည်",
+    sellerBackToShop: "← ဆိုင်သို့ ပြန်သွားရန်",
+    centerTitle: "VelCenter နေရာ",
+    centerLockedTitle: "VelCenter သည် ကုမ္ပဏီအတွင်းသာ",
+    centerLockedDesc:
+      "ကုမ္ပဏီပိုင်ရှင် ခွင့်ပြုထားသော ဝန်ထမ်းများသာ ဝင်နိုင်သည် — ခွင့်ပြုချက်အတွက် ကုမ္ပဏီပိုင်ရှင်ထံ ဆက်သွယ်ပါ",
+    centerBootstrapTitle: "ကုမ္ပဏီပိုင်ရှင် သတ်မှတ်ရန် (တစ်ကြိမ်)",
+    centerBootstrapDesc:
+      "VelCenter တွင် ပိုင်ရှင် မရှိသေးပါ — စီမံခန့်ခွဲသူ သတ်မှတ်ထားသော တစ်ကြိမ်သုံး ကုဒ် (BOOTSTRAP_OWNER_SECRET) ကို ထည့်သွင်း၍ ပိုင်ရှင်အခွင့်အရေး ရယူပါ",
+    centerBootstrapCode: "တစ်ကြိမ်သုံး ဖွင့်သည့်ကုဒ်",
+    centerBootstrapCodePlaceholder: "ဖွင့်သည့်ကုဒ် ထည့်ပါ",
+    centerBootstrapSubmit: "ကုမ္ပဏီပိုင်ရှင် အဖြစ် ရယူရန်",
+    centerBootstrapMissing:
+      "ဖွင့်သည့်ကုဒ် မသတ်မှတ်ရသေးပါ — စီမံခန့်ခွဲသူသည် Keys/API keys တွင် BOOTSTRAP_OWNER_SECRET ကို ဦးစွာ သတ်မှတ်ရပါမည်",
+    centerBootstrapSuccess: "သင်သည် Velnox ကုမ္ပဏီပိုင်ရှင် ဖြစ်ပါပြီ 🏆",
+    centerBootstrapInvalid: "ဖွင့်သည့်ကုဒ် မမှန်ပါ",
+    centerBackToShop: "← ဆိုင်သို့ ပြန်သွားရန်",
+    authRequired: "ဆက်လက်အသုံးပြုရန် ဦးစွာ ဝင်ရောက်ပါ",
+  },
+
+  productModeration: {
+    statusDraft: "မူကြမ်း",
+    statusPendingReview: "စစ်ဆေးဆဲ",
+    statusPublished: "ကြော်ငြာထား",
+    statusRejected: "ပယ်ချခံရ",
+    statusArchived: "သိမ်းထား",
+    rejectedReason: "ပယ်ချသည့် အကြောင်းရင်း: {reason}",
+    submitForReview: "စစ်ဆေးရန် တင်ရန်",
+    submitting: "တင်နေသည်...",
+    submittedToast: "စစ်ဆေးရန် တင်ပြီးပါပြီ — အဖွဲ့ အတည်ပြုပေးပါမည် 🛍️",
+    unpublishedToast: "ရောင်းချခြင်း ရပ်လိုက်သည်",
+    republishToast: "ပြန်လည် စစ်ဆေးရန် တင်လိုက်သည်",
+    sellerPendingTitle: "ကုန်ပစ္စည်း စစ်ဆေးဆဲ",
+    sellerPendingDesc:
+      "သင့်ကုန်ပစ္စည်းကို စစ်ဆေးရန် တင်ပြီးပါပြီ — အတည်ပြုပြီးပါက ဆိုင်၏ ရှေ့ဆိုင်တွင် ပြသပါမည်",
+  },
+
   checkout: {
     eyebrow: "velshop · ငွေပေးချေမှု",
     title: "ငွေပေးချေမှု",

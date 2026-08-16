@@ -14,6 +14,7 @@ Version: 1.0 · Phase 9 — รายละเอียดเต็ม: [`../ENV
 | `FREEBUFF_EMAIL_API_KEY` | OTP sign-in email (velshop) — server-only key | ✅ |
 | `STRIPE_SECRET_KEY` | ชำระเงินออนไลน์ (วิธี "online" — บัตร/PromptPay, hosted Checkout) — ถ้าไม่มี วิธีนี้ถูกซ่อน + fallback manual | เปิดฟีเจอร์เท่านั้น |
 | `STRIPE_WEBHOOK_SECRET` | verify signature webhook `/stripe/webhook` (Stripe Dashboard ต้องตั้ง endpoint ชี้ `<convex-url>/stripe/webhook`) | เปิดฟีเจอร์เท่านั้น |
+| `BOOTSTRAP_OWNER_SECRET` | รหัสเปิดใช้งานเจ้าของบริษัทครั้งเดียว (velcenter) — ≥16 ตัวอักษร, ใช้แล้วปิดถาวร (มี owner แล้วใช้ซ้ำไม่ได้) | ตั้งก่อนเปิด velcenter ครั้งแรก |
 
 ## Vercel env (frontend — ต่อ VITE_ เท่านั้น ไม่อย่างนั้นห้าม expose)
 

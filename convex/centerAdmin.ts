@@ -167,16 +167,21 @@ export const setSellerStatusAction = action({
     const need: Permission = status === "approved" || status === "rejected" ? "APPROVE_SELLERS" : "SUSPEND_SELLERS";
     if (identity.user.role === "staff") await requirePermission(ctx, need);
 
-    const rows = await db("SELECT * FROM sellers WHERE id = $1", [args.sellerId]);
+    const rows = await db(
+      `SELECT sel.*, u.convex_id AS convex_id FROM sellers sel
+       LEFT JOIN users u ON u.id = sel.owner_user_id WHERE sel.id = $1`,
+      [args.sellerId],
+    );
     if (!rows[0]) throw new AppError("NOT_FOUND", "Seller not found");
-    const before = { status: rows[0].status };
+    const before = { status: rows[0].status, rejectionReason: rows[0].rejection_reason ?? null };
 
     await db(
       `UPDATE sellers SET status = $2,
          approved_at = CASE WHEN $2 = 'approved' THEN now() ELSE approved_at END,
-         approved_by = CASE WHEN $2 IN ('approved','rejected') THEN $3 ELSE approved_by END
+         approved_by = CASE WHEN $2 IN ('approved','rejected') THEN $3 ELSE approved_by END,
+         rejection_reason = CASE WHEN $2 = 'approved' THEN NULL ELSE $4 END
        WHERE id = $1`,
-      [args.sellerId, status, identity.user.id],
+      [args.sellerId, status, identity.user.id, args.reason ?? null],
     );
     await audit(db, {
       actorId: identity.user.id,
@@ -189,6 +194,20 @@ export const setSellerStatusAction = action({
       ...clientMeta(ctx),
     });
     await recordEvent(ctx, "SellerStatusChanged", args.sellerId, { status });
+
+    // Keep the Convex auth role in sync with Neon (Neon stays the source of
+    // truth). Owner/admin actors flip the role; staff-with-permission skip
+    // the role cache — the velseller gate reads Neon directly either way.
+    if (rows[0].convex_id && identity.user.role !== "staff") {
+      try {
+        await ctx.runMutation(api.users.setSellerRoleInternal, {
+          convexUserId: rows[0].convex_id,
+          activated: status === "approved",
+        });
+      } catch (err) {
+        console.error("[center] seller role sync failed:", err);
+      }
+    }
 
     // notify the seller's owner
     try {
@@ -239,10 +258,22 @@ export const setProductModerationStatus = action({
     const need: Permission = status === "published" || status === "rejected" ? "APPROVE_PRODUCTS" : "SUSPEND_PRODUCTS";
     if (identity.user.role === "staff") await requirePermission(ctx, need);
 
-    const rows = await db("SELECT id, status, shop_id FROM products WHERE id = $1", [args.productId]);
+    const rows = await db(
+      `SELECT p.id, p.status, p.shop_id, sel.owner_user_id AS seller_owner_id
+       FROM products p
+       JOIN shops s ON s.id = p.shop_id
+       JOIN sellers sel ON sel.id = s.seller_id
+       WHERE p.id = $1`,
+      [args.productId],
+    );
     if (!rows[0]) throw new AppError("PRODUCT_NOT_FOUND", "Product not found");
-    const before = { status: rows[0].status };
-    await db("UPDATE products SET status = $2 WHERE id = $1", [args.productId, status]);
+    const before = { status: rows[0].status, rejectionReason: rows[0].rejection_reason ?? null };
+    await db(
+      `UPDATE products SET status = $2,
+         rejection_reason = CASE WHEN $2 IN ('published','archived','draft') THEN NULL ELSE $3 END
+       WHERE id = $1`,
+      [args.productId, status, args.reason ?? null],
+    );
     await audit(db, {
       actorId: identity.user.id,
       actorRole: identity.user.role,
@@ -254,6 +285,26 @@ export const setProductModerationStatus = action({
       ...clientMeta(ctx),
     });
     await recordEvent(ctx, "ProductStatusChanged", args.productId, { status });
+
+    // Spec §37 — the seller must receive the moderation result.
+    if (rows[0].seller_owner_id) {
+      try {
+        await createNotification(db, {
+          userId: rows[0].seller_owner_id,
+          type: "seller",
+          title:
+            status === "published"
+              ? "สินค้าของคุณได้รับการอนุมัติแล้ว 🛍️"
+              : status === "rejected"
+                ? "สินค้าของคุณถูกปฏิเสธ"
+                : `สถานะสินค้า: ${status}`,
+          message: args.reason ?? null,
+          data: { productId: args.productId },
+        });
+      } catch (err) {
+        console.error("[center] product notification failed:", err);
+      }
+    }
     return { ok: true };
   },
 });
