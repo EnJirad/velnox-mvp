@@ -7,6 +7,7 @@
  */
 /* eslint-disable @typescript-eslint/no-explicit-any -- DB row mappers */
 import type { Db } from "./db";
+import { toMs } from "./dates";
 import { AppError } from "./errors";
 import type { Shipment, TrackingEvent } from "./types";
 
@@ -17,7 +18,7 @@ function mapTrackingEvent(r: Record<string, any>): TrackingEvent {
     status: r.status,
     description: r.description ?? null,
     location: r.location ?? null,
-    occurredAt: r.occurred_at,
+    occurredAt: toMs(r.occurred_at),
   };
 }
 
@@ -31,9 +32,9 @@ function mapShipment(r: Record<string, any>): Shipment {
     status: r.status,
     shippingFee: Number(r.shipping_fee),
     estimatedDeliveryDate: r.estimated_delivery_date ?? null,
-    shippedAt: r.shipped_at ?? null,
-    deliveredAt: r.delivered_at ?? null,
-    createdAt: r.created_at,
+    shippedAt: r.shipped_at != null ? toMs(r.shipped_at) : null,
+    deliveredAt: r.delivered_at != null ? toMs(r.delivered_at) : null,
+    createdAt: toMs(r.created_at),
   };
 }
 

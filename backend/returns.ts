@@ -8,6 +8,7 @@
  */
 /* eslint-disable @typescript-eslint/no-explicit-any -- DB row mappers */
 import type { Db } from "./db";
+import { toMs } from "./dates";
 import { AppError, invalidTransition } from "./errors";
 import { returnInputSchema } from "./validation";
 import { calcReturnRatePercent, round2 } from "./rules";
@@ -38,8 +39,8 @@ function mapReturn(r: Record<string, any>): ReturnRequest {
     status: r.status,
     refundAmount: Number(r.refund_amount),
     returnTrackingNumber: r.return_tracking_number ?? null,
-    createdAt: r.created_at,
-    updatedAt: r.updated_at,
+    createdAt: toMs(r.created_at),
+    updatedAt: toMs(r.updated_at),
   };
 }
 

@@ -10,7 +10,7 @@
  */
 "use node";
 
-import { action } from "./_generated/server";
+import { serializedAction as action } from "./lib/serialize";
 import { getDb } from "../backend/db";
 import { storefrontSettings } from "../backend/platformSettings";
 

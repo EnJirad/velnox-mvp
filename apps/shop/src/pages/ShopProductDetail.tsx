@@ -45,7 +45,7 @@ interface ReviewRow {
   comment: string | null;
   images: string[];
   status: string;
-  createdAt: string;
+  createdAt: number;
   customerName?: string;
 }
 

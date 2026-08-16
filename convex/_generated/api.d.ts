@@ -20,6 +20,7 @@ import type * as employeeAuthHelpers from "../employeeAuthHelpers.js";
 import type * as goals from "../goals.js";
 import type * as http from "../http.js";
 import type * as intelligence from "../intelligence.js";
+import type * as lib_serialize from "../lib/serialize.js";
 import type * as memory from "../memory.js";
 import type * as memoryEvents from "../memoryEvents.js";
 import type * as orders from "../orders.js";
@@ -50,6 +51,7 @@ declare const fullApi: ApiFromModules<{
   goals: typeof goals;
   http: typeof http;
   intelligence: typeof intelligence;
+  "lib/serialize": typeof lib_serialize;
   memory: typeof memory;
   memoryEvents: typeof memoryEvents;
   orders: typeof orders;

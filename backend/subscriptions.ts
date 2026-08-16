@@ -8,6 +8,7 @@
  * Orders generated from subscriptions still go through createOrder().
  */
 import { withTransaction, type Db } from "./db";
+import { toMs } from "./dates";
 import type { Subscription, SubscriptionFrequency, SubscriptionStatus } from "./types";
 
 const round2 = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100;
@@ -34,8 +35,8 @@ function mapSubscription(r: Record<string, any>): Subscription {
       ? r.next_order_date.toISOString().slice(0, 10)
       : String(r.next_order_date).slice(0, 10),
     status: r.status,
-    createdAt: r.created_at,
-    updatedAt: r.updated_at,
+    createdAt: toMs(r.created_at),
+    updatedAt: toMs(r.updated_at),
     productName: r.product_name ?? undefined,
     productImageUrl: r.product_image_url ?? undefined,
   };

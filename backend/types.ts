@@ -32,7 +32,7 @@ export interface User {
   name: string | null;
   role: Role;
   department: Department | null;
-  createdAt: string;
+  createdAt: number;
 }
 
 export interface Seller {
@@ -45,7 +45,7 @@ export interface Seller {
   rejectionReason: string | null;
   /** 0.10 = platform pays at most 10% of sales if the return rate exceeds it */
   refundPolicyLimit: number;
-  createdAt: string;
+  createdAt: number;
 }
 
 export interface Shop {
@@ -65,7 +65,7 @@ export interface Shop {
   /** storefront GPS — used for pickup / return shipping / delivery area */
   latitude: number | null;
   longitude: number | null;
-  createdAt: string;
+  createdAt: number;
 }
 
 export interface ProductImage {
@@ -85,7 +85,7 @@ export interface ProductImage {
   isPrimary: boolean;
   width: number | null;
   height: number | null;
-  createdAt: string;
+  createdAt: number;
 }
 
 export interface Product {
@@ -102,8 +102,8 @@ export interface Product {
   /** moderation rejection reason (null unless status === 'rejected') */
   rejectionReason: string | null;
   supplier: string | null;
-  createdAt: string;
-  updatedAt: string;
+  createdAt: number;
+  updatedAt: number;
   images?: ProductImage[];
   /** primary image (images[0] when set) — convenience for cards */
   primaryImage?: ProductImage | null;
@@ -144,7 +144,7 @@ export interface Address {
   longitude: number | null;
   placeId: string | null;
   isDefault: boolean;
-  createdAt: string;
+  createdAt: number;
 }
 
 /** Frozen shipping address stored in orders.address_snapshot (JSONB). */
@@ -175,8 +175,8 @@ export interface Order {
   currency: string;
   addressSnapshot: AddressSnapshot;
   note: string | null;
-  createdAt: string;
-  updatedAt: string;
+  createdAt: number;
+  updatedAt: number;
   items?: OrderItem[];
   /** joined for seller views */
   customerName?: string;
@@ -206,8 +206,8 @@ export interface Payment {
   method: PaymentMethod;
   status: PaymentRowStatus;
   externalRef: string | null;
-  paidAt: string | null;
-  createdAt: string;
+  paidAt: number | null;
+  createdAt: number;
 }
 
 export interface Refund {
@@ -217,7 +217,7 @@ export interface Refund {
   amount: number;
   reason: string | null;
   status: RefundStatus;
-  createdAt: string;
+  createdAt: number;
 }
 
 export interface Commission {
@@ -230,8 +230,8 @@ export interface Commission {
   commissionRate: number;
   commissionAmount: number;
   status: CommissionStatus;
-  settledAt: string | null;
-  createdAt: string;
+  settledAt: number | null;
+  createdAt: number;
 }
 
 export interface Subscription {
@@ -246,8 +246,8 @@ export interface Subscription {
   intervalDays: number;
   nextOrderDate: string; // YYYY-MM-DD
   status: SubscriptionStatus;
-  createdAt: string;
-  updatedAt: string;
+  createdAt: number;
+  updatedAt: number;
   productName?: string; // joined
   productImageUrl?: string; // joined (primary image)
 }
@@ -273,8 +273,8 @@ export interface Cart {
   id: string;
   userId: string;
   status: "active" | "checked_out" | "abandoned";
-  createdAt: string;
-  updatedAt: string;
+  createdAt: number;
+  updatedAt: number;
   items?: CartItem[];
 }
 
@@ -287,7 +287,7 @@ export interface CartItem {
   shopId: string;
   quantity: number;
   priceSnapshot: number;
-  createdAt: string;
+  createdAt: number;
   // joined for display
   productName?: string;
   productImageUrl?: string;
@@ -300,7 +300,7 @@ export interface WishlistItem {
   id: string;
   wishlistId: string;
   productId: string;
-  createdAt: string;
+  createdAt: number;
   product?: Product;
 }
 
@@ -313,9 +313,9 @@ export interface Shipment {
   status: string;
   shippingFee: number;
   estimatedDeliveryDate: string | null;
-  shippedAt: string | null;
-  deliveredAt: string | null;
-  createdAt: string;
+  shippedAt: number | null;
+  deliveredAt: number | null;
+  createdAt: number;
   events?: TrackingEvent[];
 }
 
@@ -325,7 +325,7 @@ export interface TrackingEvent {
   status: string;
   description: string | null;
   location: string | null;
-  occurredAt: string;
+  occurredAt: number;
 }
 
 export type ReturnStatus =
@@ -350,8 +350,8 @@ export interface ReturnRequest {
   status: ReturnStatus;
   refundAmount: number;
   returnTrackingNumber: string | null;
-  createdAt: string;
-  updatedAt: string;
+  createdAt: number;
+  updatedAt: number;
 }
 
 export interface Review {
@@ -365,7 +365,7 @@ export interface Review {
   comment: string | null;
   images: string[];
   status: "published" | "pending" | "hidden";
-  createdAt: string;
+  createdAt: number;
   userName?: string; // joined
 }
 
@@ -377,7 +377,7 @@ export interface Notification {
   message: string | null;
   data: Record<string, unknown>;
   isRead: boolean;
-  createdAt: string;
+  createdAt: number;
 }
 
 export interface PlatformSetting {
@@ -420,7 +420,7 @@ export interface LedgerEntry {
   amount: number;
   currency: string;
   description: string | null;
-  createdAt: string;
+  createdAt: number;
 }
 
 export interface SellerBalance {
@@ -430,7 +430,7 @@ export interface SellerBalance {
   totalEarned: number;
   totalWithdrawn: number;
   currency: string;
-  updatedAt: string;
+  updatedAt: number;
 }
 
 export interface SellerPayout {
@@ -441,9 +441,9 @@ export interface SellerPayout {
   status: "pending" | "processing" | "completed" | "failed" | "cancelled";
   method: string | null;
   destination: string | null;
-  requestedAt: string;
-  processedAt: string | null;
-  createdAt: string;
+  requestedAt: number;
+  processedAt: number | null;
+  createdAt: number;
 }
 
 export interface AuditLog {
@@ -457,7 +457,7 @@ export interface AuditLog {
   after: Record<string, unknown> | null;
   ipAddress: string | null;
   userAgent: string | null;
-  createdAt: string;
+  createdAt: number;
 }
 
 /** Permission codes (spec §47) — stored on staff_profiles.permissions. */

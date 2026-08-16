@@ -15,7 +15,7 @@ import { toast } from "sonner";
 interface WishlistItemRow {
   id: string;
   productId: string;
-  createdAt: string;
+  createdAt: number;
 }
 
 export default function ShopWishlist() {

@@ -4,6 +4,7 @@
  * Ownership chain: User -> Seller -> Shop
  */
 import type { Db } from "./db";
+import { toMs } from "./dates";
 import type { Role, Seller, Shop, User } from "./types";
 
 // ---------------------------------------------------------------------------
@@ -18,7 +19,7 @@ function mapUser(r: Record<string, any>): User {
     name: r.name ?? null,
     role: r.role,
     department: r.department ?? null,
-    createdAt: r.created_at,
+    createdAt: toMs(r.created_at),
   };
 }
 
@@ -31,7 +32,7 @@ function mapSeller(r: Record<string, any>): Seller {
     status: r.status,
     rejectionReason: r.rejection_reason ?? null,
     refundPolicyLimit: Number(r.refund_policy_limit),
-    createdAt: r.created_at,
+    createdAt: toMs(r.created_at),
   };
 }
 
@@ -51,7 +52,7 @@ function mapShop(r: Record<string, any>): Shop {
     currency: r.currency,
     latitude: r.latitude != null ? Number(r.latitude) : null,
     longitude: r.longitude != null ? Number(r.longitude) : null,
-    createdAt: r.created_at,
+    createdAt: toMs(r.created_at),
   };
 }
 
@@ -149,11 +150,13 @@ export async function createShop(
     phone?: string | null;
     address?: string | null;
     commissionRate?: number;
+    /** default 'pending' (spec §13): a shop is only 'active' after seller approval */
+    status?: "pending" | "active";
   },
 ): Promise<Shop> {
   const rows = await db(
-    `INSERT INTO shops (seller_id, name, slug, description, image_url, phone, address, commission_rate)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+    `INSERT INTO shops (seller_id, name, slug, description, image_url, phone, address, commission_rate, status)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
      RETURNING *`,
     [
       input.sellerId,
@@ -164,6 +167,7 @@ export async function createShop(
       input.phone ?? null,
       input.address ?? null,
       input.commissionRate ?? 0.03,
+      input.status ?? "pending",
     ],
   );
   return mapShop(rows[0]);

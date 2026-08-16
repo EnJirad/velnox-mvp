@@ -330,6 +330,47 @@ Env ใหม่ที่ต้องตั้ง (Convex deployment env / Keys 
 **Security sweep (#18/#22):** grep mock/dummy/fake/placeholder ใน production code
 สะอาด; ไม่มี becomeSeller/becomeOwner หลงเหลือ; ไม่มี Math.random ใน dashboard
 
+---
+
+## Systemic Convex Date serialization fix — 2026-08-16 (URGENT PROD BUG)
+
+**Root cause:** `getDb()` (pg driver) คืน `timestamptz` เป็น JS `Date` object และ
+Convex actions คืน rows เหล่านั้นตรง ๆ → Convex reject ทุก response ที่มี `Date`
+("Date ... is not a supported Convex type") → ทุก Save/Create/Approve/Reject ใน
+VelSeller/VelCenter พังที่ boundary แม้เขียน Neon สำเร็จแล้ว
+
+**Central serialization layer (convex/lib/serialize.ts):**
+- `serializeForConvex()` — recursive: Date → Unix ms (getTime), arrays/nested
+  objects/null/undefined→null/string/number/boolean; ไม่ใช้ JSON round-trip,
+  ไม่ทิ้ง field, Convex Id (branded string) ผ่าน untouched
+- `serializedAction` — drop-in replacement ของ Convex `action` builder: wrap
+  handler แล้ว serialize return ทุกครั้ง; type = typeof rawAction (cast จุดเดียว)
+  → args/returns inference และ generated api types ไม่เปลี่ยน
+- เปลี่ยน import `action` → `serializedAction as action` ในไฟล์ node ทั้ง 8:
+  commerce, customer, centerAdmin, employeeAuth, sellerOps, storefront,
+  stripe, memory — ครอบทุก action ที่ return Neon data
+
+**Backend contract (type safety §9):** backend/types.ts timestamp fields
+(`createdAt/updatedAt/paidAt/settledAt/shippedAt/deliveredAt/occurredAt/requestedAt/processedAt`)
+เปลี่ยน `string` → `number` (Unix ms) + ใหม่ `backend/dates.ts` (`toMs`) ใช้ใน
+row mappers ทุกไฟล์ (addresses, carts, finance, notifications, orders, payments,
+products, returns, reviews, sellers, shipments, subscriptions, wishlists) —
+backend layer ยังใช้ Date ได้ภายใน, boundary ส่ง ms ออก
+
+**Frontend types:** shared `StoreProduct/StoreOrder/StoreShop/SellerProfile/StoreSubscription/StoreImage`
+`createdAt/updatedAt` → `number`; `formatIsoDate/formatIsoDateTime` รับ
+`string | number`; app-local interfaces (AuditLogTab, ShopCheckout/Detail/
+Notifications/OrderDetail/ProductDetail/Wishlist, VelRepeatPage) createdAt → number
+
+**Seller approval state machine (§13):** `createShop` default `status='pending'`
+(เดิม `'active'`); `applySeller` สร้าง shop เป็น `active` เฉพาะ seller approved;
+`setSellerStatusAction` sync shop status ตาม seller (approved→active,
+rejected→pending, suspended→suspended); `catalogProducts` กรอง `s.status='active'`
++ JOIN shops ใน count query — pending shop ขายไม่ได้
+
+**Tests:** +8 tests (serializer) — 138 pass / 0 fail · codegen ✅ · `tsc -b` ✅ ·
+build ครบ 4 เว็บ ✅
+
 ## ไฟล์ที่ตรวจแล้ว (สำหรับอ้างอิง)
 
 - Docs: README.md, docs/ARCHITECTURE.md, docs/GAP_ANALYSIS.md, docs/PHASE_PLAN.md, docs/Velnox-CPNS.md, docs/CUSTOMER_MEMORY.md, docs/PHASE-10/11/12/13-REPORT.md, docs/PRODUCTION.md, docs/SECURITY.md

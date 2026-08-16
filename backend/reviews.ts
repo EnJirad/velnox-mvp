@@ -7,6 +7,7 @@
  */
 /* eslint-disable @typescript-eslint/no-explicit-any -- DB row mappers */
 import type { Db } from "./db";
+import { toMs } from "./dates";
 import { AppError } from "./errors";
 import { reviewInputSchema } from "./validation";
 import type { Review } from "./types";
@@ -24,7 +25,7 @@ function mapReview(r: Record<string, any>): Review {
     comment: r.comment ?? null,
     images,
     status: r.status,
-    createdAt: r.created_at,
+    createdAt: toMs(r.created_at),
     userName: r.user_name ?? undefined,
   };
 }

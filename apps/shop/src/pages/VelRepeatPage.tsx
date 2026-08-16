@@ -45,7 +45,7 @@ interface Subscription {
   intervalDays: number;
   nextOrderDate: string;
   status: "active" | "paused" | "cancelled";
-  createdAt: string;
+  createdAt: number;
   productName?: string;
   productImageUrl?: string;
 }

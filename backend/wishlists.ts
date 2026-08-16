@@ -4,6 +4,7 @@
  */
 /* eslint-disable @typescript-eslint/no-explicit-any -- DB row mappers */
 import type { Db } from "./db";
+import { toMs } from "./dates";
 import { AppError } from "./errors";
 import type { WishlistItem } from "./types";
 
@@ -48,7 +49,7 @@ export async function listWishlist(db: Db, userId: string): Promise<WishlistItem
     id: r.id,
     wishlistId: r.wishlist_id,
     productId: r.product_id,
-    createdAt: r.created_at,
+    createdAt: toMs(r.created_at),
   }));
 }
 
