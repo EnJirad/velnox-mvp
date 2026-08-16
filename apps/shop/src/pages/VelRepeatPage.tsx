@@ -1,4 +1,6 @@
+import { ShopFooter } from "@/components/shop/ShopFooter";
 import { ShopHeader } from "@/components/shop/ShopHeader";
+import { useLanguage } from "@/lib/i18n";
 import { Badge } from "@velnox/shared/components/ui/badge";
 import { Button } from "@velnox/shared/components/ui/button";
 import {
@@ -48,32 +50,36 @@ interface Subscription {
   productImageUrl?: string;
 }
 
-const FREQUENCY_LABEL: Record<Subscription["frequency"], (sub: Subscription) => string> = {
-  daily: () => "ทุกวัน",
-  weekly: () => "ทุกสัปดาห์ (7 วัน)",
-  monthly: () => "ทุกเดือน (30 วัน)",
-  custom: (sub) => `ทุก ${sub.intervalDays} วัน`,
-};
-
-const STATUS_META: Record<Subscription["status"], { label: string; badge: string; dot: string }> = {
+const STATUS_META: Record<Subscription["status"], { badge: string; dot: string }> = {
   active: {
-    label: "กำลังสั่งอัตโนมัติ",
     badge: "bg-[#ECFDF5] text-emerald-700 ring-emerald-600/15 hover:bg-[#ECFDF5]",
     dot: "bg-[#10B981]",
   },
   paused: {
-    label: "หยุดชั่วคราว",
     badge: "bg-amber-50 text-amber-700 ring-amber-600/15 hover:bg-amber-50",
     dot: "bg-amber-500",
   },
   cancelled: {
-    label: "ยกเลิกแล้ว",
     badge: "bg-slate-100 text-slate-500 ring-slate-600/10 hover:bg-slate-100",
     dot: "bg-slate-400",
   },
 };
 
+const STATUS_LABEL_KEY: Record<Subscription["status"], string> = {
+  active: "velrepeat.statusActive",
+  paused: "velrepeat.statusPaused",
+  cancelled: "velrepeat.statusCancelled",
+};
+
+const FREQUENCIES: Array<{ id: Subscription["frequency"]; labelKey: string }> = [
+  { id: "daily", labelKey: "velrepeat.freqDaily" },
+  { id: "weekly", labelKey: "velrepeat.freqWeekly" },
+  { id: "monthly", labelKey: "velrepeat.freqMonthly" },
+  { id: "custom", labelKey: "velrepeat.custom" },
+];
+
 export default function VelRepeatPage() {
+  const { t } = useLanguage();
   const mySubscriptions = useAction(api.commerce.mySubscriptions);
   const pauseSubscription = useAction(api.commerce.pauseSubscription);
   const updateSubscription = useAction(api.commerce.updateSubscriptionAction);
@@ -85,6 +91,17 @@ export default function VelRepeatPage() {
   const [editFreq, setEditFreq] = useState<Subscription["frequency"]>("monthly");
   const [editInterval, setEditInterval] = useState(30);
   const [saving, setSaving] = useState(false);
+
+  /** Translated frequency label for a subscription (custom includes interval). */
+  const frequencyLabel = useCallback(
+    (sub: Subscription) => {
+      const key = `velrepeat.freq${sub.frequency === "custom" ? "Custom" : sub.frequency === "daily" ? "Daily" : sub.frequency === "weekly" ? "Weekly" : "Monthly"}`;
+      return sub.frequency === "custom"
+        ? t(key, { days: sub.intervalDays })
+        : t(key);
+    },
+    [t],
+  );
 
   const load = useCallback(async () => {
     try {
@@ -104,11 +121,16 @@ export default function VelRepeatPage() {
     setBusyId(sub.id);
     try {
       await pauseSubscription({ subscriptionId: sub.id, status });
-      const label = status === "active" ? "กลับมาใช้งานต่อแล้ว" : status === "paused" ? "หยุดชั่วคราวแล้ว" : "ยกเลิกการสั่งแล้ว";
+      const label =
+        status === "active"
+          ? t("velrepeat.resumed")
+          : status === "paused"
+            ? t("velrepeat.pausedMsg")
+            : t("velrepeat.cancelledMsg");
       toast.success(label);
       await load();
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "ไม่สำเร็จ กรุณาลองอีกครั้ง");
+      toast.error(err instanceof Error ? err.message : t("velrepeat.failed"));
     } finally {
       setBusyId(null);
     }
@@ -131,11 +153,11 @@ export default function VelRepeatPage() {
         frequency: editFreq,
         intervalDays: editFreq === "custom" ? editInterval : undefined,
       });
-      toast.success("อัปเดตการสั่งรายเดือนแล้ว");
+      toast.success(t("velrepeat.updated"));
       setEditing(null);
       await load();
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "อัปเดตไม่สำเร็จ");
+      toast.error(err instanceof Error ? err.message : t("velrepeat.updateFailed"));
     } finally {
       setSaving(false);
     }
@@ -149,14 +171,12 @@ export default function VelRepeatPage() {
         <div className="mx-auto w-full max-w-6xl px-4 py-10 sm:px-6">
           <p className="flex items-center gap-1.5 text-sm font-medium text-slate-400">
             <RefreshCw className="size-4 text-[#10B981]" />
-            VelRepeat · สั่งรายเดือนอัตโนมัติ
+            {t("velrepeat.eyebrow")}
           </p>
           <h1 className="mt-2 text-3xl font-extrabold tracking-tight text-slate-900 sm:text-4xl">
-            การสั่งซื้ออัตโนมัติของฉัน
+            {t("velrepeat.title")}
           </h1>
-          <p className="mt-2 max-w-lg text-sm leading-6 text-slate-500">
-            สินค้าประจำวันจะถูกสั่งให้คุณอัตโนมัติตามรอบที่ตั้งไว้ — เปลี่ยนรอบ หยุด หรือยกเลิกได้ทุกเมื่อ
-          </p>
+          <p className="mt-2 max-w-lg text-sm leading-6 text-slate-500">{t("velrepeat.desc")}</p>
         </div>
       </section>
 
@@ -172,19 +192,17 @@ export default function VelRepeatPage() {
             <span className="flex size-14 items-center justify-center rounded-2xl bg-[#ECFDF5]">
               <CalendarClock className="size-7 text-[#10B981]" />
             </span>
-            <h2 className="mt-5 text-lg font-semibold text-slate-900">ยังไม่มีการสั่งรายเดือน</h2>
-            <p className="mt-1.5 max-w-sm text-sm leading-6 text-slate-500">
-              เลือกสินค้าประจำวัน แล้วกด “สั่งรายเดือน” เพื่อให้ Velnox สั่งให้คุณอัตโนมัติทุกช่วงเวลา
-            </p>
+            <h2 className="mt-5 text-lg font-semibold text-slate-900">{t("velrepeat.emptyTitle")}</h2>
+            <p className="mt-1.5 max-w-sm text-sm leading-6 text-slate-500">{t("velrepeat.emptyDesc")}</p>
             <Button className="mt-6 gap-1.5 bg-slate-900 text-white hover:bg-slate-800" asChild>
-              <Link to="/shop">เลือกสินค้าเลย</Link>
+              <Link to="/shop">{t("velrepeat.pickProducts")}</Link>
             </Button>
           </div>
         ) : (
           <div className="space-y-3">
             {subs.map((sub) => {
               const meta = STATUS_META[sub.status];
-              const frequencyLabel = FREQUENCY_LABEL[sub.frequency](sub);
+              const label = frequencyLabel(sub);
               const editable = sub.status !== "cancelled";
               return (
                 <div
@@ -195,7 +213,7 @@ export default function VelRepeatPage() {
                     {sub.productImageUrl ? (
                       <img
                         src={sub.productImageUrl}
-                        alt={sub.productName ?? "สินค้า"}
+                        alt={sub.productName ?? t("velrepeat.product")}
                         className="size-16 rounded-[12px] border border-slate-100 object-cover"
                         loading="lazy"
                       />
@@ -212,32 +230,32 @@ export default function VelRepeatPage() {
                         to={`/shop/products/${sub.productId}`}
                         className="truncate text-sm font-semibold text-slate-900 hover:text-[#10B981]"
                       >
-                        {sub.productName ?? "สินค้า"}
+                        {sub.productName ?? t("velrepeat.product")}
                       </Link>
                       <Badge className={`gap-1 rounded-full ring-1 ring-inset ${meta.badge}`}>
                         <span className={`size-1.5 rounded-full ${meta.dot}`} />
-                        {meta.label}
+                        {t(STATUS_LABEL_KEY[sub.status])}
                       </Badge>
                     </div>
                     <div className="mt-1.5 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-slate-500">
                       <span>
-                        จำนวน <span className="font-semibold text-slate-900">{sub.quantity}</span> ต่อครั้ง
+                        {t("velrepeat.qtyPerCycle", { count: sub.quantity })}
                       </span>
                       <span>
-                        ราคา{" "}
+                        {t("velrepeat.price")}{" "}
                         <span className="font-semibold tabular-nums text-slate-900">
                           {formatBaht(sub.unitPriceSnapshot)}
                         </span>
                       </span>
                       <span className="flex items-center gap-1">
                         <RefreshCw className="size-3 text-[#10B981]" />
-                        {frequencyLabel}
+                        {label}
                       </span>
                     </div>
                     <p className="mt-1 text-xs text-slate-400">
                       {sub.status === "active"
-                        ? `สั่งครั้งถัดไป: ${formatIsoDate(sub.nextOrderDate)}`
-                        : `เริ่มสั่งอีกครั้งได้เมื่อคุณกลับมาใช้งาน`}
+                        ? t("velrepeat.nextOrder", { date: formatIsoDate(sub.nextOrderDate) })
+                        : t("velrepeat.pausedHint")}
                     </p>
                   </div>
 
@@ -251,7 +269,7 @@ export default function VelRepeatPage() {
                         onClick={() => changeStatus(sub, "paused")}
                       >
                         <Pause className="size-3.5" />
-                        หยุดชั่วคราว
+                        {t("velrepeat.pause")}
                       </Button>
                     )}
                     {sub.status === "paused" && (
@@ -263,7 +281,7 @@ export default function VelRepeatPage() {
                         onClick={() => changeStatus(sub, "active")}
                       >
                         <Play className="size-3.5" />
-                        กลับมาใช้ต่อ
+                        {t("velrepeat.resume")}
                       </Button>
                     )}
                     {editable && (
@@ -275,7 +293,7 @@ export default function VelRepeatPage() {
                           onClick={() => openEdit(sub)}
                         >
                           <Pencil className="size-3.5" />
-                          แก้ไข
+                          {t("velrepeat.edit")}
                         </Button>
                         <Button
                           variant="ghost"
@@ -285,7 +303,7 @@ export default function VelRepeatPage() {
                           onClick={() => changeStatus(sub, "cancelled")}
                         >
                           <Trash2 className="size-3.5" />
-                          ยกเลิก
+                          {t("velrepeat.cancel")}
                         </Button>
                       </>
                     )}
@@ -301,15 +319,15 @@ export default function VelRepeatPage() {
       <Dialog open={editing !== null} onOpenChange={(open) => !open && setEditing(null)}>
         <DialogContent className="bg-white sm:max-w-sm">
           <DialogHeader>
-            <DialogTitle className="text-slate-900">แก้ไขการสั่งรายเดือน</DialogTitle>
+            <DialogTitle className="text-slate-900">{t("velrepeat.editTitle")}</DialogTitle>
             <DialogDescription>
-              {editing?.productName ?? "สินค้า"} — ปรับจำนวนหรือรอบการสั่งได้ตามต้องการ
+              {t("velrepeat.editDesc", { name: editing?.productName ?? t("velrepeat.product") })}
             </DialogDescription>
           </DialogHeader>
 
           <div className="space-y-4">
             <div>
-              <label className="text-xs font-medium text-slate-500">จำนวนต่อครั้ง</label>
+              <label className="text-xs font-medium text-slate-500">{t("velrepeat.qtyLabel")}</label>
               <Input
                 type="number"
                 min={1}
@@ -319,22 +337,23 @@ export default function VelRepeatPage() {
               />
             </div>
             <div>
-              <label className="text-xs font-medium text-slate-500">รอบการสั่ง</label>
+              <label className="text-xs font-medium text-slate-500">{t("velrepeat.freqLabel")}</label>
               <Select value={editFreq} onValueChange={(val) => setEditFreq(val as Subscription["frequency"])}>
                 <SelectTrigger className="mt-1.5 h-9 w-full rounded-[10px] border-slate-200 text-sm">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="daily">ทุกวัน</SelectItem>
-                  <SelectItem value="weekly">ทุกสัปดาห์ (7 วัน)</SelectItem>
-                  <SelectItem value="monthly">ทุกเดือน (30 วัน)</SelectItem>
-                  <SelectItem value="custom">กำหนดเอง</SelectItem>
+                  {FREQUENCIES.map((f) => (
+                    <SelectItem key={f.id} value={f.id}>
+                      {t(f.labelKey)}
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </div>
             {editFreq === "custom" && (
               <div>
-                <label className="text-xs font-medium text-slate-500">ทุกกี่วัน</label>
+                <label className="text-xs font-medium text-slate-500">{t("velrepeat.customDays")}</label>
                 <Input
                   type="number"
                   min={1}
@@ -347,21 +366,23 @@ export default function VelRepeatPage() {
             )}
             {editing && editing.status === "active" && (
               <p className="rounded-[10px] bg-[#ECFDF5] px-3 py-2 text-xs text-emerald-700">
-                สั่งครั้งถัดไปจะเลื่อนเป็นวันที่ใหม่ตามรอบที่ตั้ง
+                {t("velrepeat.nextShift")}
               </p>
             )}
           </div>
 
           <DialogFooter>
             <Button variant="outline" className="border-slate-200 text-slate-600" onClick={() => setEditing(null)}>
-              ยกเลิก
+              {t("common.cancel")}
             </Button>
             <Button className="gap-1.5 bg-slate-900 text-white hover:bg-slate-800" onClick={saveEdit} disabled={saving}>
-              {saving ? "กำลังบันทึก..." : "บันทึก"}
+              {saving ? t("velrepeat.saving") : t("velrepeat.save")}
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <ShopFooter />
     </div>
   );
 }

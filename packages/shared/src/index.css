@@ -1,5 +1,5 @@
 /* DO NOT CHANGE */
-@import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Noto+Sans+Thai:wght@400;500;600;700;800&display=swap");
+@import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Noto+Sans+Thai:wght@400;500;600;700;800&family=Noto+Sans+Myanmar:wght@400;500;600;700;800&display=swap");
 @import "tailwindcss";
 @import "tw-animate-css";
 @custom-variant dark (&:is(.dark *));
@@ -42,7 +42,7 @@
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-ring: var(--sidebar-ring);
 
-  --font-sans: "Inter", "Noto Sans Thai", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-sans: "Inter", "Noto Sans Thai", "Noto Sans Myanmar", system-ui, -apple-system, "Segoe UI", sans-serif;
 }
 
 /* CHANGE VALUES FOR THEME — Velnox Design Theme v1.0 (KeyDataset/VELNOX_DESIGN_THEME.md) */
@@ -136,4 +136,11 @@
   .site-app {
     padding-bottom: calc(4.75rem + env(safe-area-inset-bottom, 0px));
   }
+}
+
+/* Thai & Burmese scripts need a touch more line-height and natural wrapping
+   than Latin text — applied app-wide so no layout breaks when switching. */
+:lang(th),
+:lang(my) {
+  line-height: 1.55;
 }

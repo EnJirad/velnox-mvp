@@ -1,4 +1,6 @@
+import { ShopFooter } from "@/components/shop/ShopFooter";
 import { ShopHeader } from "@/components/shop/ShopHeader";
+import { useLanguage } from "@/lib/i18n";
 import { Badge } from "@velnox/shared/components/ui/badge";
 import { Button } from "@velnox/shared/components/ui/button";
 import { Skeleton } from "@velnox/shared/components/ui/skeleton";
@@ -40,6 +42,7 @@ const TYPE_ICONS: Record<string, LucideIcon> = {
 };
 
 export default function ShopNotifications() {
+  const { t } = useLanguage();
   const myNotifications = useAction(api.customer.myNotifications);
   const markRead = useAction(api.customer.markNotificationReadAction);
   const markAll = useAction(api.customer.markAllNotificationsRead);
@@ -80,10 +83,10 @@ export default function ShopNotifications() {
     try {
       await markAll();
       setItems((prev) => prev?.map((x) => ({ ...x, isRead: true })) ?? null);
-      toast.success("ทำเครื่องหมายอ่านทั้งหมดแล้ว");
+      toast.success(t("notifications.markAllSuccess"));
     } catch (err) {
       console.error("Mark all error:", err);
-      toast.error("ไม่สำเร็จ กรุณาลองอีกครั้ง");
+      toast.error(t("notifications.markAllFailed"));
     }
   };
 
@@ -96,17 +99,17 @@ export default function ShopNotifications() {
           <div>
             <p className="flex items-center gap-1.5 text-sm font-medium text-slate-400">
               <Bell className="size-4 text-[#10B981]" />
-              velshop · การแจ้งเตือน
+              {t("notifications.eyebrow")}
             </p>
-            <h1 className="mt-1 text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl">การแจ้งเตือน</h1>
+            <h1 className="mt-1 text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl">{t("notifications.title")}</h1>
             <p className="mt-1.5 text-sm text-slate-500">
-              {unread > 0 ? `มีข้อความที่ยังไม่ได้อ่าน ${unread} รายการ` : "อ่านครบแล้ว 🎉"}
+              {unread > 0 ? t("notifications.unread", { count: unread }) : t("notifications.allRead")}
             </p>
           </div>
           {unread > 0 && (
             <Button variant="outline" size="sm" className="gap-1.5 border-slate-200 text-slate-600" onClick={() => void handleMarkAll()}>
               <CheckCheck className="size-3.5" />
-              อ่านทั้งหมด
+              {t("notifications.markAll")}
             </Button>
           )}
         </div>
@@ -122,10 +125,8 @@ export default function ShopNotifications() {
             <span className="flex size-14 items-center justify-center rounded-2xl bg-slate-100">
               <Bell className="size-7 text-slate-400" />
             </span>
-            <h2 className="mt-5 text-lg font-semibold text-slate-900">ยังไม่มีการแจ้งเตือน</h2>
-            <p className="mt-1.5 max-w-sm text-sm leading-6 text-slate-500">
-              สถานะออเดอร์ การจัดส่ง และโปรโมชันจะมาแจ้งที่นี่
-            </p>
+            <h2 className="mt-5 text-lg font-semibold text-slate-900">{t("notifications.emptyTitle")}</h2>
+            <p className="mt-1.5 max-w-sm text-sm leading-6 text-slate-500">{t("notifications.emptyDesc")}</p>
           </div>
         ) : (
           <div className="mt-8 space-y-2.5">
@@ -151,7 +152,7 @@ export default function ShopNotifications() {
                   <span className="min-w-0 flex-1">
                     <span className="flex items-center justify-between gap-2">
                       <span className="truncate text-sm font-semibold text-slate-900">{n.title}</span>
-                      {!n.isRead && <Badge className="shrink-0 rounded-full bg-[#10B981] text-white hover:bg-[#10B981]">ใหม่</Badge>}
+                      {!n.isRead && <Badge className="shrink-0 rounded-full bg-[#10B981] text-white hover:bg-[#10B981]">{t("notifications.new")}</Badge>}
                     </span>
                     {n.message && <span className="mt-0.5 block text-sm leading-5 text-slate-600">{n.message}</span>}
                     <span className="mt-1 block text-[11px] text-slate-400">{formatIsoDateTime(n.createdAt)}</span>
@@ -162,6 +163,8 @@ export default function ShopNotifications() {
           </div>
         )}
       </main>
+
+      <ShopFooter />
     </div>
   );
 }

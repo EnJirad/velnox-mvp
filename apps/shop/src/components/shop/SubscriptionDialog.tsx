@@ -18,6 +18,7 @@ import {
 } from "@velnox/shared/components/ui/select";
 import { api } from "@convex/_generated/api";
 import { useAuth } from "@velnox/shared/hooks/use-auth";
+import { useLanguage } from "@/lib/i18n";
 import { formatBaht, type StoreProduct } from "@velnox/shared/lib/commerce";
 import { useAction } from "convex/react";
 import { CalendarClock, Loader2 } from "lucide-react";
@@ -33,6 +34,7 @@ interface SubscriptionDialogProps {
 
 export function SubscriptionDialog({ product, open, onOpenChange }: SubscriptionDialogProps) {
   const { isAuthenticated } = useAuth();
+  const { t } = useLanguage();
   const createVelRepeat = useAction(api.commerce.createVelRepeat);
   const navigate = useNavigate();
   const [intervalDays, setIntervalDays] = useState("30");
@@ -56,11 +58,11 @@ export function SubscriptionDialog({ product, open, onOpenChange }: Subscription
         intervalDays: Number(intervalDays),
         frequency: "monthly",
       });
-      toast.success(`สมัครรับ "${product.name}" ทุก ${intervalDays} วันแล้ว 🗓️`);
+      toast.success(t("subscription.success", { name: product.name, days: intervalDays }));
       onOpenChange(false);
     } catch (error) {
       console.error("Create subscription error:", error);
-      toast.error(error instanceof Error ? error.message : "สมัครไม่สำเร็จ กรุณาลองอีกครั้ง");
+      toast.error(error instanceof Error ? error.message : t("subscription.failed"));
     } finally {
       setSubmitting(false);
     }
@@ -72,13 +74,16 @@ export function SubscriptionDialog({ product, open, onOpenChange }: Subscription
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <CalendarClock className="size-4 text-[#10B981]" />
-            สั่งรายเดือน · {product?.name}
+            {t("subscription.title", { name: product?.name ?? "" })}
           </DialogTitle>
           <DialogDescription>
-            ระบบจะสร้างออเดอร์ให้อัตโนมัติทุกช่วงเวลา — ไม่ต้องสั่งเองทุกครั้ง
+            {t("subscription.desc")}
             {product && product.price > 0 && (
               <span className="mt-1 block font-medium text-slate-700">
-                {formatBaht(product.price)} / {product.unit} ต่อรอบ
+                {t("subscription.perCycle", {
+                  price: formatBaht(product.price),
+                  unit: product.unit,
+                })}
               </span>
             )}
           </DialogDescription>
@@ -86,20 +91,20 @@ export function SubscriptionDialog({ product, open, onOpenChange }: Subscription
 
         <div className="grid gap-4">
           <div className="grid gap-2">
-            <Label htmlFor="sub-interval">รอบการสั่ง</Label>
+            <Label htmlFor="sub-interval">{t("subscription.interval")}</Label>
             <Select value={intervalDays} onValueChange={setIntervalDays}>
               <SelectTrigger id="sub-interval" className="rounded-[10px] border-slate-200">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="30">ทุก 30 วัน (รายเดือน)</SelectItem>
-                <SelectItem value="60">ทุก 60 วัน</SelectItem>
-                <SelectItem value="90">ทุก 90 วัน</SelectItem>
+                <SelectItem value="30">{t("subscription.every30")}</SelectItem>
+                <SelectItem value="60">{t("subscription.every60")}</SelectItem>
+                <SelectItem value="90">{t("subscription.every90")}</SelectItem>
               </SelectContent>
             </Select>
           </div>
           <div className="grid gap-2">
-            <Label htmlFor="sub-qty">จำนวนต่อรอบ</Label>
+            <Label htmlFor="sub-qty">{t("subscription.qtyPerCycle")}</Label>
             <Input
               id="sub-qty"
               type="number"
@@ -111,7 +116,7 @@ export function SubscriptionDialog({ product, open, onOpenChange }: Subscription
             />
             {product && stock > 0 && (
               <p className="text-xs text-slate-400">
-                สต็อกปัจจุบัน {stock} {product.unit} — ถ้าสต็อกไม่พอรอบนั้นจะถูกข้าม
+                {t("subscription.stockNote", { stock, unit: product.unit })}
               </p>
             )}
           </div>
@@ -123,7 +128,7 @@ export function SubscriptionDialog({ product, open, onOpenChange }: Subscription
             onClick={() => onOpenChange(false)}
             className="border-slate-200 text-slate-700"
           >
-            ยกเลิก
+            {t("common.cancel")}
           </Button>
           <Button
             className="gap-1.5 bg-slate-900 text-white hover:bg-slate-800"
@@ -131,7 +136,7 @@ export function SubscriptionDialog({ product, open, onOpenChange }: Subscription
             disabled={submitting}
           >
             {submitting && <Loader2 className="size-4 animate-spin" />}
-            ยืนยันสั่งรายเดือน
+            {t("subscription.confirm")}
           </Button>
         </DialogFooter>
       </DialogContent>

@@ -1,4 +1,6 @@
+import { ShopFooter } from "@/components/shop/ShopFooter";
 import { ShopHeader } from "@/components/shop/ShopHeader";
+import { useLanguage } from "@/lib/i18n";
 import { Badge } from "@velnox/shared/components/ui/badge";
 import { Button } from "@velnox/shared/components/ui/button";
 import {
@@ -27,7 +29,6 @@ import { useAction } from "convex/react";
 import {
   ArrowLeft,
   CheckCircle2,
-  Circle,
   Clock3,
   ImageOff,
   MapPin,
@@ -38,6 +39,7 @@ import {
   Store,
   Truck,
   XCircle,
+  type LucideIcon,
 } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { Link, useParams } from "react-router";
@@ -95,39 +97,27 @@ interface OrderDetail {
   shipments?: ShipmentRow[];
 }
 
-const ORDER_STEPS: Array<{ key: string; label: string; icon: typeof Clock3 }> = [
-  { key: "pending", label: "รอตรวจสอบ", icon: Clock3 },
-  { key: "confirmed", label: "ร้านกำลังเตรียมสินค้า", icon: Package },
-  { key: "shipped", label: "กำลังจัดส่ง", icon: Truck },
-  { key: "delivered", label: "จัดส่งแล้ว", icon: CheckCircle2 },
-  { key: "completed", label: "เสร็จสิ้น", icon: CheckCircle2 },
+const ORDER_STEPS: Array<{ key: string; icon: LucideIcon }> = [
+  { key: "pending", icon: Clock3 },
+  { key: "confirmed", icon: Package },
+  { key: "shipped", icon: Truck },
+  { key: "delivered", icon: CheckCircle2 },
+  { key: "completed", icon: CheckCircle2 },
 ];
-
-const TRACKING_LABELS: Record<string, string> = {
-  created: "สร้างพัสดุแล้ว",
-  picked_up: "รับพัสดุแล้ว",
-  in_transit: "อยู่ระหว่างขนส่ง",
-  arrived_at_hub: "ถึงศูนย์คัดแยก",
-  out_for_delivery: "กำลังนำส่ง",
-  delivered: "ส่งถึงแล้ว",
-  failed: "จัดส่งไม่สำเร็จ",
-  returned: "ส่งคืนผู้ขาย",
-  cancelled: "ยกเลิกการจัดส่ง",
-};
-
-const PAYMENT_LABEL: Record<string, string> = {
-  unpaid: "ยังไม่ชำระ",
-  pending: "รอชำระเงิน",
-  paid: "ชำระแล้ว",
-  partially_refunded: "คืนเงินบางส่วน",
-  refunded: "คืนเงินแล้ว",
-  failed: "ชำระไม่สำเร็จ",
-};
 
 const CANCELABLE = new Set(["pending", "confirmed"]);
 const REVIEWABLE = new Set(["delivered", "completed"]);
 
+/** Display keys → backend enum values (returnInputSchema in backend/validation.ts). */
+const RETURN_REASONS: Array<{ key: string; value: string }> = [
+  { key: "reasonWrong", value: "wrong_item" },
+  { key: "reasonDamaged", value: "damaged" },
+  { key: "reasonIncomplete", value: "missing_item" },
+  { key: "reasonChangedMind", value: "customer_changed_mind" },
+];
+
 export default function ShopOrderDetail() {
+  const { t } = useLanguage();
   const { orderId } = useParams<{ orderId: string }>();
   const orderDetail = useAction(api.customer.orderDetail);
   const reorder = useAction(api.customer.reorderAction);
@@ -151,6 +141,26 @@ export default function ShopOrderDetail() {
   const [reviewRating, setReviewRating] = useState(5);
   const [reviewComment, setReviewComment] = useState("");
 
+  /** Translated label for a tracking status, falling back to the raw status. */
+  const trackingLabel = useCallback(
+    (status: string) => {
+      const key = `trackingLabels.${status.toLowerCase()}`;
+      const val = t(key);
+      return val === key ? status : val;
+    },
+    [t],
+  );
+
+  /** Translated label for a payment status, falling back to the raw status. */
+  const paymentLabel = useCallback(
+    (status: string) => {
+      const key = `paymentLabels.${status.toLowerCase()}`;
+      const val = t(key);
+      return val === key ? status : val;
+    },
+    [t],
+  );
+
   const load = useCallback(async () => {
     if (!orderId) return;
     setLoading(true);
@@ -158,11 +168,11 @@ export default function ShopOrderDetail() {
       const data = (await orderDetail({ orderId })) as unknown as OrderDetail;
       setOrder(data);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "ไม่สามารถโหลดออเดอร์ได้");
+      setError(err instanceof Error ? err.message : t("orderDetail.loadFailed"));
     } finally {
       setLoading(false);
     }
-  }, [orderId, orderDetail]);
+  }, [orderId, orderDetail, t]);
 
   useEffect(() => {
     void load();
@@ -173,11 +183,11 @@ export default function ShopOrderDetail() {
     setBusy(true);
     try {
       await cancelOrder({ orderId: order.id });
-      toast.success("ยกเลิกออเดอร์แล้ว");
+      toast.success(t("orderDetail.cancelSuccess"));
       setCancelOpen(false);
       await load();
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "ยกเลิกไม่สำเร็จ");
+      toast.error(err instanceof Error ? err.message : t("orderDetail.cancelFailed"));
     } finally {
       setBusy(false);
     }
@@ -192,18 +202,18 @@ export default function ShopOrderDetail() {
         skipped: { productName: string; reason: string }[];
       };
       if (res.added.length > 0) {
-        toast.success(`เพิ่ม ${res.added.length} รายการลงตะกร้าแล้ว 🛒`);
+        toast.success(t("orderDetail.buyAgainAdded", { count: res.added.length }));
       }
       if (res.skipped.length > 0) {
-        toast.warning(`ข้าม ${res.skipped.length} รายการ (${res.skipped[0].reason})`, {
+        toast.warning(t("orderDetail.buyAgainSkipped", { count: res.skipped.length, reason: res.skipped[0].reason }), {
           description: res.skipped.map((s) => s.productName).join(", "),
         });
       }
       if (res.added.length === 0) {
-        toast.error("ไม่สามารถสั่งซื้อซ้ำได้ — สินค้าหมดหรือถูกนำออก");
+        toast.error(t("orderDetail.buyAgainAllFailed"));
       }
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "สั่งซื้อซ้ำไม่สำเร็จ");
+      toast.error(err instanceof Error ? err.message : t("orderDetail.buyAgainFailed"));
     } finally {
       setBusy(false);
     }
@@ -219,12 +229,12 @@ export default function ShopOrderDetail() {
         reason: returnReason.trim(),
         description: returnDesc.trim() || undefined,
       });
-      toast.success("ส่งคำขอคืนสินค้าแล้ว — ร้านค้าจะตรวจสอบภายใน 1–2 วัน");
+      toast.success(t("orderDetail.returnSuccess"));
       setReturnOpen(false);
       setReturnReason("");
       setReturnDesc("");
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "ส่งคำขอคืนไม่สำเร็จ");
+      toast.error(err instanceof Error ? err.message : t("orderDetail.returnFailed"));
     } finally {
       setBusy(false);
     }
@@ -240,12 +250,12 @@ export default function ShopOrderDetail() {
         rating: reviewRating,
         comment: reviewComment.trim() || undefined,
       });
-      toast.success("ส่งรีวิวแล้ว ขอบคุณสำหรับคำติชม 💚");
+      toast.success(t("orderDetail.reviewSuccess"));
       setReviewTarget(null);
       setReviewComment("");
       setReviewRating(5);
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "ส่งรีวิวไม่สำเร็จ");
+      toast.error(err instanceof Error ? err.message : t("orderDetail.reviewFailed"));
     } finally {
       setBusy(false);
     }
@@ -272,12 +282,12 @@ export default function ShopOrderDetail() {
           <span className="flex size-14 items-center justify-center rounded-2xl bg-slate-100">
             <Package className="size-7 text-slate-400" />
           </span>
-          <h1 className="mt-5 text-xl font-bold text-slate-900">ไม่พบออเดอร์</h1>
-          <p className="mt-2 text-sm text-slate-500">{error ?? "ออเดอร์นี้อาจไม่ใช่ของคุณ"}</p>
+          <h1 className="mt-5 text-xl font-bold text-slate-900">{t("orderDetail.notFound")}</h1>
+          <p className="mt-2 text-sm text-slate-500">{error ?? t("orderDetail.notFoundDesc")}</p>
           <Button className="mt-6 gap-1.5 bg-slate-900 text-white hover:bg-slate-800" asChild>
             <Link to="/shop/orders">
               <ArrowLeft className="size-4" />
-              กลับไปออเดอร์ของฉัน
+              {t("tracking.backToOrders")}
             </Link>
           </Button>
         </main>
@@ -310,10 +320,10 @@ export default function ShopOrderDetail() {
           <div>
             <p className="flex items-center gap-1.5 text-sm font-medium text-slate-400">
               <Package className="size-4 text-[#10B981]" />
-              ออเดอร์ {order.orderNumber}
+              {t("orders.orderNo", { no: order.orderNumber })}
             </p>
-            <h1 className="mt-1 text-2xl font-bold tracking-tight text-slate-900">รายละเอียดออเดอร์</h1>
-            <p className="mt-1 text-sm text-slate-500">สั่งเมื่อ {formatIsoDateTime(order.createdAt)}</p>
+            <h1 className="mt-1 text-2xl font-bold tracking-tight text-slate-900">{t("orderDetail.title")}</h1>
+            <p className="mt-1 text-sm text-slate-500">{t("orderDetail.orderedAt", { date: formatIsoDateTime(order.createdAt) })}</p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <Badge className={`gap-1.5 rounded-full ring-1 ring-inset ${meta.badge}`}>
@@ -322,18 +332,18 @@ export default function ShopOrderDetail() {
             </Badge>
             <Badge className="gap-1.5 rounded-full bg-white ring-1 ring-inset ring-slate-200">
               <span className="size-1.5 rounded-full bg-slate-400" />
-              {PAYMENT_LABEL[order.paymentStatus] ?? order.paymentStatus}
+              {paymentLabel(order.paymentStatus)}
             </Badge>
           </div>
         </div>
 
         {/* Timeline */}
         <section className="mt-8 rounded-2xl border border-slate-200 bg-white p-6">
-          <h2 className="text-base font-bold tracking-tight text-slate-900">ความคืบหน้าออเดอร์</h2>
+          <h2 className="text-base font-bold tracking-tight text-slate-900">{t("orderDetail.progress")}</h2>
           {order.status === "cancelled" ? (
             <div className="mt-5 flex items-center gap-3 rounded-xl bg-slate-50 px-4 py-3 text-sm text-slate-500">
               <XCircle className="size-4 text-slate-400" />
-              ออเดอร์นี้ถูกยกเลิก
+              {t("orderDetail.cancelledNote")}
             </div>
           ) : (
             <div className="mt-5 flex flex-wrap items-center gap-1">
@@ -351,7 +361,7 @@ export default function ShopOrderDetail() {
                         <Icon className="size-4" />
                       </span>
                       <span className={`text-[11px] ${done ? "font-medium text-slate-900" : "text-slate-400"}`}>
-                        {s.label}
+                        {t(`orderSteps.${s.key}`)}
                       </span>
                     </div>
                     {i < ORDER_STEPS.length - 1 && (
@@ -372,12 +382,12 @@ export default function ShopOrderDetail() {
             <div className="flex items-center justify-between gap-2">
               <h2 className="flex items-center gap-2 text-base font-bold tracking-tight text-slate-900">
                 <Truck className="size-4 text-[#10B981]" />
-                การติดตามพัสดุ
+                {t("orderDetail.shipmentTitle")}
               </h2>
               <Button variant="outline" size="sm" className="gap-1.5 border-slate-200 text-slate-600" asChild>
                 <Link to={`/shop/orders/${order.id}/tracking`}>
                   <Truck className="size-3.5" />
-                  ดูไทม์ไลน์เต็ม
+                  {t("orderDetail.fullTimeline")}
                 </Link>
               </Button>
             </div>
@@ -385,11 +395,11 @@ export default function ShopOrderDetail() {
               <div key={s.id} className="mt-4 rounded-xl border border-slate-100 bg-slate-50 p-4">
                 <div className="flex flex-wrap items-center justify-between gap-2 text-sm">
                   <p className="font-semibold text-slate-900">{s.carrier}</p>
-                  <p className="font-mono text-xs text-slate-500">{s.trackingNumber ?? "ยังไม่มีเลขพัสดุ"}</p>
+                  <p className="font-mono text-xs text-slate-500">{s.trackingNumber ?? t("orderDetail.noTrackingNo")}</p>
                 </div>
                 <p className="mt-1 text-xs text-slate-400">
-                  สถานะ: {TRACKING_LABELS[s.status] ?? s.status}
-                  {s.estimatedDeliveryDate ? ` · คาดว่าถึง ${s.estimatedDeliveryDate}` : ""}
+                  {t("orderDetail.status", { status: trackingLabel(s.status) })}
+                  {s.estimatedDeliveryDate ? ` · ${t("orderDetail.eta", { date: s.estimatedDeliveryDate })}` : ""}
                 </p>
                 {s.events && s.events.length > 0 && (
                   <div className="mt-4 space-y-0">
@@ -401,7 +411,7 @@ export default function ShopOrderDetail() {
                         </div>
                         <div className="pb-4">
                           <p className="text-sm font-medium text-slate-900">
-                            {TRACKING_LABELS[e.status.toLowerCase()] ?? e.status}
+                            {trackingLabel(e.status)}
                           </p>
                           <p className="mt-0.5 text-[11px] text-slate-400">
                             {e.location ? `${e.location} · ` : ""}
@@ -419,7 +429,7 @@ export default function ShopOrderDetail() {
 
         {/* Items */}
         <section className="mt-6 rounded-2xl border border-slate-200 bg-white p-6">
-          <h2 className="text-base font-bold tracking-tight text-slate-900">สินค้าในออเดอร์</h2>
+          <h2 className="text-base font-bold tracking-tight text-slate-900">{t("orderDetail.itemsTitle")}</h2>
           <div className="mt-4 space-y-3">
             {items.map((item) => (
               <div key={item.id} className="flex items-center justify-between gap-3 rounded-xl border border-slate-100 p-3">
@@ -448,7 +458,7 @@ export default function ShopOrderDetail() {
                       }}
                     >
                       <Star className="size-3.5" />
-                      รีวิว
+                      {t("orderDetail.review")}
                     </Button>
                   )}
                 </div>
@@ -457,21 +467,21 @@ export default function ShopOrderDetail() {
           </div>
           <div className="mt-4 space-y-1.5 border-t border-slate-100 pt-4 text-sm">
             <div className="flex items-center justify-between">
-              <span className="text-slate-500">สินค้า</span>
+              <span className="text-slate-500">{t("orderDetail.subtotal")}</span>
               <span className="tabular-nums text-slate-900">{formatBaht(order.subtotal)}</span>
             </div>
             <div className="flex items-center justify-between">
-              <span className="text-slate-500">ค่าจัดส่ง</span>
+              <span className="text-slate-500">{t("orderDetail.shipping")}</span>
               <span className="tabular-nums text-slate-900">{formatBaht(order.shippingFee)}</span>
             </div>
             <div className="flex items-center justify-between border-t border-slate-100 pt-3">
-              <span className="font-medium text-slate-500">รวมทั้งสิ้น</span>
+              <span className="font-medium text-slate-500">{t("orderDetail.total")}</span>
               <span className="text-xl font-bold tabular-nums tracking-tight text-slate-900">{formatBaht(order.total)}</span>
             </div>
           </div>
           {order.note && (
             <p className="mt-4 rounded-lg bg-slate-50 px-3 py-2 text-xs text-slate-500">
-              หมายเหตุ: {order.note}
+              {t("orderDetail.note", { note: order.note })}
             </p>
           )}
         </section>
@@ -480,7 +490,7 @@ export default function ShopOrderDetail() {
         <section className="mt-6 rounded-2xl border border-slate-200 bg-white p-6">
           <h2 className="flex items-center gap-2 text-base font-bold tracking-tight text-slate-900">
             <MapPin className="size-4 text-[#10B981]" />
-            ที่อยู่จัดส่ง
+            {t("orderDetail.addressTitle")}
           </h2>
           <p className="mt-3 text-sm font-medium text-slate-900">
             {order.addressSnapshot.recipientName ?? ""}
@@ -494,7 +504,7 @@ export default function ShopOrderDetail() {
           <Button variant="outline" className="border-slate-200 text-slate-700" asChild>
             <Link to="/shop/orders">
               <ArrowLeft className="size-4" />
-              ออเดอร์ทั้งหมด
+              {t("orderDetail.backToOrders")}
             </Link>
           </Button>
           {order.status !== "cancelled" && (
@@ -505,7 +515,7 @@ export default function ShopOrderDetail() {
               disabled={busy}
             >
               <RefreshCw className="size-4" />
-              ซื้ออีกครั้ง
+              {t("orderDetail.buyAgain")}
             </Button>
           )}
           {REVIEWABLE.has(order.status) && (
@@ -516,7 +526,7 @@ export default function ShopOrderDetail() {
               disabled={busy}
             >
               <RotateCcw className="size-4" />
-              ขอคืนสินค้า
+              {t("orderDetail.requestReturn")}
             </Button>
           )}
           {CANCELABLE.has(order.status) && (
@@ -527,7 +537,7 @@ export default function ShopOrderDetail() {
               disabled={busy}
             >
               <XCircle className="size-4" />
-              ยกเลิกออเดอร์
+              {t("orderDetail.cancelOrder")}
             </Button>
           )}
         </div>
@@ -537,15 +547,13 @@ export default function ShopOrderDetail() {
       <AlertDialog open={cancelOpen} onOpenChange={setCancelOpen}>
         <AlertDialogContent className="bg-white">
           <AlertDialogHeader>
-            <AlertDialogTitle>ยกเลิกออเดอร์นี้?</AlertDialogTitle>
-            <AlertDialogDescription>
-              ยกเลิกได้เฉพาะออเดอร์ที่ร้านค้ายังไม่ได้จัดส่ง — ระบบจะคืนสต็อกสินค้าทั้งหมดให้อัตโนมัติ
-            </AlertDialogDescription>
+            <AlertDialogTitle>{t("orderDetail.cancelDialogTitle")}</AlertDialogTitle>
+            <AlertDialogDescription>{t("orderDetail.cancelDialogDesc")}</AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel disabled={busy}>ปิด</AlertDialogCancel>
+            <AlertDialogCancel disabled={busy}>{t("orderDetail.close")}</AlertDialogCancel>
             <AlertDialogAction className="bg-red-600 text-white hover:bg-red-700" onClick={handleCancel} disabled={busy}>
-              {busy ? "กำลังยกเลิก..." : "ยืนยันยกเลิก"}
+              {busy ? t("orderDetail.cancelling") : t("orderDetail.confirmCancel")}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -555,10 +563,8 @@ export default function ShopOrderDetail() {
       <Dialog open={returnOpen} onOpenChange={setReturnOpen}>
         <DialogContent className="bg-white sm:max-w-md">
           <DialogHeader>
-            <DialogTitle className="text-slate-900">ขอคืนสินค้า / คืนเงิน</DialogTitle>
-            <DialogDescription>
-              กรอกเหตุผล — ร้านค้าจะตรวจสอบตามนโยบาย (Velnox คุ้มครองคืนสินค้าตามเงื่อนไขที่กำหนด)
-            </DialogDescription>
+            <DialogTitle className="text-slate-900">{t("orderDetail.returnTitle")}</DialogTitle>
+            <DialogDescription>{t("orderDetail.returnDesc")}</DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
             <div className="rounded-[10px] border border-slate-100 bg-slate-50 p-3 text-sm">
@@ -570,25 +576,26 @@ export default function ShopOrderDetail() {
               ))}
             </div>
             <div>
-              <label className="text-xs font-medium text-slate-500">เหตุผล *</label>
+              <label className="text-xs font-medium text-slate-500">{t("orderDetail.reason")}</label>
               <select
                 value={returnReason}
                 onChange={(e) => setReturnReason(e.target.value)}
                 className="mt-1.5 h-10 w-full rounded-[10px] border border-slate-200 bg-white px-3 text-sm text-slate-900 outline-none focus:border-[#10B981]"
               >
-                <option value="">เลือกเหตุผล...</option>
-                <option value="สินค้าผิดหรือไม่ตรงตามที่สั่ง">สินค้าผิดหรือไม่ตรงตามที่สั่ง</option>
-                <option value="สินค้าชำรุด/เสียหาย">สินค้าชำรุด / เสียหาย</option>
-                <option value="ได้สินค้าไม่ครบ">ได้สินค้าไม่ครบ</option>
-                <option value="เปลี่ยนใจไม่ต้องการแล้ว">เปลี่ยนใจไม่ต้องการแล้ว</option>
+                <option value="">{t("orderDetail.reasonPlaceholder")}</option>
+                {RETURN_REASONS.map((r) => (
+                  <option key={r.value} value={r.value}>
+                    {t(`orderDetail.${r.key}`)}
+                  </option>
+                ))}
               </select>
             </div>
             <div>
-              <label className="text-xs font-medium text-slate-500">รายละเอียดเพิ่มเติม</label>
+              <label className="text-xs font-medium text-slate-500">{t("orderDetail.extraDesc")}</label>
               <Textarea
                 value={returnDesc}
                 onChange={(e) => setReturnDesc(e.target.value)}
-                placeholder="อธิบายปัญหาเพิ่มเติม (ถ้ามี)"
+                placeholder={t("orderDetail.extraDescPlaceholder")}
                 className="mt-1.5 rounded-[10px] border-slate-200 text-sm"
                 rows={3}
               />
@@ -596,14 +603,14 @@ export default function ShopOrderDetail() {
           </div>
           <DialogFooter>
             <Button variant="outline" className="border-slate-200 text-slate-600" onClick={() => setReturnOpen(false)}>
-              ปิด
+              {t("orderDetail.close")}
             </Button>
             <Button
               className="gap-1.5 bg-slate-900 text-white hover:bg-slate-800"
               onClick={handleSubmitReturn}
               disabled={busy || !returnReason.trim()}
             >
-              {busy ? "กำลังส่ง..." : "ส่งคำขอคืนสินค้า"}
+              {busy ? t("orderDetail.sending") : t("orderDetail.sendReturn")}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -613,12 +620,12 @@ export default function ShopOrderDetail() {
       <Dialog open={reviewTarget !== null} onOpenChange={(open) => !open && setReviewTarget(null)}>
         <DialogContent className="bg-white sm:max-w-sm">
           <DialogHeader>
-            <DialogTitle className="text-slate-900">รีวิวสินค้า</DialogTitle>
+            <DialogTitle className="text-slate-900">{t("orderDetail.reviewTitle")}</DialogTitle>
             <DialogDescription>{reviewTarget?.productName}</DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
             <div>
-              <label className="text-xs font-medium text-slate-500">คะแนน</label>
+              <label className="text-xs font-medium text-slate-500">{t("orderDetail.rating")}</label>
               <div className="mt-2 flex gap-1">
                 {Array.from({ length: 5 }).map((_, i) => (
                   <button
@@ -626,7 +633,7 @@ export default function ShopOrderDetail() {
                     type="button"
                     onClick={() => setReviewRating(i + 1)}
                     className="transition-transform hover:scale-110"
-                    aria-label={`${i + 1} ดาว`}
+                    aria-label={t("orderDetail.stars", { n: i + 1 })}
                   >
                     <Star
                       className={`size-6 ${i < reviewRating ? "fill-amber-400 text-amber-400" : "text-slate-200"}`}
@@ -636,33 +643,35 @@ export default function ShopOrderDetail() {
               </div>
             </div>
             <div>
-              <label className="text-xs font-medium text-slate-500">ความคิดเห็น</label>
+              <label className="text-xs font-medium text-slate-500">{t("orderDetail.comment")}</label>
               <Textarea
                 value={reviewComment}
                 onChange={(e) => setReviewComment(e.target.value)}
-                placeholder="บอกประสบการณ์การใช้สินค้า..."
+                placeholder={t("orderDetail.commentPlaceholder")}
                 className="mt-1.5 rounded-[10px] border-slate-200 text-sm"
                 rows={3}
               />
             </div>
             <p className="rounded-[10px] bg-[#ECFDF5] px-3 py-2 text-xs text-emerald-700">
-              รีวิวนี้จะแสดงว่า “ซื้อจริงแล้ว” ให้ลูกค้าคนอื่นมั่นใจ
+              {t("orderDetail.verifiedNote")}
             </p>
           </div>
           <DialogFooter>
             <Button variant="outline" className="border-slate-200 text-slate-600" onClick={() => setReviewTarget(null)}>
-              ปิด
+              {t("orderDetail.close")}
             </Button>
             <Button
               className="gap-1.5 bg-slate-900 text-white hover:bg-slate-800"
               onClick={handleSubmitReview}
               disabled={busy}
             >
-              {busy ? "กำลังส่ง..." : "ส่งรีวิว"}
+              {busy ? t("orderDetail.sending") : t("orderDetail.submitReview")}
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <ShopFooter />
     </div>
   );
 }

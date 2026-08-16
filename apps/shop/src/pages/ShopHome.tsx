@@ -1,4 +1,5 @@
 import { ShopHeader } from "@/components/shop/ShopHeader";
+import { ShopFooter } from "@/components/shop/ShopFooter";
 import { SubscriptionDialog } from "@/components/shop/SubscriptionDialog";
 import { ProductDetailModal } from "@/components/shop/ProductDetailModal";
 import { Badge } from "@velnox/shared/components/ui/badge";
@@ -7,6 +8,7 @@ import { Input } from "@velnox/shared/components/ui/input";
 import { api } from "@convex/_generated/api";
 import { useAuth } from "@velnox/shared/hooks/use-auth";
 import { useCart } from "@/lib/cart";
+import { useLanguage } from "@/lib/i18n";
 import {
   PRODUCT_CATEGORY_META,
   formatBaht,
@@ -35,14 +37,6 @@ import {
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router";
 import { toast } from "sonner";
-
-const CATEGORIES: { id: StoreProductCategory | "all"; label: string }[] = [
-  { id: "all", label: "ทั้งหมด" },
-  ...Object.entries(PRODUCT_CATEGORY_META).map(([id, meta]) => ({
-    id: id as StoreProductCategory,
-    label: meta.label,
-  })),
-];
 
 interface RecommendedRow {
   product: StoreProduct;
@@ -96,14 +90,9 @@ function useCommerceData<T>(load: () => Promise<T>) {
   return { data, loading, reload };
 }
 
-const INTENT_LABEL: Record<string, string> = {
-  low: "กำลังสำรวจ",
-  medium: "เริ่มสนใจ",
-  high: "พร้อมซื้อสูง",
-};
-
 export default function ShopHome() {
   const { isAuthenticated, isLoading: authLoading, user } = useAuth();
+  const { t } = useLanguage();
   const listProducts = useAction(api.commerce.listProducts);
   const recommendAction = useAction(api.memory.recommendForCustomer);
   const regularsAction = useAction(api.commerce.customerRegulars);
@@ -190,12 +179,12 @@ export default function ShopHome() {
       },
       qty,
     );
-    toast.success(`เพิ่ม "${product.name}" ลงตะกร้าแล้ว`);
+    toast.success(t("cart.added", { name: product.name }));
   };
 
   const handleInterest = async (product: StoreProduct) => {
-    toast.success(`บันทึกความสนใจ "${product.name}" แล้ว 💚`, {
-      description: "Velnox จะแนะนำสินค้าแบบนี้ให้คุณบ่อยขึ้น",
+    toast.success(t("product.interestToast", { name: product.name }), {
+      description: t("product.interestToastDesc"),
     });
     track("INTEREST", {
       entityId: product.id,
@@ -209,23 +198,44 @@ export default function ShopHome() {
     }
   };
 
-  const shopName = settings?.shopName || "Velnox Shop";
-  const tagline =
-    settings?.tagline || "Commerce that remembers you · จำแทนคุณ";
+  const shopName = settings?.shopName || t("home.defaultShopName");
+  const tagline = settings?.tagline || "Commerce that remembers you · จำแทนคุณ";
 
   useEffect(() => {
     setSeo({
-      title: `${shopName} — VelShop · ตลาดออนไลน์ Velnox`,
-      description: `${tagline} ค้นหาและสั่งซื้อสินค้าได้จริง พร้อมสั่งรายเดือนอัตโนมัติ (VelRepeat)`,
+      title: t("home.seoTitle", { shop: shopName }),
+      description: t("home.seoDesc", { tagline }),
     });
-  }, [shopName, tagline]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [shopName, tagline, t]);
 
   const stockOf = (p: StoreProduct) => p.inventory?.available ?? p.inventory?.quantity ?? 0;
 
   const firstName = user?.name?.split(" ")[0] ?? user?.email?.split("@")[0] ?? "";
 
+  const CATEGORIES = useMemo(
+    () =>
+      [
+        { id: "all" as const, label: t("common.all") },
+        ...Object.entries(PRODUCT_CATEGORY_META).map(([id, meta]) => ({
+          id: id as StoreProductCategory,
+          label: meta.label,
+        })),
+      ],
+    [t],
+  );
+
+  const INTENT_LABEL: Record<string, string> = useMemo(
+    () => ({
+      low: t("home.intentLow"),
+      medium: t("home.intentMedium"),
+      high: t("home.intentHigh"),
+    }),
+    [t],
+  );
+
   return (
-    <div className="min-h-screen bg-[#F8FAFC] text-slate-900">
+    <div className="flex min-h-screen flex-col bg-[#F8FAFC] text-slate-900">
       <ShopHeader />
 
       {/* Storefront hero */}
@@ -235,7 +245,7 @@ export default function ShopHome() {
             <div>
               <p className="flex items-center gap-1.5 text-sm font-medium text-slate-400">
                 <Store className="size-4 text-[#10B981]" />
-                velshop · ตลาดออนไลน์ Velnox
+                {t("home.eyebrow")}
               </p>
               <h1 className="mt-2 text-3xl font-extrabold tracking-tight text-slate-900 sm:text-4xl">
                 {shopName}
@@ -244,7 +254,7 @@ export default function ShopHome() {
               {isAuthenticated && firstName && (
                 <p className="mt-2 flex items-center gap-1.5 text-sm font-medium text-[#10B981]">
                   <Sparkles className="size-3.5" />
-                  สวัสดี {firstName} — Velnox จำคุณได้ และคัดสิ่งที่ดีที่สุดมาให้คุณ
+                  {t("home.heroWelcome", { name: firstName })}
                 </p>
               )}
               {settings?.announcement && (
@@ -255,10 +265,12 @@ export default function ShopHome() {
               )}
             </div>
             <div className="flex flex-col gap-2 sm:items-end">
-              <p className="text-xs text-slate-400">สินค้าที่มีจำหน่าย</p>
+              <p className="text-xs text-slate-400">{t("home.availableProducts")}</p>
               <p className="text-3xl font-bold tabular-nums tracking-tight text-slate-900">
                 {products.length}
-                <span className="ml-1 text-sm font-medium text-slate-400">รายการ</span>
+                <span className="ml-1.5 text-sm font-medium text-slate-400">
+                  {t("common.items")}
+                </span>
               </p>
             </div>
           </div>
@@ -270,8 +282,9 @@ export default function ShopHome() {
               <Input
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
-                placeholder="ค้นหาสินค้า..."
-                className="rounded-[10px] border-slate-200 bg-white pl-9"
+                placeholder={t("home.searchPlaceholder")}
+                className="h-11 rounded-[10px] border-slate-200 bg-white pl-9"
+                aria-label={t("header.ariaSearch")}
               />
             </div>
             <div className="flex flex-wrap gap-1.5">
@@ -280,7 +293,7 @@ export default function ShopHome() {
                   key={c.id}
                   type="button"
                   onClick={() => handleCategory(c.id)}
-                  className={`rounded-full px-3 py-1.5 text-xs font-medium transition-colors ${
+                  className={`rounded-full px-3 py-2 text-xs font-medium transition-colors ${
                     category === c.id
                       ? "bg-slate-900 text-white"
                       : "border border-slate-200 bg-white text-slate-500 hover:border-slate-300 hover:text-slate-900"
@@ -304,11 +317,9 @@ export default function ShopHome() {
               </span>
               <div>
                 <h2 className="text-base font-bold tracking-tight text-slate-900">
-                  ถึงเวลาสั่งซื้อซ้ำแล้ว
+                  {t("home.reorderDueTitle")}
                 </h2>
-                <p className="text-xs text-slate-400">
-                  Velnox จำรอบการสั่งของคุณได้ — สินค้าเหล่านี้ใกล้ถึงเวลาที่คุณมักจะสั่ง
-                </p>
+                <p className="text-xs text-slate-400">{t("home.reorderDueDesc")}</p>
               </div>
             </div>
 
@@ -327,14 +338,14 @@ export default function ShopHome() {
                   <div className="min-w-0 flex-1">
                     <p className="truncate text-sm font-semibold text-slate-900">{r.product.name}</p>
                     <p className="mt-0.5 text-xs text-slate-400">
-                      สั่งทุก ~{r.avgCycleDays} วัน · สั่งแล้ว {r.times} ครั้ง
+                      {t("home.reorderDueEvery", { days: r.avgCycleDays, times: r.times })}
                     </p>
                     <p className="mt-1 text-xs font-medium text-emerald-700">
                       {r.daysLeft < 0
-                        ? `เลยรอบมาแล้ว ${Math.abs(r.daysLeft)} วัน`
+                        ? t("home.reorderDueOverdue", { days: Math.abs(r.daysLeft) })
                         : r.daysLeft === 0
-                          ? "ถึงกำหนดวันนี้พอดี"
-                          : `อีก ${r.daysLeft} วัน ถึงรอบสั่ง`}
+                          ? t("home.reorderDueToday")
+                          : t("home.reorderDueInDays", { days: r.daysLeft })}
                     </p>
                   </div>
                   <Button
@@ -343,7 +354,7 @@ export default function ShopHome() {
                     onClick={() => handleAdd(r.product)}
                   >
                     <Plus className="size-3.5" />
-                    ซื้ออีกครั้ง
+                    {t("home.reorderDueBuy")}
                   </Button>
                 </motion.div>
               ))}
@@ -362,11 +373,9 @@ export default function ShopHome() {
               </span>
               <div>
                 <h2 className="text-base font-bold tracking-tight text-slate-900">
-                  Velnox จำคุณได้ — สินค้าที่คุณสั่งประจำ
+                  {t("home.regularsTitle")}
                 </h2>
-                <p className="text-xs text-slate-400">
-                  อิงจากออเดอร์ของคุณเอง · กดสั่งซื้อซ้ำได้ในคลิกเดียว
-                </p>
+                <p className="text-xs text-slate-400">{t("home.regularsDesc")}</p>
               </div>
             </div>
 
@@ -403,16 +412,25 @@ export default function ShopHome() {
                         {product.name}
                       </h3>
                       <Badge className="shrink-0 gap-1 rounded-full bg-[#ECFDF5] text-emerald-700 ring-1 ring-inset ring-emerald-600/15 hover:bg-[#ECFDF5]">
-                        สั่งแล้ว {times} ครั้ง
+                        {t("home.regularsOrderedTimes", { times })}
                       </Badge>
                     </div>
                     <p className="mt-1 text-xs text-slate-400">
-                      {lastOrderedAt ? `สั่งล่าสุด ${new Date(lastOrderedAt).toLocaleDateString("th-TH", { day: "numeric", month: "short" })}` : ""}
+                      {lastOrderedAt
+                        ? t("home.regularsLastOrdered", {
+                            date: new Date(lastOrderedAt).toLocaleDateString("th-TH", {
+                              day: "numeric",
+                              month: "short",
+                            }),
+                          })
+                        : ""}
                     </p>
                     <div className="mt-3 flex items-end justify-between gap-2 border-t border-slate-100 pt-3">
                       <p className="text-sm font-bold tabular-nums tracking-tight text-slate-900">
                         {formatBaht(product.price)}
-                        <span className="ml-1 text-[11px] font-normal text-slate-400">/ {product.unit}</span>
+                        <span className="ml-1 text-[11px] font-normal text-slate-400">
+                          {t("cart.perUnit", { unit: product.unit })}
+                        </span>
                       </p>
                       <Button
                         size="sm"
@@ -420,7 +438,7 @@ export default function ShopHome() {
                         onClick={() => handleAdd(product)}
                       >
                         <Plus className="size-3.5" />
-                        สั่งซื้ออีกครั้ง
+                        {t("product.buyAgain")}
                       </Button>
                     </div>
                   </div>
@@ -441,13 +459,13 @@ export default function ShopHome() {
               </span>
               <div>
                 <h2 className="text-base font-bold tracking-tight text-slate-900">
-                  Velnox สังเกตว่าคุณสนใจ…
+                  {t("home.insightsTitle")}
                 </h2>
                 <p className="text-xs text-slate-400">
-                  ความเข้าใจนี้มาจากพฤติกรรมของคุณเอง — กดหมวดเพื่อกรองสินค้า
+                  {t("home.insightsDesc")}
                   {memory.intent && (
                     <span className="ml-1 rounded-full bg-emerald-50 px-2 py-0.5 font-medium text-emerald-700">
-                      ระดับความตั้งใจซื้อ: {INTENT_LABEL[memory.intent]}
+                      {t("home.intentLabel", { label: INTENT_LABEL[memory.intent] })}
                     </span>
                   )}
                 </p>
@@ -460,7 +478,7 @@ export default function ShopHome() {
                   key={c.category}
                   type="button"
                   onClick={() => handleCategory(c.category as StoreProductCategory)}
-                  className={`rounded-full px-3.5 py-1.5 text-xs font-medium transition-colors ${
+                  className={`rounded-full px-3.5 py-2 text-xs font-medium transition-colors ${
                     category === c.category
                       ? "bg-slate-900 text-white"
                       : "border border-emerald-200 bg-[#F0FDF9] text-emerald-800 hover:border-emerald-300"
@@ -485,12 +503,14 @@ export default function ShopHome() {
               </span>
               <div>
                 <h2 className="text-base font-bold tracking-tight text-slate-900">
-                  {recommendData.data?.source === "personal" ? "แนะนำสำหรับคุณ" : "สินค้ายอดนิยม"}
+                  {recommendData.data?.source === "personal"
+                    ? t("home.recsPersonal")
+                    : t("home.recsPopular")}
                 </h2>
                 <p className="text-xs text-slate-400">
                   {recommendData.data?.source === "personal"
-                    ? "Velnox เลือกให้จากสิ่งที่คุณสนใจ ค้นหา และสั่งบ่อย"
-                    : "จากความสนใจของลูกค้าทั่วตลาด (VelRepeat)"}
+                    ? t("home.recsPersonalDesc")
+                    : t("home.recsPopularDesc")}
                 </p>
               </div>
             </div>
@@ -540,7 +560,7 @@ export default function ShopHome() {
                       <h3 className="text-sm font-semibold leading-5 text-slate-900">{product.name}</h3>
                       <Badge className="shrink-0 gap-1 rounded-full bg-slate-100 text-slate-500 ring-1 ring-inset ring-slate-600/10 hover:bg-slate-100">
                         <Sparkles className="size-3" />
-                        {views ?? 0} คลิก
+                        {t("home.recsClicks", { count: views ?? 0 })}
                       </Badge>
                     </div>
                     {reasons && reasons.length > 0 && (
@@ -554,7 +574,9 @@ export default function ShopHome() {
                     <div className="mt-3 flex items-end justify-between gap-2 border-t border-slate-100 pt-3">
                       <p className="text-sm font-bold tabular-nums tracking-tight text-slate-900">
                         {formatBaht(product.price)}
-                        <span className="ml-1 text-[11px] font-normal text-slate-400">/ {product.unit}</span>
+                        <span className="ml-1 text-[11px] font-normal text-slate-400">
+                          {t("cart.perUnit", { unit: product.unit })}
+                        </span>
                       </p>
                       <Button
                         size="sm"
@@ -562,7 +584,7 @@ export default function ShopHome() {
                         onClick={() => handleAdd(product)}
                       >
                         <Plus className="size-3.5" />
-                        เพิ่มตะกร้า
+                        {t("product.addToCartSm")}
                       </Button>
                     </div>
                   </div>
@@ -582,8 +604,10 @@ export default function ShopHome() {
                 <Store className="size-4 text-[#10B981]" />
               </span>
               <div>
-                <h2 className="text-base font-bold tracking-tight text-slate-900">ร้านค้าในตลาด</h2>
-                <p className="text-xs text-slate-400">เลือกซื้อตรงจากร้านค้าที่ตรวจสอบแล้ว</p>
+                <h2 className="text-base font-bold tracking-tight text-slate-900">
+                  {t("home.shopsTitle")}
+                </h2>
+                <p className="text-xs text-slate-400">{t("home.shopsDesc")}</p>
               </div>
             </div>
 
@@ -611,7 +635,7 @@ export default function ShopHome() {
                           {shop.rating.toFixed(1)}
                         </span>
                       )}
-                      <span>{shop.productCount} สินค้า</span>
+                      <span>{t("home.shopsProductCount", { count: shop.productCount })}</span>
                     </span>
                   </span>
                 </Link>
@@ -622,7 +646,7 @@ export default function ShopHome() {
       )}
 
       {/* Product grid */}
-      <main className="mx-auto w-full max-w-6xl px-4 py-10 sm:px-6">
+      <main className="mx-auto w-full max-w-6xl flex-1 px-4 py-10 sm:px-6">
         {productsData.loading ? (
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
             {Array.from({ length: 8 }).map((_, i) => (
@@ -634,16 +658,14 @@ export default function ShopHome() {
             <span className="flex size-14 items-center justify-center rounded-2xl bg-[#ECFDF5]">
               <ShoppingBag className="size-7 text-[#10B981]" />
             </span>
-            <h2 className="mt-5 text-lg font-semibold text-slate-900">ร้านยังไม่มีสินค้า</h2>
-            <p className="mt-1.5 max-w-sm text-sm leading-6 text-slate-500">
-              ร้านค้ายังไม่ได้ประกาศขายสินค้า — เชิญกลับมาใหม่เร็ว ๆ นี้
-            </p>
+            <h2 className="mt-5 text-lg font-semibold text-slate-900">{t("home.emptyTitle")}</h2>
+            <p className="mt-1.5 max-w-sm text-sm leading-6 text-slate-500">{t("home.emptyDesc")}</p>
           </div>
         ) : filtered.length === 0 ? (
           <div className="flex flex-col items-center rounded-2xl border border-dashed border-slate-300 bg-white px-6 py-16 text-center">
             <Search className="size-8 text-slate-300" />
-            <h2 className="mt-4 text-lg font-semibold text-slate-900">ไม่พบสินค้า</h2>
-            <p className="mt-1.5 text-sm text-slate-500">ลองค้นหาหรือเปลี่ยนหมวดหมู่ดูนะครับ</p>
+            <h2 className="mt-4 text-lg font-semibold text-slate-900">{t("home.noResults")}</h2>
+            <p className="mt-1.5 text-sm text-slate-500">{t("home.noResultsDesc")}</p>
           </div>
         ) : (
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
@@ -661,7 +683,7 @@ export default function ShopHome() {
                   <Link
                     to={`/shop/products/${product.id}`}
                     className="block aspect-square w-full overflow-hidden bg-slate-50"
-                    aria-label={`ดูรายละเอียด ${product.name}`}
+                    aria-label={t("product.ariaViewDetail", { name: product.name })}
                     onClick={() =>
                       track("PRODUCT_CLICK", {
                         entityId: product.id,
@@ -684,7 +706,7 @@ export default function ShopHome() {
                     )}
                     {product.images && product.images.length > 1 && (
                       <span className="absolute right-2 top-2 rounded-full bg-slate-900/60 px-2 py-0.5 text-[10px] font-medium text-white backdrop-blur">
-                        {product.images.length} รูป
+                        {t("product.images", { count: product.images.length })}
                       </span>
                     )}
                   </Link>
@@ -699,15 +721,15 @@ export default function ShopHome() {
                     {product.description ? (
                       <p className="mt-1 line-clamp-2 text-xs leading-5 text-slate-400">{product.description}</p>
                     ) : (
-                      <p className="mt-1 text-xs text-slate-300">
-                        {product.shopName ?? "ร้านค้า Velnox"}
-                      </p>
+                      <p className="mt-1 text-xs text-slate-300">{product.shopName ?? t("home.defaultShopName")}</p>
                     )}
 
                     <div className="mt-4">
                       <p className="text-lg font-bold tabular-nums tracking-tight text-slate-900">
                         {formatBaht(product.price)}
-                        <span className="ml-1 text-xs font-normal text-slate-400">/ {product.unit}</span>
+                        <span className="ml-1 text-xs font-normal text-slate-400">
+                          {t("cart.perUnit", { unit: product.unit })}
+                        </span>
                       </p>
                     </div>
 
@@ -721,19 +743,19 @@ export default function ShopHome() {
                       }`}
                     >
                       {outOfStock
-                        ? "หมดชั่วคราว"
+                        ? t("product.outOfStock")
                         : lowStock
-                          ? `เหลือน้อย — ${stockOf(product)} ${product.unit}`
-                          : `เหลือ ${stockOf(product)} ${product.unit}`}
+                          ? t("product.lowStock", { count: stockOf(product), unit: product.unit })
+                          : t("product.inStock", { count: stockOf(product), unit: product.unit })}
                     </p>
 
                     <div className="mt-3 flex items-center gap-2">
                       <Button
                         variant="outline"
                         size="icon"
-                        className="size-9 shrink-0 border-slate-200 text-slate-500 hover:border-rose-300 hover:bg-rose-50 hover:text-rose-500"
+                        className="size-10 shrink-0 border-slate-200 text-slate-500 hover:border-rose-300 hover:bg-rose-50 hover:text-rose-500"
                         onClick={() => handleInterest(product)}
-                        aria-label={`สนใจ ${product.name}`}
+                        aria-label={t("product.ariaInterest", { name: product.name })}
                       >
                         <Heart className="size-4" />
                       </Button>
@@ -743,18 +765,18 @@ export default function ShopHome() {
                         onClick={() => handleAdd(product)}
                       >
                         <Plus className="size-4" />
-                        ใส่ตะกร้า
+                        {t("product.addToCart")}
                       </Button>
                     </div>
 
                     {!outOfStock && product.price > 0 && (
                       <Button
                         variant="ghost"
-                        className="mt-1.5 h-8 w-full gap-1.5 text-xs text-slate-500 hover:bg-[#ECFDF5] hover:text-emerald-700"
+                        className="mt-1.5 h-10 w-full gap-1.5 text-xs text-slate-500 hover:bg-[#ECFDF5] hover:text-emerald-700"
                         onClick={() => setSubProduct(product)}
                       >
                         <CalendarClock className="size-3.5" />
-                        สั่งรายเดือนทุก X วัน
+                        {t("product.reorderMonthly")}
                       </Button>
                     )}
                   </div>
@@ -764,6 +786,8 @@ export default function ShopHome() {
           </div>
         )}
       </main>
+
+      <ShopFooter />
 
       <ProductDetailModal
         product={detailProduct}

@@ -1,4 +1,5 @@
 import { ShopHeader } from "@/components/shop/ShopHeader";
+import { ShopFooter } from "@/components/shop/ShopFooter";
 import { SubscriptionDialog } from "@/components/shop/SubscriptionDialog";
 import { Badge } from "@velnox/shared/components/ui/badge";
 import { Button } from "@velnox/shared/components/ui/button";
@@ -6,6 +7,7 @@ import { Skeleton } from "@velnox/shared/components/ui/skeleton";
 import { api } from "@convex/_generated/api";
 import { useAuth } from "@velnox/shared/hooks/use-auth";
 import { useCart } from "@/lib/cart";
+import { useLanguage } from "@/lib/i18n";
 import { useTracking } from "@velnox/shared/lib/track";
 import {
   PRODUCT_CATEGORY_META,
@@ -51,6 +53,7 @@ export default function ShopProductDetail() {
   const { productId } = useParams<{ productId: string }>();
   const navigate = useNavigate();
   const { isAuthenticated } = useAuth();
+  const { t } = useLanguage();
   const getProduct = useAction(api.commerce.getProductDetail);
   const productReviews = useAction(api.customer.productReviews);
   const toggleWishlist = useAction(api.customer.toggleWishlistAction);
@@ -122,7 +125,14 @@ export default function ShopProductDetail() {
         : undefined;
     setSeo({
       title: `${product.name} — VelShop`,
-      description: product.description ?? `${product.name} ราคา ${formatBaht(product.price)}/${product.unit} ที่ร้าน ${product.shopName ?? "Velnox"}`,
+      description:
+        product.description ??
+        t("productDetail.seoDesc", {
+          name: product.name,
+          price: formatBaht(product.price),
+          unit: product.unit,
+          shop: product.shopName ?? t("productDetail.defaultShop"),
+        }),
       ogType: "product",
       ogImage: images[0]?.displayUrl ?? undefined,
       jsonLd: {
@@ -140,7 +150,8 @@ export default function ShopProductDetail() {
         },
       },
     });
-  }, [product, reviews, images, outOfStock]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [product, reviews, images, outOfStock, t]);
 
   const handleAdd = () => {
     if (!product) return;
@@ -152,7 +163,7 @@ export default function ShopProductDetail() {
       { id: product.id, name: product.name, unit: product.unit, price: product.price, stock: available },
       qty,
     );
-    toast.success(`เพิ่ม "${product.name}" (×${qty}) ลงตะกร้าแล้ว`);
+    toast.success(t("productDetail.addedToast", { name: product.name, qty }));
   };
 
   const handleBuyNow = () => {
@@ -178,10 +189,10 @@ export default function ShopProductDetail() {
     try {
       const res = await toggleWishlist({ productId: product.id });
       setWishlisted(res.added);
-      toast.success(res.added ? "เพิ่มในรายการโปรดแล้ว 💚" : "นำออกจากรายการโปรดแล้ว");
+      toast.success(res.added ? t("productDetail.wishlistAdded") : t("productDetail.wishlistRemoved"));
     } catch (err) {
       console.error("Wishlist error:", err);
-      toast.error("บันทึกรายการโปรดไม่สำเร็จ");
+      toast.error(t("productDetail.wishlistFailed"));
     } finally {
       setWishToggling(false);
     }
@@ -214,12 +225,12 @@ export default function ShopProductDetail() {
           <span className="flex size-14 items-center justify-center rounded-2xl bg-slate-100">
             <ImageOff className="size-7 text-slate-400" />
           </span>
-          <h1 className="mt-5 text-xl font-bold text-slate-900">ไม่พบสินค้า</h1>
-          <p className="mt-2 text-sm text-slate-500">สินค้าอาจถูกนำออกหรือยังไม่วางขาย</p>
+          <h1 className="mt-5 text-xl font-bold text-slate-900">{t("productDetail.notFound")}</h1>
+          <p className="mt-2 text-sm text-slate-500">{t("productDetail.notFoundDesc")}</p>
           <Button className="mt-6 gap-1.5 bg-slate-900 text-white hover:bg-slate-800" asChild>
             <Link to="/shop">
               <ArrowLeft className="size-4" />
-              กลับไปหน้าร้าน
+              {t("productDetail.backToShop")}
             </Link>
           </Button>
         </main>
@@ -228,17 +239,17 @@ export default function ShopProductDetail() {
   }
 
   return (
-    <div className="min-h-screen bg-[#F8FAFC] text-slate-900">
+    <div className="flex min-h-screen flex-col bg-[#F8FAFC] text-slate-900">
       <ShopHeader />
 
-      <main className="mx-auto w-full max-w-6xl px-4 py-6 sm:px-6 sm:py-10">
+      <main className="mx-auto w-full max-w-6xl flex-1 px-4 py-6 sm:px-6 sm:py-10">
         <button
           type="button"
           onClick={() => navigate(-1)}
-          className="flex items-center gap-1.5 text-sm text-slate-500 transition-colors hover:text-slate-900"
+          className="flex items-center gap-1.5 py-1 text-sm text-slate-500 transition-colors hover:text-slate-900"
         >
           <ArrowLeft className="size-4" />
-          ย้อนกลับ
+          {t("productDetail.back")}
         </button>
 
         <div className="mt-5 grid gap-8 lg:grid-cols-2">
@@ -267,7 +278,7 @@ export default function ShopProductDetail() {
                     className={`size-16 shrink-0 overflow-hidden rounded-[10px] border-2 transition-colors ${
                       i === activeIndex ? "border-[#10B981]" : "border-slate-200 hover:border-slate-300"
                     }`}
-                    aria-label={`รูปที่ ${i + 1}`}
+                    aria-label={t("productDetail.imageAlt", { n: i + 1 })}
                   >
                     <img src={img.thumbUrl || img.url} alt="" className="size-full object-cover" loading="lazy" />
                   </button>
@@ -295,21 +306,21 @@ export default function ShopProductDetail() {
                 </h1>
                 <Link
                   to={`/shop/shops/${product.shopId}`}
-                  className="mt-2 inline-flex items-center gap-1.5 text-sm text-slate-500 transition-colors hover:text-[#10B981]"
+                  className="mt-2 inline-flex items-center gap-1.5 py-1 text-sm text-slate-500 transition-colors hover:text-[#10B981]"
                 >
                   <Store className="size-4" />
-                  {product.shopName ?? "ร้านค้า Velnox"}
+                  {product.shopName ?? t("productDetail.defaultShop")}
                 </Link>
               </div>
               <Button
                 variant="outline"
                 size="icon"
-                className={`shrink-0 border-slate-200 ${
+                className={`size-10 shrink-0 border-slate-200 ${
                   wishlisted ? "bg-rose-50 text-rose-500 hover:bg-rose-50" : "text-slate-500 hover:border-rose-200 hover:bg-rose-50 hover:text-rose-500"
                 }`}
                 onClick={handleWishlist}
                 disabled={wishToggling}
-                aria-label="เพิ่มในรายการโปรด"
+                aria-label={t("productDetail.ariaWishlist")}
               >
                 {wishToggling ? <Loader2 className="size-4 animate-spin" /> : <Heart className={`size-4 ${wishlisted ? "fill-rose-500" : ""}`} />}
               </Button>
@@ -320,7 +331,9 @@ export default function ShopProductDetail() {
                 <div>
                   <p className="text-3xl font-bold tabular-nums tracking-tight text-slate-900">
                     {formatBaht(product.price)}
-                    <span className="ml-1 text-sm font-normal text-slate-400">/ {product.unit}</span>
+                    <span className="ml-1 text-sm font-normal text-slate-400">
+                      {t("cart.perUnit", { unit: product.unit })}
+                    </span>
                   </p>
                   <p
                     className={`mt-1.5 text-xs ${
@@ -332,10 +345,10 @@ export default function ShopProductDetail() {
                     }`}
                   >
                     {outOfStock
-                      ? "หมดชั่วคราว — สินค้าอาจกลับมามีสต็อกเร็ว ๆ นี้"
+                      ? t("productDetail.outOfStockDesc")
                       : lowStock
-                        ? `เหลือน้อย — ${available} ${product.unit}`
-                        : `เหลือ ${available} ${product.unit}`}
+                        ? t("product.lowStock", { count: available, unit: product.unit })
+                        : t("product.inStock", { count: available, unit: product.unit })}
                   </p>
                 </div>
                 {reviews.length > 0 && (
@@ -344,7 +357,9 @@ export default function ShopProductDetail() {
                     <span className="font-semibold tabular-nums text-slate-900">
                       {(reviews.reduce((s, r) => s + r.rating, 0) / reviews.length).toFixed(1)}
                     </span>
-                    <span className="text-xs text-slate-400">({reviews.length} รีวิว)</span>
+                    <span className="text-xs text-slate-400">
+                      {t("productDetail.reviewCountShort", { count: reviews.length })}
+                    </span>
                   </div>
                 )}
               </div>
@@ -361,7 +376,7 @@ export default function ShopProductDetail() {
             <div className="sticky bottom-16 z-40 -mx-4 mt-5 space-y-2.5 border-t border-slate-200 bg-white/95 px-4 py-3 pb-4 backdrop-blur md:static md:mx-0 md:mt-5 md:border-0 md:bg-transparent md:p-0 md:pb-0 md:backdrop-blur-none">
               {outOfStock ? (
                 <Button className="w-full gap-1.5 bg-slate-100 text-slate-400 hover:bg-slate-100" disabled>
-                  หมดชั่วคราว
+                  {t("product.outOfStock")}
                 </Button>
               ) : (
                 <>
@@ -370,9 +385,9 @@ export default function ShopProductDetail() {
                       <Button
                         variant="ghost"
                         size="icon"
-                        className="size-7 text-slate-600"
+                        className="size-8 text-slate-600"
                         onClick={() => setQty((q) => Math.max(1, q - 1))}
-                        aria-label="ลดจำนวน"
+                        aria-label={t("cartDrawer.ariaDecrease")}
                       >
                         <Minus className="size-3.5" />
                       </Button>
@@ -380,10 +395,10 @@ export default function ShopProductDetail() {
                       <Button
                         variant="ghost"
                         size="icon"
-                        className="size-7 text-slate-600"
+                        className="size-8 text-slate-600"
                         onClick={() => setQty((q) => Math.min(available, q + 1))}
                         disabled={qty >= available}
-                        aria-label="เพิ่มจำนวน"
+                        aria-label={t("cartDrawer.ariaIncrease")}
                       >
                         <Plus className="size-3.5" />
                       </Button>
@@ -394,7 +409,7 @@ export default function ShopProductDetail() {
                       disabled={product.price <= 0}
                     >
                       <ShoppingCart className="size-4" />
-                      ใส่ตะกร้า · {formatBaht(product.price * qty)}
+                      {t("productDetail.addToCartWithTotal", { total: formatBaht(product.price * qty) })}
                     </Button>
                   </div>
                   <Button
@@ -404,15 +419,15 @@ export default function ShopProductDetail() {
                     disabled={product.price <= 0}
                   >
                     <Zap className="size-4" />
-                    ซื้อเลย
+                    {t("productDetail.buyNow")}
                   </Button>
                   <Button
                     variant="ghost"
-                    className="h-9 w-full gap-1.5 text-xs text-slate-500 hover:bg-[#ECFDF5] hover:text-emerald-700"
+                    className="h-10 w-full gap-1.5 text-xs text-slate-500 hover:bg-[#ECFDF5] hover:text-emerald-700"
                     onClick={() => setSubOpen(true)}
                   >
                     <CalendarClock className="size-3.5" />
-                    สั่งรายเดือน (VelRepeat) — ให้ระบบสั่งให้อัตโนมัติทุกช่วงเวลา
+                    {t("productDetail.reorderCta")}
                   </Button>
                 </>
               )}
@@ -424,10 +439,10 @@ export default function ShopProductDetail() {
         <section className="mt-12">
           <div className="flex items-center gap-2">
             <Star className="size-4 text-amber-400" />
-            <h2 className="text-lg font-bold tracking-tight text-slate-900">รีวิวสินค้า</h2>
+            <h2 className="text-lg font-bold tracking-tight text-slate-900">{t("productDetail.reviews")}</h2>
             {reviews.length > 0 && (
               <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-500">
-                {reviews.length} รายการ
+                {t("productDetail.reviewsCount", { count: reviews.length })}
               </span>
             )}
           </div>
@@ -435,8 +450,8 @@ export default function ShopProductDetail() {
           {reviews.length === 0 ? (
             <div className="mt-4 rounded-2xl border border-dashed border-slate-300 bg-white px-6 py-12 text-center">
               <Star className="mx-auto size-7 text-slate-300" />
-              <p className="mt-3 text-sm font-medium text-slate-600">ยังไม่มีรีวิว</p>
-              <p className="mt-1 text-xs text-slate-400">รีวิวจะแสดงเมื่อลูกค้าที่ซื้อจริงได้รับสินค้าแล้ว</p>
+              <p className="mt-3 text-sm font-medium text-slate-600">{t("productDetail.noReviews")}</p>
+              <p className="mt-1 text-xs text-slate-400">{t("productDetail.noReviewsDesc")}</p>
             </div>
           ) : (
             <div className="mt-4 grid gap-3 sm:grid-cols-2">
@@ -456,7 +471,7 @@ export default function ShopProductDetail() {
                   {r.title && <p className="mt-2 text-sm font-semibold text-slate-900">{r.title}</p>}
                   {r.comment && <p className="mt-1 text-sm leading-6 text-slate-600">{r.comment}</p>}
                   <p className="mt-2 text-[11px] text-slate-400">
-                    {r.customerName ?? "ลูกค้า"} · {r.orderId ? "ซื้อจริงแล้ว ✓" : ""}
+                    {r.customerName ?? t("productDetail.customer")} · {r.orderId ? t("productDetail.verifiedPurchase") : ""}
                   </p>
                 </div>
               ))}
@@ -464,6 +479,8 @@ export default function ShopProductDetail() {
           )}
         </section>
       </main>
+
+      <ShopFooter />
 
       <SubscriptionDialog
         product={product}

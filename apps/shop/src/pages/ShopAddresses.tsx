@@ -1,5 +1,7 @@
 import { MapPicker } from "@/components/shop/MapPicker";
+import { ShopFooter } from "@/components/shop/ShopFooter";
 import { ShopHeader } from "@/components/shop/ShopHeader";
+import { useLanguage } from "@/lib/i18n";
 import { Badge } from "@velnox/shared/components/ui/badge";
 import { Button } from "@velnox/shared/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@velnox/shared/components/ui/dialog";
@@ -44,26 +46,12 @@ interface FormState {
   isDefault: boolean;
 }
 
-const EMPTY_FORM: FormState = {
-  label: "บ้าน",
-  recipientName: "",
-  phone: "",
-  line1: "",
-  line2: "",
-  subdistrict: "",
-  district: "",
-  province: "",
-  postalCode: "",
-  latitude: null,
-  longitude: null,
-  isDefault: false,
-};
-
 function formatAddress(a: AddressRow): string {
   return [a.line1, a.line2, a.subdistrict, a.district, a.province, a.postalCode].filter(Boolean).join(" · ");
 }
 
 export default function ShopAddresses() {
+  const { t } = useLanguage();
   const myAddresses = useAction(api.customer.myAddresses);
   const saveAddress = useAction(api.customer.saveAddress);
   const deleteAddress = useAction(api.customer.deleteAddressAction);
@@ -71,7 +59,20 @@ export default function ShopAddresses() {
   const [addresses, setAddresses] = useState<AddressRow[] | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [form, setForm] = useState<FormState>(EMPTY_FORM);
+  const [form, setForm] = useState<FormState>({
+    label: t("addresses.labelPlaceholder").split(" / ")[0] ?? "บ้าน",
+    recipientName: "",
+    phone: "",
+    line1: "",
+    line2: "",
+    subdistrict: "",
+    district: "",
+    province: "",
+    postalCode: "",
+    latitude: null,
+    longitude: null,
+    isDefault: false,
+  });
   const [submitting, setSubmitting] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
 
@@ -90,7 +91,20 @@ export default function ShopAddresses() {
 
   const openCreate = () => {
     setEditingId(null);
-    setForm(EMPTY_FORM);
+    setForm({
+      label: t("addresses.labelPlaceholder").split(" / ")[0] ?? "บ้าน",
+      recipientName: "",
+      phone: "",
+      line1: "",
+      line2: "",
+      subdistrict: "",
+      district: "",
+      province: "",
+      postalCode: "",
+      latitude: null,
+      longitude: null,
+      isDefault: false,
+    });
     setDialogOpen(true);
   };
 
@@ -115,18 +129,18 @@ export default function ShopAddresses() {
 
   const handleSave = async () => {
     if (!form.recipientName.trim() || !form.phone.trim() || !form.line1.trim()) {
-      toast.error("กรุณากรอกชื่อผู้รับ เบอร์โทร และที่อยู่ให้ครบ");
+      toast.error(t("addresses.required"));
       return;
     }
     if (form.isDefault && (form.latitude == null || form.longitude == null)) {
-      toast.error("ที่อยู่หลักต้องมีพิกัด GPS — เลือกตำแหน่งบนแผนที่ก่อนบันทึก");
+      toast.error(t("addresses.gpsDefaultRequired"));
       return;
     }
     setSubmitting(true);
     try {
       await saveAddress({
         addressId: editingId ?? undefined,
-        label: form.label.trim() || "บ้าน",
+        label: form.label.trim() || t("addresses.labelPlaceholder").split(" / ")[0],
         recipientName: form.recipientName.trim(),
         phone: form.phone.trim(),
         line1: form.line1.trim(),
@@ -140,12 +154,12 @@ export default function ShopAddresses() {
         longitude: form.longitude ?? undefined,
         isDefault: form.isDefault,
       });
-      toast.success(editingId ? "อัปเดตที่อยู่แล้ว" : "เพิ่มที่อยู่แล้ว");
+      toast.success(editingId ? t("addresses.updateSuccess") : t("addresses.saveSuccess"));
       setDialogOpen(false);
       await load();
     } catch (err) {
       console.error("Save address error:", err);
-      toast.error(err instanceof Error ? err.message : "บันทึกไม่สำเร็จ");
+      toast.error(err instanceof Error ? err.message : t("addresses.saveFailed"));
     } finally {
       setSubmitting(false);
     }
@@ -155,11 +169,11 @@ export default function ShopAddresses() {
     setDeletingId(a.id);
     try {
       await deleteAddress({ addressId: a.id });
-      toast.success("ลบที่อยู่แล้ว");
+      toast.success(t("addresses.deleteSuccess"));
       await load();
     } catch (err) {
       console.error("Delete address error:", err);
-      toast.error("ลบไม่สำเร็จ");
+      toast.error(t("addresses.deleteFailed"));
     } finally {
       setDeletingId(null);
     }
@@ -168,7 +182,7 @@ export default function ShopAddresses() {
   const handleSetDefault = async (a: AddressRow) => {
     if (a.isDefault) return;
     if (a.latitude == null || a.longitude == null) {
-      toast.error("ที่อยู่นี้ยังไม่มีพิกัด GPS — ต้องเลือกตำแหน่งบนแผนที่ก่อนตั้งเป็นที่อยู่หลัก");
+      toast.error(t("addresses.setDefaultGpsError"));
       return;
     }
     setSubmitting(true);
@@ -189,11 +203,11 @@ export default function ShopAddresses() {
         longitude: a.longitude ?? undefined,
         isDefault: true,
       });
-      toast.success("ตั้งเป็นที่อยู่หลักแล้ว");
+      toast.success(t("addresses.setDefaultSuccess"));
       await load();
     } catch (err) {
       console.error("Set default error:", err);
-      toast.error(err instanceof Error ? err.message : "ไม่สำเร็จ");
+      toast.error(err instanceof Error ? err.message : t("addresses.saveFailed"));
     } finally {
       setSubmitting(false);
     }
@@ -210,16 +224,14 @@ export default function ShopAddresses() {
           <div>
             <p className="flex items-center gap-1.5 text-sm font-medium text-slate-400">
               <MapPin className="size-4 text-[#10B981]" />
-              velshop · ที่อยู่ของฉัน
+              {t("addresses.eyebrow")}
             </p>
-            <h1 className="mt-1 text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl">จัดการที่อยู่</h1>
-            <p className="mt-1.5 text-sm text-slate-500">
-              ที่อยู่หลักต้องมีพิกัด GPS (เลือกบนแผนที่) ถึงจะใช้จัดส่งได้
-            </p>
+            <h1 className="mt-1 text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl">{t("addresses.title")}</h1>
+            <p className="mt-1.5 text-sm text-slate-500">{t("addresses.desc")}</p>
           </div>
           <Button className="gap-1.5 bg-slate-900 text-white hover:bg-slate-800" onClick={openCreate}>
             <Plus className="size-4" />
-            เพิ่มที่อยู่
+            {t("addresses.add")}
           </Button>
         </div>
 
@@ -233,13 +245,11 @@ export default function ShopAddresses() {
             <span className="flex size-14 items-center justify-center rounded-2xl bg-slate-100">
               <MapPin className="size-7 text-slate-400" />
             </span>
-            <h2 className="mt-5 text-lg font-semibold text-slate-900">ยังไม่มีที่อยู่</h2>
-            <p className="mt-1.5 max-w-sm text-sm leading-6 text-slate-500">
-              เพิ่มที่อยู่พร้อมเลือกตำแหน่งบนแผนที่ เพื่อใช้ในการจัดส่งสินค้า
-            </p>
+            <h2 className="mt-5 text-lg font-semibold text-slate-900">{t("addresses.emptyTitle")}</h2>
+            <p className="mt-1.5 max-w-sm text-sm leading-6 text-slate-500">{t("addresses.emptyDesc")}</p>
             <Button className="mt-6 gap-1.5 bg-slate-900 text-white hover:bg-slate-800" onClick={openCreate}>
               <Plus className="size-4" />
-              เพิ่มที่อยู่แรก
+              {t("addresses.addFirst")}
             </Button>
           </div>
         ) : (
@@ -255,12 +265,12 @@ export default function ShopAddresses() {
                         {a.isDefault && (
                           <Badge className="gap-1 rounded-full bg-[#ECFDF5] text-emerald-700 ring-1 ring-inset ring-emerald-600/15 hover:bg-[#ECFDF5]">
                             <Star className="size-3 fill-emerald-600 text-emerald-600" />
-                            ที่อยู่หลัก
+                            {t("addresses.default")}
                           </Badge>
                         )}
                         {!gps && (
                           <Badge className="rounded-full bg-amber-50 text-amber-700 ring-1 ring-inset ring-amber-600/15 hover:bg-amber-50">
-                            ยังไม่มี GPS
+                            {t("addresses.noGps")}
                           </Badge>
                         )}
                       </div>
@@ -284,7 +294,7 @@ export default function ShopAddresses() {
                           disabled={submitting}
                         >
                           <Star className="size-3.5" />
-                          ตั้งเป็นหลัก
+                          {t("addresses.setDefault")}
                         </Button>
                       )}
                       <Button
@@ -292,7 +302,7 @@ export default function ShopAddresses() {
                         size="icon"
                         className="size-8 border-slate-200 text-slate-500"
                         onClick={() => openEdit(a)}
-                        aria-label={`แก้ไข ${a.label}`}
+                        aria-label={t("addresses.ariaEdit", { name: a.label })}
                       >
                         <Pencil className="size-3.5" />
                       </Button>
@@ -302,7 +312,7 @@ export default function ShopAddresses() {
                         className="size-8 border-slate-200 text-slate-400 hover:border-rose-200 hover:bg-rose-50 hover:text-rose-500"
                         onClick={() => void handleDelete(a)}
                         disabled={deletingId === a.id}
-                        aria-label={`ลบ ${a.label}`}
+                        aria-label={t("addresses.ariaDelete", { name: a.label })}
                       >
                         {deletingId === a.id ? <Loader2 className="size-3.5 animate-spin" /> : <Trash2 className="size-3.5" />}
                       </Button>
@@ -321,60 +331,58 @@ export default function ShopAddresses() {
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <MapPin className="size-4 text-[#10B981]" />
-              {editingId ? "แก้ไขที่อยู่" : "เพิ่มที่อยู่"}
+              {editingId ? t("addresses.dialogEditTitle") : t("addresses.dialogTitle")}
             </DialogTitle>
-            <DialogDescription>
-              เลือกตำแหน่งบนแผนที่ (ลากหมุดหรือแตะแผนที่) — ที่อยู่หลักต้องมีพิกัด GPS
-            </DialogDescription>
+            <DialogDescription>{t("addresses.dialogDesc")}</DialogDescription>
           </DialogHeader>
 
           <div className="grid gap-4">
             <div className="grid grid-cols-2 gap-3">
               <div className="grid gap-2">
-                <Label htmlFor="addr-label">ชื่อที่อยู่</Label>
+                <Label htmlFor="addr-label">{t("addresses.labelName")}</Label>
                 <Input
                   id="addr-label"
                   value={form.label}
                   onChange={(e) => setForm((f) => ({ ...f, label: e.target.value }))}
-                  placeholder="บ้าน / ที่ทำงาน"
+                  placeholder={t("addresses.labelPlaceholder")}
                   className="rounded-[10px] border-slate-200"
                 />
               </div>
               <div className="grid gap-2">
-                <Label htmlFor="addr-recipient">ชื่อผู้รับ *</Label>
+                <Label htmlFor="addr-recipient">{t("addresses.recipient")}</Label>
                 <Input
                   id="addr-recipient"
                   value={form.recipientName}
                   onChange={(e) => setForm((f) => ({ ...f, recipientName: e.target.value }))}
-                  placeholder="ชื่อ-นามสกุล"
+                  placeholder={t("addresses.recipientPlaceholder")}
                   className="rounded-[10px] border-slate-200"
                 />
               </div>
             </div>
             <div className="grid gap-2">
-              <Label htmlFor="addr-phone">เบอร์โทร *</Label>
+              <Label htmlFor="addr-phone">{t("addresses.phone")}</Label>
               <Input
                 id="addr-phone"
                 type="tel"
                 value={form.phone}
                 onChange={(e) => setForm((f) => ({ ...f, phone: e.target.value }))}
-                placeholder="เช่น 081-234-5678"
+                placeholder={t("addresses.phonePlaceholder")}
                 className="rounded-[10px] border-slate-200"
               />
             </div>
             <div className="grid gap-2">
-              <Label htmlFor="addr-line1">ที่อยู่ (บ้านเลขที่ / ถนน) *</Label>
+              <Label htmlFor="addr-line1">{t("addresses.line1")}</Label>
               <Input
                 id="addr-line1"
                 value={form.line1}
                 onChange={(e) => setForm((f) => ({ ...f, line1: e.target.value }))}
-                placeholder="เช่น 12/34 ถ.สุขุมวิท"
+                placeholder={t("addresses.line1Placeholder")}
                 className="rounded-[10px] border-slate-200"
               />
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div className="grid gap-2">
-                <Label htmlFor="addr-subdistrict">ตำบล / แขวง</Label>
+                <Label htmlFor="addr-subdistrict">{t("addresses.subdistrict")}</Label>
                 <Input
                   id="addr-subdistrict"
                   value={form.subdistrict}
@@ -383,7 +391,7 @@ export default function ShopAddresses() {
                 />
               </div>
               <div className="grid gap-2">
-                <Label htmlFor="addr-district">อำเภอ / เขต</Label>
+                <Label htmlFor="addr-district">{t("addresses.district")}</Label>
                 <Input
                   id="addr-district"
                   value={form.district}
@@ -392,7 +400,7 @@ export default function ShopAddresses() {
                 />
               </div>
               <div className="grid gap-2">
-                <Label htmlFor="addr-province">จังหวัด</Label>
+                <Label htmlFor="addr-province">{t("addresses.province")}</Label>
                 <Input
                   id="addr-province"
                   value={form.province}
@@ -401,7 +409,7 @@ export default function ShopAddresses() {
                 />
               </div>
               <div className="grid gap-2">
-                <Label htmlFor="addr-postal">รหัสไปรษณีย์</Label>
+                <Label htmlFor="addr-postal">{t("addresses.postal")}</Label>
                 <Input
                   id="addr-postal"
                   value={form.postalCode}
@@ -412,7 +420,10 @@ export default function ShopAddresses() {
             </div>
 
             <div className="grid gap-2">
-              <Label>ตำแหน่งบนแผนที่ {form.isDefault && <span className="text-amber-600">(บังคับสำหรับที่อยู่หลัก)</span>}</Label>
+              <Label>
+                {t("addresses.mapLabel")}{" "}
+                {form.isDefault && <span className="text-amber-600">{t("addresses.mapRequiredNote")}</span>}
+              </Label>
               <MapPicker
                 latitude={form.latitude}
                 longitude={form.longitude}
@@ -428,21 +439,23 @@ export default function ShopAddresses() {
                 onChange={(e) => setForm((f) => ({ ...f, isDefault: e.target.checked }))}
                 className="size-4 rounded border-slate-300 text-[#10B981]"
               />
-              ตั้งเป็นที่อยู่หลัก (ใช้ตอนสั่งซื้อ)
+              {t("addresses.isDefault")}
             </label>
           </div>
 
           <div className="flex justify-end gap-2">
             <Button variant="outline" className="border-slate-200 text-slate-700" onClick={() => setDialogOpen(false)}>
-              ยกเลิก
+              {t("common.cancel")}
             </Button>
             <Button className="gap-1.5 bg-slate-900 text-white hover:bg-slate-800" onClick={handleSave} disabled={submitting}>
               {submitting && <Loader2 className="size-4 animate-spin" />}
-              บันทึกที่อยู่
+              {t("addresses.save")}
             </Button>
           </div>
         </DialogContent>
       </Dialog>
+
+      <ShopFooter />
     </div>
   );
 }

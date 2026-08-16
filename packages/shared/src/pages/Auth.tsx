@@ -16,6 +16,7 @@ import {
 
 import { Logo } from "@velnox/shared/components/Logo";
 import { SITE_URLS } from "@velnox/shared/lib/sites";
+import { useLanguage } from "@velnox/shared/lib/i18n";
 import { useAuth } from "@velnox/shared/hooks/use-auth";
 import { ArrowRight, Loader2, Mail, UserX } from "lucide-react";
 import { Suspense, useEffect, useState } from "react";
@@ -50,6 +51,7 @@ function roleHome(role: string | undefined): string {
 }
 
 function Auth() {
+  const { t } = useLanguage();
   const { isLoading: authLoading, isAuthenticated, user, signIn } = useAuth();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
@@ -86,9 +88,7 @@ function Auth() {
     } catch (error) {
       console.error("Email sign-in error:", error);
       setError(
-        error instanceof Error
-          ? error.message
-          : "Failed to send verification code. Please try again.",
+        error instanceof Error ? error.message : t("auth.emailError"),
       );
       setIsLoading(false);
     }
@@ -104,7 +104,7 @@ function Auth() {
     } catch (error) {
       console.error("OTP verification error:", error);
 
-      setError("The verification code you entered is incorrect.");
+      setError(t("auth.otpError"));
       setIsLoading(false);
 
       setOtp("");
@@ -119,7 +119,7 @@ function Auth() {
     } catch (error) {
       console.error("Guest login error:", error);
       console.error("Error details:", JSON.stringify(error, null, 2));
-      setError(`Failed to sign in as guest: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      setError(t("auth.guestError", { message: error instanceof Error ? error.message : "unknown" }));
       setIsLoading(false);
     }
   };
@@ -139,14 +139,12 @@ function Auth() {
                   type="button"
                   onClick={() => navigate("/")}
                   className="mx-auto mb-5 cursor-pointer rounded-xl transition-opacity hover:opacity-80"
-                  aria-label="กลับไปหน้าแรก"
+                  aria-label={t("auth.backHomeAria")}
                 >
                   <Logo />
                 </button>
-                <CardTitle className="text-xl">เข้าสู่ระบบ Velnox</CardTitle>
-                <CardDescription>
-                  กรอกอีเมลเพื่อเข้าสู่ระบบหรือสมัครใช้งาน
-                </CardDescription>
+                <CardTitle className="text-xl">{t("auth.title")}</CardTitle>
+                <CardDescription>{t("auth.desc")}</CardDescription>
               </CardHeader>
               <form onSubmit={handleEmailSubmit}>
                 <CardContent>
@@ -187,7 +185,7 @@ function Auth() {
                       </div>
                       <div className="relative flex justify-center text-xs uppercase">
                         <span className="bg-background px-2 text-muted-foreground">
-                          หรือ
+                          {t("auth.or")}
                         </span>
                       </div>
                     </div>
@@ -200,7 +198,7 @@ function Auth() {
                       disabled={isLoading}
                     >
                       <UserX className="mr-2 h-4 w-4" />
-                      เข้าสู่ระบบแบบผู้เยี่ยมชม
+                      {t("auth.guest")}
                     </Button>
                   </div>
                 </CardContent>
@@ -209,10 +207,8 @@ function Auth() {
           ) : (
             <>
               <CardHeader className="text-center mt-4">
-                <CardTitle>ตรวจสอบอีเมลของคุณ</CardTitle>
-                <CardDescription>
-                  เราได้ส่งรหัสยืนยันไปที่ {step.email}
-                </CardDescription>
+                <CardTitle>{t("auth.checkTitle")}</CardTitle>
+                <CardDescription>{t("auth.checkDesc", { email: step.email })}</CardDescription>
               </CardHeader>
               <form onSubmit={handleOtpSubmit}>
                 <CardContent className="pb-4">
@@ -248,13 +244,13 @@ function Auth() {
                     </p>
                   )}
                   <p className="text-sm text-muted-foreground text-center mt-4">
-                    ไม่ได้รับรหัส?{" "}
+                    {t("auth.noCode")}{" "}
                     <Button
                       variant="link"
                       className="p-0 h-auto"
                       onClick={() => setStep("signIn")}
                     >
-                      ส่งรหัสใหม่
+                      {t("auth.resend")}
                     </Button>
                   </p>
                 </CardContent>
@@ -267,11 +263,11 @@ function Auth() {
                     {isLoading ? (
                       <>
                         <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                        กำลังยืนยัน...
+                        {t("auth.verifying")}
                       </>
                     ) : (
                       <>
-                        ยืนยันรหัส
+                        {t("auth.confirmCode")}
                         <ArrowRight className="ml-2 h-4 w-4" />
                       </>
                     )}
@@ -283,7 +279,7 @@ function Auth() {
                     disabled={isLoading}
                     className="w-full"
                   >
-                    ใช้อีเมลอื่น
+                    {t("auth.otherEmail")}
                   </Button>
                 </CardFooter>
               </form>

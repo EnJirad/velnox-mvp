@@ -8,6 +8,7 @@ import {
   DialogTitle,
 } from "@velnox/shared/components/ui/dialog";
 import { useCart } from "@/lib/cart";
+import { useLanguage } from "@/lib/i18n";
 import {
   PRODUCT_CATEGORY_META,
   formatBaht,
@@ -35,6 +36,7 @@ interface ProductDetailModalProps {
 
 export function ProductDetailModal({ product, open, onOpenChange, onSubscribe }: ProductDetailModalProps) {
   const { add } = useCart();
+  const { t } = useLanguage();
   const { track } = useTracking();
   const [activeIndex, setActiveIndex] = useState(0);
   const [qty, setQty] = useState(1);
@@ -72,7 +74,7 @@ export function ProductDetailModal({ product, open, onOpenChange, onSubscribe }:
       },
       qty,
     );
-    toast.success(`เพิ่ม "${product.name}" (×${qty}) ลงตะกร้าแล้ว`);
+    toast.success(t("productDetail.addedToast", { name: product.name, qty }));
   };
 
   return (
@@ -81,7 +83,12 @@ export function ProductDetailModal({ product, open, onOpenChange, onSubscribe }:
         <DialogHeader>
           <DialogTitle className="sr-only">{product.name}</DialogTitle>
           <DialogDescription className="sr-only">
-            รายละเอียดสินค้า {product.name}
+            {t("productDetail.seoDesc", {
+              name: product.name,
+              price: formatBaht(product.price),
+              unit: product.unit,
+              shop: product.shopName ?? t("productDetail.defaultShop"),
+            })}
           </DialogDescription>
         </DialogHeader>
 
@@ -112,7 +119,7 @@ export function ProductDetailModal({ product, open, onOpenChange, onSubscribe }:
                         ? "border-[#10B981]"
                         : "border-slate-200 hover:border-slate-300"
                     }`}
-                    aria-label={`รูปที่ ${i + 1}`}
+                    aria-label={t("productDetail.imageAlt", { n: i + 1 })}
                   >
                     <img
                       src={img.thumbUrl || img.url}
@@ -138,7 +145,7 @@ export function ProductDetailModal({ product, open, onOpenChange, onSubscribe }:
                 </h2>
                 <p className="mt-1 flex items-center gap-1.5 text-xs text-slate-400">
                   <Store className="size-3.5" />
-                  {product.shopName ?? "ร้านค้า Velnox"}
+                  {product.shopName ?? t("productDetail.defaultShop")}
                   {product.sellerName ? ` · ${product.sellerName}` : ""}
                 </p>
               </div>
@@ -147,7 +154,9 @@ export function ProductDetailModal({ product, open, onOpenChange, onSubscribe }:
             <div className="mt-4">
               <p className="text-2xl font-bold tabular-nums tracking-tight text-slate-900">
                 {formatBaht(product.price)}
-                <span className="ml-1 text-sm font-normal text-slate-400">/ {product.unit}</span>
+                <span className="ml-1 text-sm font-normal text-slate-400">
+                  {t("cart.perUnit", { unit: product.unit })}
+                </span>
               </p>
               <p
                 className={`mt-1.5 text-xs ${
@@ -159,10 +168,10 @@ export function ProductDetailModal({ product, open, onOpenChange, onSubscribe }:
                 }`}
               >
                 {outOfStock
-                  ? "หมดชั่วคราว — สินค้าอาจกลับมามีสต็อกเร็ว ๆ นี้"
+                  ? t("productDetail.outOfStockDesc")
                   : lowStock
-                    ? `เหลือน้อย — ${available} ${product.unit}`
-                    : `เหลือ ${available} ${product.unit}`}
+                    ? t("product.lowStock", { count: available, unit: product.unit })
+                    : t("product.inStock", { count: available, unit: product.unit })}
               </p>
             </div>
 
@@ -173,7 +182,7 @@ export function ProductDetailModal({ product, open, onOpenChange, onSubscribe }:
             <div className="mt-auto pt-6">
               {outOfStock ? (
                 <Button className="w-full gap-1.5 bg-slate-100 text-slate-400 hover:bg-slate-100" disabled>
-                  หมดชั่วคราว
+                  {t("product.outOfStock")}
                 </Button>
               ) : (
                 <div className="flex items-center gap-3">
@@ -181,9 +190,9 @@ export function ProductDetailModal({ product, open, onOpenChange, onSubscribe }:
                     <Button
                       variant="ghost"
                       size="icon"
-                      className="size-7 text-slate-600"
+                      className="size-8 text-slate-600"
                       onClick={() => setQty((q) => Math.max(1, q - 1))}
-                      aria-label="ลดจำนวน"
+                      aria-label={t("cartDrawer.ariaDecrease")}
                     >
                       <Minus className="size-3.5" />
                     </Button>
@@ -193,17 +202,17 @@ export function ProductDetailModal({ product, open, onOpenChange, onSubscribe }:
                     <Button
                       variant="ghost"
                       size="icon"
-                      className="size-7 text-slate-600"
+                      className="size-8 text-slate-600"
                       onClick={() => setQty((q) => Math.min(available, q + 1))}
                       disabled={qty >= available}
-                      aria-label="เพิ่มจำนวน"
+                      aria-label={t("cartDrawer.ariaIncrease")}
                     >
                       <Plus className="size-3.5" />
                     </Button>
                   </div>
                   <Button className="flex-1 gap-1.5 bg-slate-900 text-white hover:bg-slate-800" onClick={handleAdd}>
                     <ShoppingCart className="size-4" />
-                    ใส่ตะกร้า · {formatBaht(product.price * qty)}
+                    {t("productDetail.addToCartWithTotal", { total: formatBaht(product.price * qty) })}
                   </Button>
                 </div>
               )}
@@ -211,21 +220,18 @@ export function ProductDetailModal({ product, open, onOpenChange, onSubscribe }:
               {!outOfStock && (
                 <Button
                   variant="ghost"
-                  className="mt-2 h-9 w-full gap-1.5 text-xs text-slate-500 hover:bg-[#ECFDF5] hover:text-emerald-700"
+                  className="mt-2 h-10 w-full gap-1.5 text-xs text-slate-500 hover:bg-[#ECFDF5] hover:text-emerald-700"
                   onClick={() => onSubscribe?.(product)}
                 >
                   <CalendarClock className="size-3.5" />
-                  สั่งรายเดือน (VelRepeat) — ให้ระบบสั่งให้อัตโนมัติทุกช่วงเวลา
+                  {t("productDetail.reorderCta")}
                 </Button>
               )}
 
-              <button
-                type="button"
-                className="mt-3 flex w-full items-center justify-center gap-1.5 text-xs text-slate-400 transition-colors hover:text-[#10B981]"
-              >
+              <p className="mt-3 flex w-full items-center justify-center gap-1.5 text-xs text-slate-400">
                 <Heart className="size-3.5" />
-                Velnox จะจำความสนใจของคุณเพื่อแนะนำสินค้าที่ใช่
-              </button>
+                {t("productDetail.interestNote")}
+              </p>
             </div>
           </div>
         </div>

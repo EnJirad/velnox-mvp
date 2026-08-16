@@ -9,6 +9,7 @@ import {
 } from "@velnox/shared/components/ui/sheet";
 import { useAuth } from "@velnox/shared/hooks/use-auth";
 import { useCart } from "@/lib/cart";
+import { useLanguage } from "@/lib/i18n";
 import { formatBaht } from "@velnox/shared/lib/shop";
 import { Minus, Plus, ShoppingCart, Trash2 } from "lucide-react";
 import { useNavigate } from "react-router";
@@ -21,6 +22,7 @@ interface CartDrawerProps {
 export function CartDrawer({ open, onOpenChange }: CartDrawerProps) {
   const { lines, count, total, setQty, remove } = useCart();
   const { isAuthenticated } = useAuth();
+  const { t } = useLanguage();
   const navigate = useNavigate();
 
   const goCheckout = () => {
@@ -34,14 +36,14 @@ export function CartDrawer({ open, onOpenChange }: CartDrawerProps) {
         <SheetHeader className="border-b border-slate-200 px-5 py-4 text-left">
           <SheetTitle className="flex items-center gap-2 text-base">
             <ShoppingCart className="size-4 text-[#10B981]" />
-            ตะกร้าสินค้า
+            {t("cart.title")}
             {count > 0 && (
               <span className="rounded-full bg-slate-900 px-2 py-0.5 text-xs font-semibold text-white">
                 {count}
               </span>
             )}
           </SheetTitle>
-          <SheetDescription className="sr-only">สินค้าในตะกร้าของคุณ</SheetDescription>
+          <SheetDescription className="sr-only">{t("cartDrawer.summary")}</SheetDescription>
         </SheetHeader>
 
         {lines.length === 0 ? (
@@ -50,10 +52,8 @@ export function CartDrawer({ open, onOpenChange }: CartDrawerProps) {
               <ShoppingCart className="size-6 text-slate-400" />
             </span>
             <div>
-              <p className="text-sm font-semibold text-slate-900">ตะกร้ายังว่าง</p>
-              <p className="mt-1 text-xs leading-5 text-slate-400">
-                ไปเลือกสินค้าในหน้าร้าน แล้วกด "ใส่ตะกร้า" ได้เลย
-              </p>
+              <p className="text-sm font-semibold text-slate-900">{t("cartDrawer.emptyTitle")}</p>
+              <p className="mt-1 text-xs leading-5 text-slate-400">{t("cartDrawer.emptyDesc")}</p>
             </div>
             <Button
               variant="outline"
@@ -63,7 +63,7 @@ export function CartDrawer({ open, onOpenChange }: CartDrawerProps) {
                 navigate("/shop");
               }}
             >
-              ดูสินค้าทั้งหมด
+              {t("cartDrawer.viewProducts")}
             </Button>
           </div>
         ) : (
@@ -77,15 +77,15 @@ export function CartDrawer({ open, onOpenChange }: CartDrawerProps) {
                   <div className="min-w-0 flex-1">
                     <p className="truncate text-sm font-medium text-slate-900">{line.name}</p>
                     <p className="mt-0.5 text-xs text-slate-400">
-                      {formatBaht(line.price)} / {line.unit}
+                      {formatBaht(line.price)} {t("cart.perUnit", { unit: line.unit })}
                     </p>
                     <div className="mt-2 flex items-center gap-1">
                       <Button
                         variant="outline"
                         size="icon"
-                        className="size-6 border-slate-200 text-slate-600"
+                        className="size-8 border-slate-200 text-slate-600"
                         onClick={() => setQty(line.productId, line.qty - 1)}
-                        aria-label="ลดจำนวน"
+                        aria-label={t("cartDrawer.ariaDecrease")}
                       >
                         <Minus className="size-3" />
                       </Button>
@@ -95,10 +95,10 @@ export function CartDrawer({ open, onOpenChange }: CartDrawerProps) {
                       <Button
                         variant="outline"
                         size="icon"
-                        className="size-6 border-slate-200 text-slate-600"
+                        className="size-8 border-slate-200 text-slate-600"
                         onClick={() => setQty(line.productId, line.qty + 1)}
                         disabled={line.qty >= line.stock}
-                        aria-label="เพิ่มจำนวน"
+                        aria-label={t("cartDrawer.ariaIncrease")}
                       >
                         <Plus className="size-3" />
                       </Button>
@@ -111,9 +111,9 @@ export function CartDrawer({ open, onOpenChange }: CartDrawerProps) {
                     <Button
                       variant="ghost"
                       size="icon"
-                      className="size-7 text-slate-400 hover:text-red-600"
+                      className="size-8 text-slate-400 hover:text-red-600"
                       onClick={() => remove(line.productId)}
-                      aria-label={`ลบ ${line.name}`}
+                      aria-label={t("cartDrawer.ariaRemove", { name: line.name })}
                     >
                       <Trash2 className="size-3.5" />
                     </Button>
@@ -124,7 +124,7 @@ export function CartDrawer({ open, onOpenChange }: CartDrawerProps) {
 
             <div className="border-t border-slate-200 px-5 py-4">
               <div className="flex items-center justify-between">
-                <p className="text-sm text-slate-500">รวมทั้งสิ้น</p>
+                <p className="text-sm text-slate-500">{t("cartDrawer.totalLabel")}</p>
                 <p className="text-xl font-bold tabular-nums tracking-tight text-slate-900">
                   {formatBaht(total)}
                 </p>
@@ -134,7 +134,7 @@ export function CartDrawer({ open, onOpenChange }: CartDrawerProps) {
                 onClick={goCheckout}
               >
                 <ShoppingCart className="size-4" />
-                ไปชำระเงิน / สั่งซื้อ
+                {t("cartDrawer.checkoutCta")}
               </Button>
             </div>
           </>
@@ -142,7 +142,7 @@ export function CartDrawer({ open, onOpenChange }: CartDrawerProps) {
 
         <div className="flex items-center justify-center gap-2 border-t border-slate-100 bg-slate-50 px-5 py-3">
           <Logo />
-          <p className="text-[11px] text-slate-400">Commerce that remembers you · จำแทนคุณ</p>
+          <p className="text-[11px] text-slate-400">{t("cartDrawer.tagline")}</p>
         </div>
       </SheetContent>
     </Sheet>

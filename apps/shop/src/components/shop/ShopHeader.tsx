@@ -1,19 +1,24 @@
 import { CartDrawer } from "@/components/shop/CartDrawer";
+import { LanguageSwitcher } from "@/components/shop/LanguageSwitcher";
 import { Logo } from "@velnox/shared/components/Logo";
-import { SiteSwitcher } from "@velnox/shared/components/SiteSwitcher";
-import { UserMenu } from "@velnox/shared/components/UserMenu";
 import { Button } from "@velnox/shared/components/ui/button";
 import { Input } from "@velnox/shared/components/ui/input";
 import { useAuth } from "@velnox/shared/hooks/use-auth";
-import { SITE_URLS } from "@velnox/shared/lib/sites";
 import { useCart } from "@/lib/cart";
+import { useLanguage } from "@/lib/i18n";
 import { Bell, RefreshCw, Search, ShoppingCart, User } from "lucide-react";
 import { useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router";
 
+/**
+ * VelShop header — a pure shopping header. No website switcher, no links to
+ * Center/Corporate, no seller platform navigation (the only public cross-site
+ * entry lives in the footer). Desktop and mobile get dedicated compositions.
+ */
 export function ShopHeader() {
   const { isAuthenticated, isLoading } = useAuth();
   const { count } = useCart();
+  const { t } = useLanguage();
   const location = useLocation();
   const navigate = useNavigate();
   const [cartOpen, setCartOpen] = useState(false);
@@ -30,7 +35,7 @@ export function ShopHeader() {
     return (
       <Link
         to={to}
-        className={`rounded-[10px] px-3 py-1.5 text-sm font-medium transition-colors ${
+        className={`rounded-[10px] px-3 py-2 text-sm font-medium transition-colors ${
           active
             ? "bg-slate-100 text-slate-900"
             : "text-slate-500 hover:bg-slate-50 hover:text-slate-900"
@@ -43,54 +48,54 @@ export function ShopHeader() {
 
   return (
     <header className="sticky top-0 z-40 border-b border-slate-200 bg-white/90 backdrop-blur">
-      <div className="mx-auto flex h-16 w-full max-w-6xl items-center justify-between px-4 sm:px-6">
-        <div className="flex items-center gap-2 sm:gap-5">
-          <Link to="/shop" aria-label="velshop">
-            <Logo />
-          </Link>
-          <SiteSwitcher />
-          <nav className="hidden items-center gap-1 md:flex">
-            {navItem("/shop", "หน้าแรก", true)}
-            {navItem("/shop/products", "สินค้า")}
-            {navItem("/shop/categories", "หมวดหมู่")}
-            {isAuthenticated && navItem("/shop/orders", "ออเดอร์")}
-            {isAuthenticated && navItem("/shop/wishlist", "รายการโปรด")}
-            <a
-              href={SITE_URLS.velseller}
-              className="rounded-[10px] px-3 py-1.5 text-sm font-semibold text-[#10B981] transition-colors hover:bg-emerald-50 hover:text-emerald-700"
-            >
-              ขายของ
-            </a>
-          </nav>
-        </div>
+      <div className="mx-auto flex h-16 w-full max-w-6xl items-center gap-2 px-4 sm:px-6">
+        {/* Brand */}
+        <Link to="/shop" aria-label={t("header.ariaHome", { name: "VelShop" })} className="shrink-0">
+          <Logo />
+        </Link>
+
+        {/* Desktop navigation */}
+        <nav className="ml-3 hidden items-center gap-1 md:flex" aria-label={t("nav.home")}>
+          {navItem("/shop", t("nav.home"), true)}
+          {navItem("/shop/products", t("nav.products"))}
+          {navItem("/shop/categories", t("nav.categories"))}
+          {isAuthenticated && navItem("/shop/orders", t("nav.orders"))}
+          {isAuthenticated && navItem("/shop/wishlist", t("nav.wishlist"))}
+        </nav>
 
         {/* Search (desktop) */}
-        <form onSubmit={submitSearch} className="relative hidden w-full max-w-[220px] xl:max-w-xs lg:block">
+        <form
+          onSubmit={submitSearch}
+          className="relative ml-auto hidden w-full max-w-[260px] lg:block"
+        >
           <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-slate-400" />
           <Input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="ค้นหาสินค้า..."
-            className="h-9 rounded-[10px] border-slate-200 bg-slate-50 pl-9 text-sm focus:bg-white"
-            aria-label="ค้นหาสินค้า"
+            placeholder={t("header.searchPlaceholder")}
+            className="h-10 rounded-[10px] border-slate-200 bg-slate-50 pl-9 pr-3 text-sm focus:bg-white"
+            aria-label={t("header.ariaSearch")}
           />
         </form>
 
-        <div className="flex items-center gap-1.5">
+        {/* Utility actions */}
+        <div className="ml-auto flex items-center gap-1 lg:ml-2">
           {/* Search (mobile) */}
           <Button
             variant="ghost"
-            className="cursor-pointer rounded-[10px] px-2 text-slate-600 hover:bg-slate-100 lg:hidden"
+            size="icon"
+            className="size-10 cursor-pointer rounded-[10px] text-slate-600 hover:bg-slate-100 lg:hidden"
             onClick={() => navigate("/shop/products")}
-            aria-label="ค้นหาสินค้า"
+            aria-label={t("header.ariaSearch")}
           >
             <Search className="size-5" />
           </Button>
+
           {isAuthenticated && (
             <Link
               to="/shop/velrepeat"
-              className="rounded-[10px] p-2 text-slate-600 transition-colors hover:bg-slate-100"
-              aria-label="การสั่งซื้ออัตโนมัติ (VelRepeat)"
+              className="hidden size-10 items-center justify-center rounded-[10px] text-slate-600 transition-colors hover:bg-slate-100 sm:flex"
+              aria-label={t("header.ariaVelrepeat")}
             >
               <RefreshCw className="size-5" />
             </Link>
@@ -98,21 +103,25 @@ export function ShopHeader() {
           {isAuthenticated && (
             <Link
               to="/shop/notifications"
-              className="rounded-[10px] p-2 text-slate-600 transition-colors hover:bg-slate-100"
-              aria-label="การแจ้งเตือน"
+              className="hidden size-10 items-center justify-center rounded-[10px] text-slate-600 transition-colors hover:bg-slate-100 sm:flex"
+              aria-label={t("header.ariaNotifications")}
             >
               <Bell className="size-5" />
             </Link>
           )}
+
+          <LanguageSwitcher variant="mobile" />
+
           <Button
             variant="ghost"
-            className="relative cursor-pointer rounded-[10px] px-2.5 text-slate-600 hover:bg-slate-100"
+            size="icon"
+            className="relative size-10 cursor-pointer rounded-[10px] text-slate-600 hover:bg-slate-100"
             onClick={() => setCartOpen(true)}
-            aria-label="เปิดตะกร้าสินค้า"
+            aria-label={t("header.ariaCart")}
           >
             <ShoppingCart className="size-5" />
             {count > 0 && (
-              <span className="absolute -right-0.5 -top-0.5 flex size-5 items-center justify-center rounded-full bg-[#10B981] text-[11px] font-bold text-white">
+              <span className="absolute right-0 top-0 flex size-5 items-center justify-center rounded-full bg-[#10B981] text-[11px] font-bold text-white">
                 {count > 99 ? "99+" : count}
               </span>
             )}
@@ -121,14 +130,18 @@ export function ShopHeader() {
           {isLoading ? null : isAuthenticated ? (
             <Link
               to="/shop/profile"
-              className="rounded-[10px] p-2 text-slate-600 transition-colors hover:bg-slate-100"
-              aria-label="โปรไฟล์"
+              className="flex size-10 items-center justify-center rounded-[10px] text-slate-600 transition-colors hover:bg-slate-100"
+              aria-label={t("header.ariaProfile")}
             >
               <User className="size-5" />
             </Link>
           ) : (
-            <Button variant="outline" className="border-slate-200 text-slate-700" asChild>
-              <Link to="/auth?returnTo=/shop">เข้าสู่ระบบ</Link>
+            <Button
+              variant="outline"
+              className="h-10 border-slate-200 text-slate-700"
+              asChild
+            >
+              <Link to="/auth?returnTo=/shop">{t("header.login")}</Link>
             </Button>
           )}
         </div>

@@ -1,4 +1,6 @@
+import { ShopFooter } from "@/components/shop/ShopFooter";
 import { ShopHeader } from "@/components/shop/ShopHeader";
+import { useLanguage } from "@/lib/i18n";
 import { Badge } from "@velnox/shared/components/ui/badge";
 import { Button } from "@velnox/shared/components/ui/button";
 import { Skeleton } from "@velnox/shared/components/ui/skeleton";
@@ -31,6 +33,7 @@ interface ShopRow {
 }
 
 export default function ShopDetail() {
+  const { t } = useLanguage();
   const { shopId } = useParams<{ shopId: string }>();
   const shopDetail = useAction(api.customer.shopDetail);
   const { add } = useCart();
@@ -48,20 +51,20 @@ export default function ShopDetail() {
       setShop(res.shop as ShopRow);
       setProducts((res.products ?? []) as StoreProduct[]);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "ไม่พบร้านค้า");
+      setError(err instanceof Error ? err.message : t("shopDetail.notFound"));
     } finally {
       setLoading(false);
     }
-  }, [shopId, shopDetail]);
+  }, [shopId, shopDetail, t]);
 
   useEffect(() => {
     if (!shop) return;
     setSeo({
       title: `${shop.name} — VelShop`,
-      description: shop.description ?? `ร้าน ${shop.name} ในตลาด Velnox — สินค้า ${shop.productCount} รายการ`,
+      description: shop.description ?? t("shopDetail.notFoundDesc"),
       ogType: "website",
     });
-  }, [shop]);
+  }, [shop, t]);
 
   useEffect(() => {
     void load();
@@ -79,7 +82,7 @@ export default function ShopDetail() {
       { id: product.id, name: product.name, unit: product.unit, price: product.price, stock: product.inventory?.available ?? product.inventory?.quantity ?? 0 },
       1,
     );
-    toast.success(`เพิ่ม "${product.name}" ลงตะกร้าแล้ว`);
+    toast.success(t("shopDetail.added", { name: product.name }));
   };
 
   if (loading) {
@@ -104,12 +107,12 @@ export default function ShopDetail() {
         <ShopHeader />
         <main className="mx-auto flex w-full max-w-6xl flex-col items-center px-4 py-24 text-center sm:px-6">
           <Store className="size-10 text-slate-300" />
-          <h1 className="mt-4 text-xl font-bold text-slate-900">ไม่พบร้านค้า</h1>
-          <p className="mt-2 text-sm text-slate-500">{error ?? "ร้านค้าอาจถูกปิดหรือยังไม่เปิดขาย"}</p>
+          <h1 className="mt-4 text-xl font-bold text-slate-900">{t("shopDetail.notFound")}</h1>
+          <p className="mt-2 text-sm text-slate-500">{error ?? t("shopDetail.notFoundDesc")}</p>
           <Button className="mt-6 gap-1.5 bg-slate-900 text-white hover:bg-slate-800" asChild>
             <Link to="/shop">
               <ArrowLeft className="size-4" />
-              กลับไปหน้าร้าน
+              {t("shopDetail.backHome")}
             </Link>
           </Button>
         </main>
@@ -124,7 +127,7 @@ export default function ShopDetail() {
       <main className="mx-auto w-full max-w-6xl px-4 py-8 sm:px-6 sm:py-10">
         <Link to="/shop" className="flex items-center gap-1.5 text-sm text-slate-500 transition-colors hover:text-slate-900">
           <ArrowLeft className="size-4" />
-          ย้อนกลับ
+          {t("shopDetail.back")}
         </Link>
 
         {/* Shop profile */}
@@ -143,7 +146,7 @@ export default function ShopDetail() {
                 <h1 className="text-xl font-bold tracking-tight text-slate-900 sm:text-2xl">{shop.name}</h1>
                 <Badge className="gap-1 rounded-full bg-[#ECFDF5] text-emerald-700 ring-1 ring-inset ring-emerald-600/15 hover:bg-[#ECFDF5]">
                   <ShieldCheck className="size-3" />
-                  ร้านค้าที่ตรวจสอบแล้ว
+                  {t("shopDetail.verified")}
                 </Badge>
               </div>
               <div className="mt-1.5 flex flex-wrap items-center gap-3 text-xs text-slate-400">
@@ -151,16 +154,16 @@ export default function ShopDetail() {
                   <span className="flex items-center gap-1">
                     <Star className="size-3.5 fill-amber-400 text-amber-400" />
                     <span className="font-semibold text-slate-900">{shop.rating.toFixed(1)}</span>
-                    <span>({shop.reviewCount} รีวิว)</span>
+                    <span>{t("shopDetail.reviews", { count: shop.reviewCount })}</span>
                   </span>
                 )}
                 <span className="flex items-center gap-1">
                   <Package className="size-3.5" />
-                  {shop.productCount} สินค้า
+                  {t("shopDetail.productCount", { count: shop.productCount })}
                 </span>
                 <span className="flex items-center gap-1">
                   <Heart className="size-3.5" />
-                  ขายแล้ว {shop.orderCount} ออเดอร์
+                  {t("shopDetail.soldOrders", { count: shop.orderCount })}
                 </span>
               </div>
               {shop.description && (
@@ -177,11 +180,11 @@ export default function ShopDetail() {
 
         {/* Products */}
         <section className="mt-8">
-          <h2 className="text-lg font-bold tracking-tight text-slate-900">สินค้าของร้าน</h2>
+          <h2 className="text-lg font-bold tracking-tight text-slate-900">{t("shopDetail.productsTitle")}</h2>
           {products.length === 0 ? (
             <div className="mt-4 flex flex-col items-center rounded-2xl border border-dashed border-slate-300 bg-white px-6 py-14 text-center">
               <Package className="size-7 text-slate-300" />
-              <p className="mt-3 text-sm font-medium text-slate-600">ร้านนี้ยังไม่มีสินค้าลงขาย</p>
+              <p className="mt-3 text-sm font-medium text-slate-600">{t("shopDetail.noProducts")}</p>
             </div>
           ) : (
             <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
@@ -214,12 +217,12 @@ export default function ShopDetail() {
                       <p
                         className={`mt-1.5 text-xs ${outOfStock ? "font-medium text-red-500" : "text-slate-400"}`}
                       >
-                        {outOfStock ? "หมดชั่วคราว" : `เหลือ ${available} ${product.unit}`}
+                        {outOfStock ? t("shopDetail.outOfStock") : t("shopDetail.left", { count: available, unit: product.unit })}
                       </p>
                       <div className="mt-3 flex items-end justify-between gap-2 border-t border-slate-100 pt-3">
                         <p className="text-base font-bold tabular-nums tracking-tight text-slate-900">
                           {formatBaht(product.price)}
-                          <span className="ml-1 text-[11px] font-normal text-slate-400">/ {product.unit}</span>
+                          <span className="ml-1 text-[11px] font-normal text-slate-400">{t("shopDetail.perUnit", { unit: product.unit })}</span>
                         </p>
                         <Button
                           size="sm"
@@ -228,7 +231,7 @@ export default function ShopDetail() {
                           onClick={() => handleAdd(product)}
                         >
                           <Plus className="size-3.5" />
-                          ใส่ตะกร้า
+                          {t("shopDetail.addToCart")}
                         </Button>
                       </div>
                     </div>
@@ -239,6 +242,8 @@ export default function ShopDetail() {
           )}
         </section>
       </main>
+
+      <ShopFooter />
     </div>
   );
 }

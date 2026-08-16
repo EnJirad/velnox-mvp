@@ -3,6 +3,7 @@ import { RequireAuth } from "@velnox/shared/components/RequireAuth";
 import { ConvexAuthProvider } from "@convex-dev/auth/react";
 import { ConvexReactClient } from "convex/react";
 import { CartProvider } from "@/lib/cart";
+import { LanguageProvider, useLanguage } from "@/lib/i18n";
 import {
   RootErrorBoundary,
   RouteSyncer,
@@ -24,23 +25,24 @@ import "../../../packages/shared/src/index.css";
 /** App-like bottom navigation for mobile (velshop). */
 function ShopTabBar() {
   const { count } = useCart();
+  const { t } = useLanguage();
   const items: MobileTabItem[] = [
     {
       to: "/shop",
-      label: "หน้าแรก",
+      label: t("nav.home"),
       icon: Home,
       activeMatch: (p) => p === "/shop" || p === "/",
     },
-    { to: "/shop/products", label: "สินค้า", icon: Package },
+    { to: "/shop/products", label: t("nav.products"), icon: Package },
     {
       to: "/shop/cart",
-      label: "ตะกร้า",
+      label: t("nav.cart"),
       icon: ShoppingCart,
       badge: count,
       activeMatch: (p) => p.startsWith("/shop/cart") || p.startsWith("/shop/checkout"),
     },
-    { to: "/shop/orders", label: "ออเดอร์", icon: ReceiptText },
-    { to: "/shop/profile", label: "โปรไฟล์", icon: User },
+    { to: "/shop/orders", label: t("nav.orders"), icon: ReceiptText },
+    { to: "/shop/profile", label: t("nav.profile"), icon: User },
   ];
   return <MobileTabBar items={items} />;
 }
@@ -67,12 +69,13 @@ const convex = new ConvexReactClient(import.meta.env.VITE_CONVEX_URL as string);
 
 createRoot(document.getElementById("root")!).render(
   <RootErrorBoundary>
-    <ConvexAuthProvider client={convex}>
-      <IdentityMerge />
-      <BrowserRouter basename={siteBasename("velshop")}>
+    <LanguageProvider>
+      <ConvexAuthProvider client={convex}>
+        <IdentityMerge />
+        <BrowserRouter basename={siteBasename("velshop")}>
         <RouteSyncer />
         <CartProvider>
-          <div className="site-app">
+          <div className="site-app pb-16 md:pb-0">
           <SiteSuspense>
             <Routes>
               <Route path="/" element={<Navigate to="/shop" replace />} />
@@ -161,8 +164,8 @@ createRoot(document.getElementById("root")!).render(
           <ShopTabBar />
           </div>
         </CartProvider>
-      </BrowserRouter>
-      <Toaster />
-    </ConvexAuthProvider>
+      </BrowserRouter>          <Toaster />
+        </ConvexAuthProvider>
+    </LanguageProvider>
   </RootErrorBoundary>,
 );

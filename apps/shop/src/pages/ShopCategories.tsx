@@ -1,7 +1,9 @@
 import { ShopHeader } from "@/components/shop/ShopHeader";
+import { ShopFooter } from "@/components/shop/ShopFooter";
 import { Button } from "@velnox/shared/components/ui/button";
 import { Skeleton } from "@velnox/shared/components/ui/skeleton";
 import { api } from "@convex/_generated/api";
+import { useLanguage } from "@/lib/i18n";
 import { setSeo } from "@/lib/seo";
 import { useAction } from "convex/react";
 import { ArrowRight, Boxes, ImageOff, LayoutGrid, Package } from "lucide-react";
@@ -22,6 +24,7 @@ interface CategoryNode {
 
 export default function ShopCategories() {
   const categoryStats = useAction(api.customer.categoryStatsAction);
+  const { t } = useLanguage();
   const [tree, setTree] = useState<CategoryNode[] | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -40,10 +43,10 @@ export default function ShopCategories() {
 
   useEffect(() => {
     setSeo({
-      title: "หมวดหมู่สินค้า — VelShop",
-      description: "เลือกหมวดหมู่เพื่อค้นหาสินค้าจากร้านค้าจริงทั่วตลาด Velnox",
+      title: t("categories.seoTitle"),
+      description: t("categories.seoDesc"),
     });
-  }, []);
+  }, [t]);
 
   useEffect(() => {
     void load();
@@ -53,25 +56,23 @@ export default function ShopCategories() {
     node.productCount + node.children.reduce((sum, c) => sum + countFor(c), 0);
 
   return (
-    <div className="min-h-screen bg-[#F8FAFC] text-slate-900">
+    <div className="flex min-h-screen flex-col bg-[#F8FAFC] text-slate-900">
       <ShopHeader />
 
       <section className="border-b border-slate-100 bg-white">
         <div className="mx-auto w-full max-w-6xl px-4 py-10 sm:px-6">
           <p className="flex items-center gap-1.5 text-sm font-medium text-slate-400">
             <LayoutGrid className="size-4 text-[#10B981]" />
-            หมวดหมู่สินค้า · มาร์เก็ตเพลส Velnox
+            {t("categories.eyebrow")}
           </p>
           <h1 className="mt-2 text-3xl font-extrabold tracking-tight text-slate-900 sm:text-4xl">
-            หมวดหมู่ทั้งหมด
+            {t("categories.title")}
           </h1>
-          <p className="mt-2 max-w-lg text-sm leading-6 text-slate-500">
-            เลือกหมวดหมู่เพื่อค้นหาสินค้าที่คุณต้องการ — ข้อมูลมาจากร้านค้าจริงทั่วตลาด
-          </p>
+          <p className="mt-2 max-w-lg text-sm leading-6 text-slate-500">{t("categories.desc")}</p>
         </div>
       </section>
 
-      <main className="mx-auto w-full max-w-6xl px-4 py-10 sm:px-6">
+      <main className="mx-auto w-full max-w-6xl flex-1 px-4 py-10 sm:px-6">
         {loading ? (
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {Array.from({ length: 6 }).map((_, i) => (
@@ -81,8 +82,8 @@ export default function ShopCategories() {
         ) : !tree || tree.length === 0 ? (
           <div className="flex flex-col items-center rounded-2xl border border-dashed border-slate-300 bg-white px-6 py-16 text-center">
             <Boxes className="size-8 text-slate-300" />
-            <h2 className="mt-4 text-lg font-semibold text-slate-900">ยังไม่มีหมวดหมู่</h2>
-            <p className="mt-1.5 text-sm text-slate-500">หมวดหมู่จะแสดงเมื่อมีสินค้าวางขาย</p>
+            <h2 className="mt-4 text-lg font-semibold text-slate-900">{t("categories.empty")}</h2>
+            <p className="mt-1.5 text-sm text-slate-500">{t("categories.emptyDesc")}</p>
           </div>
         ) : (
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
@@ -106,7 +107,8 @@ export default function ShopCategories() {
                       <div className="min-w-0">
                         <h2 className="truncate text-lg font-bold tracking-tight text-white">{root.name}</h2>
                         <p className="text-xs text-emerald-50/90">
-                          {total} สินค้า{root.description ? ` · ${root.description}` : ""}
+                          {t("categories.count", { count: total })}
+                          {root.description ? ` · ${root.description}` : ""}
                         </p>
                       </div>
                     </div>
@@ -118,7 +120,7 @@ export default function ShopCategories() {
                         <Link
                           key={child.id}
                           to={`/shop/products?category=${encodeURIComponent(child.slug ?? child.id)}`}
-                          className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-medium text-slate-600 transition-colors hover:border-[#10B981]/40 hover:bg-[#ECFDF5] hover:text-emerald-700"
+                          className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-medium text-slate-600 transition-colors hover:border-[#10B981]/40 hover:bg-[#ECFDF5] hover:text-emerald-700"
                         >
                           {child.name} · {child.productCount}
                         </Link>
@@ -129,11 +131,11 @@ export default function ShopCategories() {
                   <div className="mt-auto p-5 pt-4">
                     <Button
                       variant="ghost"
-                      className="h-8 w-full gap-1 text-xs text-slate-500 hover:bg-[#ECFDF5] hover:text-emerald-700"
+                      className="h-9 w-full gap-1 text-xs text-slate-500 hover:bg-[#ECFDF5] hover:text-emerald-700"
                       asChild
                     >
                       <Link to={to}>
-                        ดูสินค้าในหมวดนี้
+                        {t("categories.viewProducts")}
                         <ArrowRight className="size-3.5" />
                       </Link>
                     </Button>
@@ -144,6 +146,8 @@ export default function ShopCategories() {
           </div>
         )}
       </main>
+
+      <ShopFooter />
     </div>
   );
 }

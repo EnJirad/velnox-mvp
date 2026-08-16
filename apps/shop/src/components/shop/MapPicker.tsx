@@ -3,6 +3,7 @@ import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import { useEffect, useRef, useState } from "react";
 import { Button } from "@velnox/shared/components/ui/button";
+import { useLanguage } from "@/lib/i18n";
 
 /**
  * GPS map picker (spec §17–18, §62).
@@ -34,6 +35,7 @@ function pinIcon() {
 }
 
 export function MapPicker({ latitude, longitude, onChange, height = "h-64" }: MapPickerProps) {
+  const { t } = useLanguage();
   const containerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<L.Map | null>(null);
   const markerRef = useRef<L.Marker | null>(null);
@@ -87,7 +89,7 @@ export function MapPicker({ latitude, longitude, onChange, height = "h-64" }: Ma
 
   const useCurrentLocation = () => {
     if (!("geolocation" in navigator)) {
-      alert("เบราว์เซอร์ของคุณไม่รองรับการระบุตำแหน่ง — กรุณาเลือกตำแหน่งบนแผนที่แทน");
+      alert(t("mapPicker.unsupported"));
       return;
     }
     setLocating(true);
@@ -99,7 +101,7 @@ export function MapPicker({ latitude, longitude, onChange, height = "h-64" }: Ma
       },
       () => {
         setLocating(false);
-        alert("ไม่สามารถดึงตำแหน่งปัจจุบันได้ — กรุณาเลือกตำแหน่งบนแผนที่แทน (ลากหมุดหรือคลิกแผนที่)");
+        alert(t("mapPicker.failed"));
       },
       { enableHighAccuracy: true, timeout: 10000 },
     );
@@ -110,7 +112,7 @@ export function MapPicker({ latitude, longitude, onChange, height = "h-64" }: Ma
       <div
         ref={containerRef}
         className={`w-full overflow-hidden rounded-[12px] border border-slate-200 ${height} z-0`}
-        aria-label="แผนที่เลือกตำแหน่งจัดส่ง"
+        aria-label={t("mapPicker.ariaMap")}
       />
       <div className="flex flex-wrap items-center justify-between gap-2">
         <Button
@@ -122,11 +124,11 @@ export function MapPicker({ latitude, longitude, onChange, height = "h-64" }: Ma
           disabled={locating}
         >
           <LocateFixed className={`size-3.5 ${locating ? "animate-spin" : ""}`} />
-          {locating ? "กำลังค้นหาตำแหน่ง..." : "ใช้ตำแหน่งปัจจุบัน"}
+          {locating ? t("mapPicker.locating") : t("mapPicker.useCurrent")}
         </Button>
         {hasPos && (
           <p className="text-[11px] tabular-nums text-slate-400">
-            พิกัด: {latitude!.toFixed(5)}, {longitude!.toFixed(5)}
+            {t("mapPicker.coords", { lat: latitude!.toFixed(5), lng: longitude!.toFixed(5) })}
           </p>
         )}
       </div>

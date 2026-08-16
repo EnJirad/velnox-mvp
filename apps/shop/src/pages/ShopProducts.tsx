@@ -1,4 +1,5 @@
 import { ShopHeader } from "@/components/shop/ShopHeader";
+import { ShopFooter } from "@/components/shop/ShopFooter";
 import { Badge } from "@velnox/shared/components/ui/badge";
 import { Button } from "@velnox/shared/components/ui/button";
 import { Checkbox } from "@velnox/shared/components/ui/checkbox";
@@ -14,6 +15,7 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@vel
 import { Skeleton } from "@velnox/shared/components/ui/skeleton";
 import { api } from "@convex/_generated/api";
 import { useCart } from "@/lib/cart";
+import { useLanguage } from "@/lib/i18n";
 import { useTracking } from "@velnox/shared/lib/track";
 import {
   PRODUCT_CATEGORY_META,
@@ -42,20 +44,12 @@ import { toast } from "sonner";
 
 const PAGE_SIZE = 24;
 
-const CATEGORY_OPTIONS: Array<{ id: StoreProductCategory | "all"; label: string }> = [
-  { id: "all", label: "ทั้งหมด" },
-  ...Object.entries(PRODUCT_CATEGORY_META).map(([id, meta]) => ({
-    id: id as StoreProductCategory,
-    label: meta.label,
-  })),
-];
-
 const SORT_OPTIONS: Array<{ value: string; label: string }> = [
-  { value: "newest", label: "ใหม่ล่าสุด" },
-  { value: "price_asc", label: "ราคา: ต่ำ → สูง" },
-  { value: "price_desc", label: "ราคา: สูง → ต่ำ" },
-  { value: "popular", label: "ขายดีที่สุด" },
-  { value: "rating", label: "คะแนนรีวิว" },
+  { value: "newest", label: "products.sortNewest" },
+  { value: "price_asc", label: "products.sortPriceAsc" },
+  { value: "price_desc", label: "products.sortPriceDesc" },
+  { value: "popular", label: "products.sortPopular" },
+  { value: "rating", label: "products.sortRating" },
 ];
 
 interface ShopRow {
@@ -74,6 +68,7 @@ export default function ShopProducts() {
   const catalog = useAction(api.commerce.catalogProductsAction);
   const publicShops = useAction(api.customer.publicShops);
   const { add } = useCart();
+  const { t } = useLanguage();
   const { track } = useTracking();
 
   const q = params.get("q") ?? "";
@@ -93,7 +88,7 @@ export default function ShopProducts() {
 
   // live search box → URL param (debounced)
   useEffect(() => {
-    const t = setTimeout(() => {
+    const timer = setTimeout(() => {
       if (queryInput.trim() === q) return;
       setParams(
         (prev) => {
@@ -106,7 +101,7 @@ export default function ShopProducts() {
         { replace: true },
       );
     }, 350);
-    return () => clearTimeout(t);
+    return () => clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [queryInput]);
 
@@ -128,24 +123,24 @@ export default function ShopProducts() {
       setData(result);
     } catch (err) {
       console.error("Catalog error:", err);
-      setError(err instanceof Error ? err.message : "โหลดสินค้าไม่สำเร็จ");
+      setError(err instanceof Error ? err.message : t("products.loadError"));
     } finally {
       setLoading(false);
     }
-  }, [catalog, q, category, shopId, minPrice, maxPrice, inStock, sortBy, page]);
+  }, [catalog, q, category, shopId, minPrice, maxPrice, inStock, sortBy, page, t]);
 
   useEffect(() => {
     const categoryLabel =
       category !== "all" ? (PRODUCT_CATEGORY_META[category as StoreProductCategory]?.label ?? category) : null;
     setSeo({
       title: categoryLabel
-        ? `สินค้าหมวด ${categoryLabel} — VelShop`
+        ? t("products.seoCatTitle", { cat: categoryLabel })
         : q
-          ? `ค้นหา "${q}" — VelShop`
-          : "สินค้าทั้งหมด — VelShop",
-      description: `สินค้าจากร้านค้าจริงทั่วตลาด Velnox${categoryLabel ? ` หมวด ${categoryLabel}` : ""} — ราคาและสต็อกอัปเดตจากร้านค้า`,
+          ? t("products.seoSearchTitle", { q })
+          : t("products.seoTitle"),
+      description: t("products.seoDesc"),
     });
-  }, [q, category]);
+  }, [q, category, t]);
 
   useEffect(() => {
     void load();
@@ -212,18 +207,35 @@ export default function ShopProducts() {
     return pages;
   }, [page, totalPages]);
 
+  const categoryOptions = useMemo(
+    () =>
+      [
+        { id: "all" as const, label: t("common.all") },
+        ...Object.entries(PRODUCT_CATEGORY_META).map(([id, meta]) => ({
+          id: id as StoreProductCategory,
+          label: meta.label,
+        })),
+      ],
+    [t],
+  );
+
+  const sortOptions = useMemo(
+    () => SORT_OPTIONS.map((o) => ({ value: o.value, label: t(o.label) })),
+    [t],
+  );
+
   const FiltersPanel = (
     <div className="space-y-6">
       {/* Category */}
       <div>
-        <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">หมวดหมู่</p>
+        <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">{t("products.category")}</p>
         <div className="mt-3 flex flex-wrap gap-1.5 lg:flex-col lg:items-start lg:gap-1">
-          {CATEGORY_OPTIONS.map((c) => (
+          {categoryOptions.map((c) => (
             <button
               key={c.id}
               type="button"
               onClick={() => updateParam("category", c.id === "all" ? null : c.id)}
-              className={`rounded-full px-3 py-1.5 text-xs font-medium transition-colors lg:w-full lg:rounded-[10px] lg:text-left ${
+              className={`rounded-full px-3 py-2 text-xs font-medium transition-colors lg:w-full lg:rounded-[10px] lg:text-left ${
                 category === c.id
                   ? "bg-slate-900 text-white"
                   : "border border-slate-200 bg-white text-slate-500 hover:border-slate-300 hover:text-slate-900"
@@ -239,14 +251,14 @@ export default function ShopProducts() {
       <div>
         <p className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-slate-400">
           <Store className="size-3.5" />
-          ร้านค้า
+          {t("products.shop")}
         </p>
         <Select value={shopId || "all"} onValueChange={(val) => updateParam("shop", val === "all" ? null : val)}>
-          <SelectTrigger className="mt-3 h-9 w-full rounded-[10px] border-slate-200 text-sm">
-            <SelectValue placeholder="ร้านค้าทั้งหมด" />
+          <SelectTrigger className="mt-3 h-10 w-full rounded-[10px] border-slate-200 text-sm">
+            <SelectValue placeholder={t("products.allShops")} />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="all">ร้านค้าทั้งหมด</SelectItem>
+            <SelectItem value="all">{t("products.allShops")}</SelectItem>
             {shops.map((s) => (
               <SelectItem key={s.id} value={s.id}>
                 {s.name}
@@ -258,15 +270,15 @@ export default function ShopProducts() {
 
       {/* Price */}
       <div>
-        <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">ช่วงราคา (฿)</p>
+        <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">{t("products.priceRange")}</p>
         <div className="mt-3 flex items-center gap-2">
           <Input
             type="number"
             min={0}
             value={minPrice}
             onChange={(e) => updateParam("min", e.target.value || null)}
-            placeholder="ต่ำสุด"
-            className="h-9 rounded-[10px] border-slate-200 text-sm"
+            placeholder={t("products.minPrice")}
+            className="h-10 rounded-[10px] border-slate-200 text-sm"
           />
           <span className="text-slate-300">–</span>
           <Input
@@ -274,8 +286,8 @@ export default function ShopProducts() {
             min={0}
             value={maxPrice}
             onChange={(e) => updateParam("max", e.target.value || null)}
-            placeholder="สูงสุด"
-            className="h-9 rounded-[10px] border-slate-200 text-sm"
+            placeholder={t("products.maxPrice")}
+            className="h-10 rounded-[10px] border-slate-200 text-sm"
           />
         </div>
       </div>
@@ -287,7 +299,7 @@ export default function ShopProducts() {
           onCheckedChange={(v) => updateParam("inStock", v ? "1" : null)}
           className="border-slate-300 data-[state=checked]:bg-[#10B981] data-[state=checked]:border-[#10B981]"
         />
-        มีสินค้าพร้อมส่งเท่านั้น
+        {t("products.inStockOnly")}
       </label>
 
       {hasFilters && (
@@ -297,14 +309,14 @@ export default function ShopProducts() {
           onClick={resetFilters}
         >
           <RotateCcw className="size-3.5" />
-          ล้างตัวกรอง
+          {t("products.clearFilters")}
         </Button>
       )}
     </div>
   );
 
   return (
-    <div className="min-h-screen bg-[#F8FAFC] text-slate-900">
+    <div className="flex min-h-screen flex-col bg-[#F8FAFC] text-slate-900">
       <ShopHeader />
 
       {/* Page header */}
@@ -312,16 +324,18 @@ export default function ShopProducts() {
         <div className="mx-auto w-full max-w-6xl px-4 py-8 sm:px-6">
           <p className="flex items-center gap-1.5 text-sm font-medium text-slate-400">
             <PackageSearch className="size-4 text-[#10B981]" />
-            ค้นหาสินค้าทั่วตลาด Velnox
+            {t("products.eyebrow")}
           </p>
-          <h1 className="mt-1 text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl">สินค้าทั้งหมด</h1>
+          <h1 className="mt-1 text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl">
+            {t("products.title")}
+          </h1>
 
           <div className="relative mt-5 w-full sm:max-w-xl">
             <Search className="absolute left-3.5 top-1/2 size-4 -translate-y-1/2 text-slate-400" />
             <Input
               value={queryInput}
               onChange={(e) => setQueryInput(e.target.value)}
-              placeholder="ค้นหาสินค้า หมวดหมู่ หรือร้านค้า..."
+              placeholder={t("products.searchPlaceholder")}
               className="h-11 rounded-[12px] border-slate-200 bg-white pl-10 pr-9"
             />
             {queryInput && (
@@ -329,7 +343,7 @@ export default function ShopProducts() {
                 type="button"
                 onClick={() => setQueryInput("")}
                 className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700"
-                aria-label="ล้างคำค้นหา"
+                aria-label={t("products.clearSearch")}
               >
                 <X className="size-4" />
               </button>
@@ -338,7 +352,7 @@ export default function ShopProducts() {
         </div>
       </section>
 
-      <main className="mx-auto w-full max-w-6xl px-4 py-8 sm:px-6">
+      <main className="mx-auto w-full max-w-6xl flex-1 px-4 py-8 sm:px-6">
         <div className="grid gap-8 lg:grid-cols-[240px_1fr]">
           {/* Sidebar (desktop) */}
           <aside className="hidden lg:block">
@@ -351,14 +365,14 @@ export default function ShopProducts() {
             <div className="flex flex-wrap items-center justify-between gap-3">
               <p className="text-sm text-slate-500">
                 {loading ? (
-                  "กำลังโหลด..."
+                  t("common.loading")
                 ) : (
                   <>
-                    พบ <span className="font-semibold text-slate-900">{data?.total ?? 0}</span> สินค้า
+                    {t("products.found", { count: data?.total ?? 0 })}
                     {q && (
                       <>
                         {" "}
-                        สำหรับ “<span className="font-medium text-slate-900">{q}</span>”
+                        {t("products.for", { q })}
                       </>
                     )}
                   </>
@@ -370,7 +384,7 @@ export default function ShopProducts() {
                   <SheetTrigger asChild>
                     <Button variant="outline" className="gap-1.5 border-slate-200 text-slate-600 lg:hidden">
                       <SlidersHorizontal className="size-4" />
-                      ตัวกรอง
+                      {t("products.filters")}
                       {hasFilters && <span className="size-1.5 rounded-full bg-[#10B981]" />}
                     </Button>
                   </SheetTrigger>
@@ -378,7 +392,7 @@ export default function ShopProducts() {
                     <SheetHeader>
                       <SheetTitle className="flex items-center gap-2 text-slate-900">
                         <Filter className="size-4 text-[#10B981]" />
-                        ตัวกรองสินค้า
+                        {t("products.filterTitle")}
                       </SheetTitle>
                     </SheetHeader>
                     <div className="mt-6">{FiltersPanel}</div>
@@ -386,11 +400,11 @@ export default function ShopProducts() {
                 </Sheet>
 
                 <Select value={sortBy} onValueChange={(val) => updateParam("sort", val)}>
-                  <SelectTrigger className="h-9 w-[180px] rounded-[10px] border-slate-200 text-sm">
+                  <SelectTrigger className="h-10 w-[180px] rounded-[10px] border-slate-200 text-sm">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    {SORT_OPTIONS.map((s) => (
+                    {sortOptions.map((s) => (
                       <SelectItem key={s.value} value={s.value}>
                         {s.label}
                       </SelectItem>
@@ -411,23 +425,23 @@ export default function ShopProducts() {
               ) : error ? (
                 <div className="flex flex-col items-center rounded-2xl border border-dashed border-slate-300 bg-white px-6 py-16 text-center">
                   <PackageSearch className="size-8 text-slate-300" />
-                  <h2 className="mt-4 text-lg font-semibold text-slate-900">โหลดสินค้าไม่สำเร็จ</h2>
-                  <p className="mt-1.5 text-sm text-slate-500">{error}</p>
+                  <h2 className="mt-4 text-lg font-semibold text-slate-900">{t("products.errorTitle")}</h2>
+                  <p className="mt-1.5 text-sm text-slate-500">{t("common.error")}</p>
                   <Button className="mt-6 bg-slate-900 text-white hover:bg-slate-800" onClick={() => void load()}>
-                    ลองอีกครั้ง
+                    {t("common.retry")}
                   </Button>
                 </div>
               ) : data && data.items.length === 0 ? (
                 <div className="flex flex-col items-center rounded-2xl border border-dashed border-slate-300 bg-white px-6 py-16 text-center">
                   <Search className="size-8 text-slate-300" />
-                  <h2 className="mt-4 text-lg font-semibold text-slate-900">ไม่พบสินค้าที่ตรงเงื่อนไข</h2>
+                  <h2 className="mt-4 text-lg font-semibold text-slate-900">{t("products.noResultsTitle")}</h2>
                   <p className="mt-1.5 max-w-sm text-sm leading-6 text-slate-500">
-                    ลองเปลี่ยนคำค้นหา ลดช่วงราคา หรือล้างตัวกรองดูนะครับ
+                    {t("products.noResultsDesc")}
                   </p>
                   {hasFilters && (
                     <Button variant="outline" className="mt-6 gap-1.5 border-slate-200 text-slate-600" onClick={resetFilters}>
                       <RotateCcw className="size-3.5" />
-                      ล้างตัวกรอง
+                      {t("products.clearFilters")}
                     </Button>
                   )}
                 </div>
@@ -445,7 +459,7 @@ export default function ShopProducts() {
                           <Link
                             to={`/shop/products/${product.id}`}
                             className="block aspect-square w-full overflow-hidden bg-slate-50"
-                            aria-label={`ดูรายละเอียด ${product.name}`}
+                            aria-label={t("product.ariaViewDetail", { name: product.name })}
                             onClick={() =>
                               track("PRODUCT_CLICK", {
                                 entityId: product.id,
@@ -484,14 +498,18 @@ export default function ShopProducts() {
                             )}
                             <p className="mt-3 text-lg font-bold tabular-nums tracking-tight text-slate-900">
                               {formatBaht(product.price)}
-                              <span className="ml-1 text-xs font-normal text-slate-400">/ {product.unit}</span>
+                              <span className="ml-1 text-xs font-normal text-slate-400">
+                                {t("cart.perUnit", { unit: product.unit })}
+                              </span>
                             </p>
                             <p
                               className={`mt-1 text-xs ${
                                 outOfStock ? "font-medium text-red-500" : "text-slate-400"
                               }`}
                             >
-                              {outOfStock ? "หมดชั่วคราว" : `เหลือ ${available} ${product.unit}`}
+                              {outOfStock
+                                ? t("product.outOfStock")
+                                : t("product.inStock", { count: available, unit: product.unit })}
                             </p>
                             <div className="mt-3 flex items-center gap-2 border-t border-slate-100 pt-3">
                               <Button
@@ -503,11 +521,11 @@ export default function ShopProducts() {
                                     { id: product.id, name: product.name, unit: product.unit, price: product.price, stock: available },
                                     1,
                                   );
-                                  toast.success(`เพิ่ม "${product.name}" ลงตะกร้าแล้ว`);
+                                  toast.success(t("cart.added", { name: product.name }));
                                 }}
                               >
                                 <Plus className="size-3.5" />
-                                ใส่ตะกร้า
+                                {t("product.addToCartSm")}
                               </Button>
                             </div>
                           </div>
@@ -523,8 +541,8 @@ export default function ShopProducts() {
                         type="button"
                         disabled={page <= 1}
                         onClick={() => updateParam("page", String(page - 1))}
-                        className="flex size-9 items-center justify-center rounded-[10px] border border-slate-200 bg-white text-slate-500 transition-colors hover:border-slate-300 hover:text-slate-900 disabled:opacity-40"
-                        aria-label="หน้าก่อนหน้า"
+                        className="flex size-10 items-center justify-center rounded-[10px] border border-slate-200 bg-white text-slate-500 transition-colors hover:border-slate-300 hover:text-slate-900 disabled:opacity-40"
+                        aria-label={t("products.prevPage")}
                       >
                         <ChevronLeft className="size-4" />
                       </button>
@@ -534,12 +552,12 @@ export default function ShopProducts() {
                           key={p}
                           type="button"
                           onClick={() => updateParam("page", String(p))}
-                          className={`flex size-9 items-center justify-center rounded-[10px] text-sm font-medium transition-colors ${
+                          className={`flex size-10 items-center justify-center rounded-[10px] text-sm font-medium transition-colors ${
                             p === page
                               ? "bg-slate-900 text-white"
                               : "border border-slate-200 bg-white text-slate-600 hover:border-slate-300 hover:text-slate-900"
                           }`}
-                          aria-label={`หน้า ${p}`}
+                          aria-label={t("products.page", { n: p })}
                         >
                           {p}
                         </button>
@@ -551,8 +569,8 @@ export default function ShopProducts() {
                         type="button"
                         disabled={page >= totalPages}
                         onClick={() => updateParam("page", String(page + 1))}
-                        className="flex size-9 items-center justify-center rounded-[10px] border border-slate-200 bg-white text-slate-500 transition-colors hover:border-slate-300 hover:text-slate-900 disabled:opacity-40"
-                        aria-label="หน้าถัดไป"
+                        className="flex size-10 items-center justify-center rounded-[10px] border border-slate-200 bg-white text-slate-500 transition-colors hover:border-slate-300 hover:text-slate-900 disabled:opacity-40"
+                        aria-label={t("products.nextPage")}
                       >
                         <ChevronRight className="size-4" />
                       </button>
@@ -564,6 +582,8 @@ export default function ShopProducts() {
           </div>
         </div>
       </main>
+
+      <ShopFooter />
     </div>
   );
 }

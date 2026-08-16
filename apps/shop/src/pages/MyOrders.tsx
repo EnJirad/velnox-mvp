@@ -1,4 +1,6 @@
+import { ShopFooter } from "@/components/shop/ShopFooter";
 import { ShopHeader } from "@/components/shop/ShopHeader";
+import { useLanguage } from "@/lib/i18n";
 import { Badge } from "@velnox/shared/components/ui/badge";
 import { Button } from "@velnox/shared/components/ui/button";
 import { api } from "@convex/_generated/api";
@@ -30,6 +32,7 @@ interface Loaded {
 }
 
 export default function MyOrders() {
+  const { t } = useLanguage();
   const myOrdersAction = useAction(api.commerce.myOrders);
   const mySubscriptionsAction = useAction(api.commerce.mySubscriptions);
   const pauseSubscription = useAction(api.commerce.pauseSubscription);
@@ -64,11 +67,11 @@ export default function MyOrders() {
     setCancellingId(subscriptionId);
     try {
       await pauseSubscription({ subscriptionId, status: "cancelled" });
-      toast.success("ยกเลิกการสั่งรายเดือนแล้ว");
+      toast.success(t("orders.cancelSuccess"));
       await load();
     } catch (error) {
       console.error("Cancel subscription error:", error);
-      toast.error("ยกเลิกไม่สำเร็จ กรุณาลองอีกครั้ง");
+      toast.error(t("orders.cancelFailed"));
     } finally {
       setCancellingId(null);
     }
@@ -90,14 +93,12 @@ export default function MyOrders() {
         <div>
           <p className="flex items-center gap-1.5 text-sm font-medium text-slate-400">
             <ShoppingBag className="size-4 text-[#10B981]" />
-            velshop · ออเดอร์ของฉัน
+            {t("orders.eyebrow")}
           </p>
           <h1 className="mt-1 text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl">
-            ออเดอร์ของฉัน
+            {t("orders.title")}
           </h1>
-          <p className="mt-1.5 text-sm text-slate-500">
-            ติดตามสถานะออเดอร์และการสั่งรายเดือนของคุณ
-          </p>
+          <p className="mt-1.5 text-sm text-slate-500">{t("orders.desc")}</p>
         </div>
 
         {/* Monthly subscriptions */}
@@ -106,7 +107,7 @@ export default function MyOrders() {
             <span className="flex size-8 items-center justify-center rounded-[10px] bg-[#ECFDF5]">
               <CalendarClock className="size-4 text-[#10B981]" />
             </span>
-            <h2 className="text-base font-semibold text-slate-900">การสั่งรายเดือนของฉัน</h2>
+            <h2 className="text-base font-semibold text-slate-900">{t("orders.monthlyTitle")}</h2>
           </div>
 
           {loading ? (
@@ -116,9 +117,7 @@ export default function MyOrders() {
           ) : subscriptions.length === 0 ? (
             <div className="mt-3 flex items-center gap-3 rounded-xl border border-slate-200 bg-white p-5">
               <CalendarClock className="size-5 text-slate-300" />
-              <p className="text-sm text-slate-500">
-                ยังไม่มีการสั่งรายเดือน — กด "สั่งรายเดือน" บนการ์ดสินค้าเพื่อให้ระบบสั่งให้คุณทุกเดือน
-              </p>
+              <p className="text-sm text-slate-500">{t("orders.monthlyEmpty")}</p>
             </div>
           ) : (
             <div className="mt-3 space-y-3">
@@ -142,12 +141,15 @@ export default function MyOrders() {
                     )}
                     <div>
                       <p className="text-sm font-semibold text-slate-900">
-                        {sub.productName ?? "สินค้าถูกลบ"}{" "}
+                        {sub.productName ?? t("orders.productDeleted")}{" "}
                         <span className="font-normal text-slate-400">× {sub.quantity}</span>
                       </p>
                       <p className="mt-1 text-xs text-slate-400">
-                        ทุก {sub.intervalDays} วัน · รอบถัดไป {formatIsoDate(sub.nextOrderDate)}{" "}
-                        ({daysLeft(sub.nextOrderDate)} วัน)
+                        {t("orders.every", {
+                          days: sub.intervalDays,
+                          date: formatIsoDate(sub.nextOrderDate),
+                          left: daysLeft(sub.nextOrderDate),
+                        })}
                       </p>
                     </div>
                   </div>
@@ -164,7 +166,7 @@ export default function MyOrders() {
                           sub.status === "active" ? "bg-emerald-500" : "bg-slate-400"
                         }`}
                       />
-                      {sub.status === "active" ? "ใช้งานอยู่" : "ยกเลิกแล้ว"}
+                      {sub.status === "active" ? t("orders.active") : t("orders.cancelled")}
                     </Badge>
                     {sub.status === "active" && (
                       <Button
@@ -179,7 +181,7 @@ export default function MyOrders() {
                         ) : (
                           <XCircle className="size-3.5" />
                         )}
-                        ยกเลิก
+                        {t("orders.cancel")}
                       </Button>
                     )}
                   </div>
@@ -191,7 +193,7 @@ export default function MyOrders() {
 
         {/* Order history */}
         <section className="mt-8">
-          <h2 className="text-base font-semibold text-slate-900">ประวัติออเดอร์</h2>
+          <h2 className="text-base font-semibold text-slate-900">{t("orders.historyTitle")}</h2>
 
           {loading ? (
             <div className="mt-8 space-y-4">
@@ -204,14 +206,12 @@ export default function MyOrders() {
               <span className="flex size-14 items-center justify-center rounded-2xl bg-[#ECFDF5]">
                 <PackageSearch className="size-7 text-[#10B981]" />
               </span>
-              <h2 className="mt-5 text-lg font-semibold text-slate-900">ยังไม่มีออเดอร์</h2>
-              <p className="mt-1.5 max-w-sm text-sm leading-6 text-slate-500">
-                เมื่อคุณสั่งซื้อสินค้า ออเดอร์จะปรากฏที่นี่พร้อมสถานะ
-              </p>
+              <h2 className="mt-5 text-lg font-semibold text-slate-900">{t("orders.emptyTitle")}</h2>
+              <p className="mt-1.5 max-w-sm text-sm leading-6 text-slate-500">{t("orders.emptyDesc")}</p>
               <Button className="mt-6 gap-1.5 bg-slate-900 text-white hover:bg-slate-800" asChild>
                 <Link to="/shop">
                   <ShoppingBag className="size-4" />
-                  ไปเลือกสินค้า
+                  {t("orders.goShopping")}
                 </Link>
               </Button>
             </div>
@@ -229,10 +229,13 @@ export default function MyOrders() {
                     <div className="flex flex-wrap items-center justify-between gap-3">
                       <div>
                         <p className="text-sm font-semibold text-slate-900">
-                          ออเดอร์ {shortOrderNumber(order.orderNumber)}
+                          {t("orders.orderNo", { no: shortOrderNumber(order.orderNumber) })}
                         </p>
                         <p className="mt-0.5 text-xs text-slate-400">
-                          {formatIsoDateTime(order.createdAt)} · {order.itemCount ?? items.reduce((s, i) => s + i.quantity, 0)} ชิ้น
+                          {formatIsoDateTime(order.createdAt)} ·{" "}
+                          {t("orders.pieces", {
+                            count: order.itemCount ?? items.reduce((s, i) => s + i.quantity, 0),
+                          })}
                         </p>
                       </div>
                       <Badge className={`gap-1.5 rounded-full ring-1 ring-inset ${meta.badge}`}>
@@ -261,11 +264,11 @@ export default function MyOrders() {
                     </div>
 
                     <div className="mt-4 flex items-center justify-between border-t border-slate-100 pt-4">
-                      <span className="text-sm text-slate-500">รวมทั้งสิ้น</span>
+                      <span className="text-sm text-slate-500">{t("orders.total")}</span>
                       <span className="text-lg font-bold tabular-nums tracking-tight text-slate-900">
                         {formatBaht(order.total)}
                       </span>
-                      <span className="text-xs font-medium text-[#10B981]">ดูรายละเอียด →</span>
+                      <span className="text-xs font-medium text-[#10B981]">{t("orders.viewDetail")}</span>
                     </div>
                   </Link>
                 );
@@ -274,6 +277,8 @@ export default function MyOrders() {
           )}
         </section>
       </main>
+
+      <ShopFooter />
     </div>
   );
 }

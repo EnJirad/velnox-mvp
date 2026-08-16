@@ -1,4 +1,6 @@
+import { ShopFooter } from "@/components/shop/ShopFooter";
 import { ShopHeader } from "@/components/shop/ShopHeader";
+import { useLanguage } from "@/lib/i18n";
 import { Button } from "@velnox/shared/components/ui/button";
 import { Skeleton } from "@velnox/shared/components/ui/skeleton";
 import { api } from "@convex/_generated/api";
@@ -17,6 +19,7 @@ interface WishlistItemRow {
 }
 
 export default function ShopWishlist() {
+  const { t } = useLanguage();
   const myWishlist = useAction(api.customer.myWishlist);
   const toggleWishlist = useAction(api.customer.toggleWishlistAction);
   const listProducts = useAction(api.commerce.listProducts);
@@ -57,10 +60,10 @@ export default function ShopWishlist() {
     try {
       await toggleWishlist({ productId });
       setItems((prev) => prev?.filter((i) => i.productId !== productId) ?? null);
-      toast.success("นำออกจากรายการโปรดแล้ว");
+      toast.success(t("wishlist.removed"));
     } catch (err) {
       console.error("Wishlist remove error:", err);
-      toast.error("ไม่สำเร็จ กรุณาลองอีกครั้ง");
+      toast.error(t("wishlist.failed"));
     } finally {
       setBusyId(null);
     }
@@ -71,7 +74,7 @@ export default function ShopWishlist() {
       { id: product.id, name: product.name, unit: product.unit, price: product.price, stock: product.inventory?.available ?? product.inventory?.quantity ?? 0 },
       1,
     );
-    toast.success(`เพิ่ม "${product.name}" ลงตะกร้าแล้ว`);
+    toast.success(t("wishlist.added", { name: product.name }));
   };
 
   return (
@@ -82,10 +85,10 @@ export default function ShopWishlist() {
         <div>
           <p className="flex items-center gap-1.5 text-sm font-medium text-slate-400">
             <Heart className="size-4 text-[#10B981]" />
-            velshop · รายการโปรด
+            {t("wishlist.eyebrow")}
           </p>
-          <h1 className="mt-1 text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl">รายการโปรดของฉัน</h1>
-          <p className="mt-1.5 text-sm text-slate-500">สินค้าที่คุณกดหัวใจไว้ — พร้อมสั่งได้ทันที</p>
+          <h1 className="mt-1 text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl">{t("wishlist.title")}</h1>
+          <p className="mt-1.5 text-sm text-slate-500">{t("wishlist.desc")}</p>
         </div>
 
         {items === null ? (
@@ -99,14 +102,12 @@ export default function ShopWishlist() {
             <span className="flex size-14 items-center justify-center rounded-2xl bg-slate-100">
               <Heart className="size-7 text-slate-400" />
             </span>
-            <h2 className="mt-5 text-lg font-semibold text-slate-900">ยังไม่มีรายการโปรด</h2>
-            <p className="mt-1.5 max-w-sm text-sm leading-6 text-slate-500">
-              กดหัวใจที่สินค้าที่ชอบ ระบบจะเก็บไว้ที่นี่ให้คุณ
-            </p>
+            <h2 className="mt-5 text-lg font-semibold text-slate-900">{t("wishlist.emptyTitle")}</h2>
+            <p className="mt-1.5 max-w-sm text-sm leading-6 text-slate-500">{t("wishlist.emptyDesc")}</p>
             <Button className="mt-6 gap-1.5 bg-slate-900 text-white hover:bg-slate-800" asChild>
               <Link to="/shop">
                 <ShoppingBag className="size-4" />
-                ไปเลือกสินค้า
+                {t("wishlist.goShopping")}
               </Link>
             </Button>
           </div>
@@ -135,11 +136,11 @@ export default function ShopWishlist() {
                   <Link to={`/shop/products/${product!.id}`} className="line-clamp-2 text-sm font-semibold leading-5 text-slate-900 hover:text-[#10B981]">
                     {product!.name}
                   </Link>
-                  <p className="mt-1 text-xs text-slate-400">{product!.shopName ?? "ร้านค้า Velnox"}</p>
+                  <p className="mt-1 text-xs text-slate-400">{product!.shopName ?? t("wishlist.defaultShop")}</p>
                   <div className="mt-3 flex items-end justify-between gap-2 border-t border-slate-100 pt-3">
                     <p className="text-base font-bold tabular-nums tracking-tight text-slate-900">
                       {formatBaht(product!.price)}
-                      <span className="ml-1 text-[11px] font-normal text-slate-400">/ {product!.unit}</span>
+                      <span className="ml-1 text-[11px] font-normal text-slate-400">{t("cart.perUnit", { unit: product!.unit })}</span>
                     </p>
                     <div className="flex items-center gap-1.5">
                       <Button
@@ -148,7 +149,7 @@ export default function ShopWishlist() {
                         className="size-8 border-slate-200 text-slate-400 hover:border-rose-200 hover:bg-rose-50 hover:text-rose-500"
                         onClick={() => void handleRemove(product!.id)}
                         disabled={busyId === product!.id}
-                        aria-label={`ลบ ${product!.name} ออกจากรายการโปรด`}
+                        aria-label={t("wishlist.ariaRemove", { name: product!.name })}
                       >
                         {busyId === product!.id ? <Loader2 className="size-3.5 animate-spin" /> : <Trash2 className="size-3.5" />}
                       </Button>
@@ -157,7 +158,7 @@ export default function ShopWishlist() {
                         className="size-8 bg-slate-900 text-white hover:bg-slate-800"
                         disabled={(product!.inventory?.available ?? product!.inventory?.quantity ?? 0) <= 0}
                         onClick={() => handleAdd(product!)}
-                        aria-label={`เพิ่ม ${product!.name} ลงตะกร้า`}
+                        aria-label={t("wishlist.ariaAdd", { name: product!.name })}
                       >
                         <Plus className="size-4" />
                       </Button>
@@ -169,6 +170,8 @@ export default function ShopWishlist() {
           </div>
         )}
       </main>
+
+      <ShopFooter />
     </div>
   );
 }

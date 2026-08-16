@@ -1,5 +1,6 @@
 import { Link, useLocation } from "react-router";
 import { cn } from "@velnox/shared/lib/utils";
+import { useLanguage } from "@velnox/shared/lib/i18n";
 import type { LucideIcon } from "lucide-react";
 
 export interface MobileTabItem {
@@ -26,6 +27,7 @@ export interface MobileTabItem {
  *   velcenter  → rendered inside Center.tsx so it respects role permissions
  */
 export function MobileTabBar({ items }: { items: MobileTabItem[] }) {
+  const { t } = useLanguage();
   const { pathname, search } = useLocation();
 
   // The auth flow is a full-screen sheet — hide the tab bar there.
@@ -33,7 +35,7 @@ export function MobileTabBar({ items }: { items: MobileTabItem[] }) {
 
   return (
     <nav
-      aria-label="เมนูหลักบนมือถือ"
+      aria-label={t("nav.ariaMobile")}
       className="fixed inset-x-0 bottom-0 z-50 border-t border-slate-200 bg-white/95 backdrop-blur md:hidden"
       style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
     >

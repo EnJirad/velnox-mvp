@@ -1,4 +1,6 @@
+import { ShopFooter } from "@/components/shop/ShopFooter";
 import { ShopHeader } from "@/components/shop/ShopHeader";
+import { useLanguage } from "@/lib/i18n";
 import { Button } from "@velnox/shared/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@velnox/shared/components/ui/card";
 import { useAuth } from "@velnox/shared/hooks/use-auth";
@@ -15,19 +17,20 @@ import {
 import { Link } from "react-router";
 import { toast } from "sonner";
 
-const SECTIONS: Array<{ to: string; label: string; desc: string; icon: LucideIcon }> = [
-  { to: "/shop/addresses", label: "ที่อยู่ของฉัน", desc: "จัดการที่อยู่ + พิกัด GPS สำหรับจัดส่ง", icon: MapPin },
-  { to: "/shop/orders", label: "ออเดอร์ของฉัน", desc: "ติดตามออเดอร์และพัสดุ", icon: Package },
-  { to: "/shop/wishlist", label: "รายการโปรด", desc: "สินค้าที่คุณกดหัวใจไว้", icon: Heart },
-  { to: "/shop/notifications", label: "การแจ้งเตือน", desc: "สถานะออเดอร์และโปรโมชัน", icon: Bell },
+const SECTION_KEYS: Array<{ to: string; labelKey: string; descKey: string; icon: LucideIcon }> = [
+  { to: "/shop/addresses", labelKey: "profile.addresses", descKey: "profile.addressesDesc", icon: MapPin },
+  { to: "/shop/orders", labelKey: "profile.orders", descKey: "profile.ordersDesc", icon: Package },
+  { to: "/shop/wishlist", labelKey: "profile.wishlist", descKey: "profile.wishlistDesc", icon: Heart },
+  { to: "/shop/notifications", labelKey: "profile.notifications", descKey: "profile.notificationsDesc", icon: Bell },
 ];
 
 export default function ShopProfile() {
+  const { t } = useLanguage();
   const { user, isLoading, isAuthenticated, signOut } = useAuth();
 
   const handleSignOut = async () => {
     await signOut();
-    toast.success("ออกจากระบบแล้ว");
+    toast.success(t("profile.signedOut"));
   };
 
   return (
@@ -38,9 +41,9 @@ export default function ShopProfile() {
         <div>
           <p className="flex items-center gap-1.5 text-sm font-medium text-slate-400">
             <User className="size-4 text-[#10B981]" />
-            velshop · โปรไฟล์ของฉัน
+            {t("profile.eyebrow")}
           </p>
-          <h1 className="mt-1 text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl">โปรไฟล์</h1>
+          <h1 className="mt-1 text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl">{t("profile.title")}</h1>
         </div>
 
         {isLoading ? (
@@ -53,7 +56,7 @@ export default function ShopProfile() {
                   {(user.name ?? user.email ?? "?").slice(0, 1).toUpperCase()}
                 </span>
                 <div className="min-w-0">
-                  <p className="truncate text-lg font-bold text-slate-900">{user.name ?? "สมาชิก Velnox"}</p>
+                  <p className="truncate text-lg font-bold text-slate-900">{user.name ?? t("profile.member")}</p>
                   <p className="truncate text-sm text-slate-500">{user.email ?? ""}</p>
                 </div>
                 <Button
@@ -63,13 +66,13 @@ export default function ShopProfile() {
                   onClick={() => void handleSignOut()}
                 >
                   <LogOut className="size-3.5" />
-                  ออกจากระบบ
+                  {t("profile.signOut")}
                 </Button>
               </CardContent>
             </Card>
 
             <div className="mt-6 grid gap-3 sm:grid-cols-2">
-              {SECTIONS.map((s) => {
+              {SECTION_KEYS.map((s) => {
                 const Icon = s.icon;
                 return (
                   <Link key={s.to} to={s.to} className="group">
@@ -79,8 +82,8 @@ export default function ShopProfile() {
                           <Icon className="size-4" />
                         </span>
                         <div>
-                          <CardTitle className="text-sm font-semibold text-slate-900">{s.label}</CardTitle>
-                          <p className="mt-0.5 text-xs text-slate-400">{s.desc}</p>
+                          <CardTitle className="text-sm font-semibold text-slate-900">{t(s.labelKey)}</CardTitle>
+                          <p className="mt-0.5 text-xs text-slate-400">{t(s.descKey)}</p>
                         </div>
                       </CardHeader>
                     </Card>
@@ -92,13 +95,15 @@ export default function ShopProfile() {
         ) : (
           <div className="mt-8 flex flex-col items-center rounded-2xl border border-dashed border-slate-300 bg-white px-6 py-16 text-center">
             <ShoppingBag className="size-8 text-slate-300" />
-            <p className="mt-3 text-sm text-slate-500">กรุณาเข้าสู่ระบบเพื่อดูโปรไฟล์ของคุณ</p>
+            <p className="mt-3 text-sm text-slate-500">{t("profile.notSignedIn")}</p>
             <Button className="mt-5 bg-slate-900 text-white hover:bg-slate-800" asChild>
-              <Link to="/auth?returnTo=/shop/profile">เข้าสู่ระบบ</Link>
+              <Link to="/auth?returnTo=/shop/profile">{t("profile.signIn")}</Link>
             </Button>
           </div>
         )}
       </main>
+
+      <ShopFooter />
     </div>
   );
 }
