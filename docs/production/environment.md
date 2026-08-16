@@ -11,7 +11,8 @@ Version: 1.0 · Phase 9 — รายละเอียดเต็ม: [`../ENV
 | `JWT_PRIVATE_KEY` | Convex Auth signing | ✅ |
 | `JWKS` | Convex Auth public keys | ✅ |
 | `CLOUDINARY_CLOUD_NAME` / `_API_KEY` / `_API_SECRET` | product image storage | ✅ |
-| `FREEBUFF_EMAIL_API_KEY` | OTP sign-in email (velshop) — server-only key | ✅ |
+| `FREEBUFF_EMAIL_API_KEY` | OTP sign-in email (velshop) — ตั้งค่าเป็น **Resend API key** (`re_...`) — server-only | ✅ |
+| `EMAIL_FROM` | sender ของ OTP email เช่น `Velnox <no-reply@velnox.com>` (domain ต้อง verify กับ Resend; ไม่ตั้ง = fallback เป็น sandbox sender) | เปิด production เท่านั้น |
 | `STRIPE_SECRET_KEY` | ชำระเงินออนไลน์ (วิธี "online" — บัตร/PromptPay, hosted Checkout) — ถ้าไม่มี วิธีนี้ถูกซ่อน + fallback manual | เปิดฟีเจอร์เท่านั้น |
 | `STRIPE_WEBHOOK_SECRET` | verify signature webhook `/stripe/webhook` (Stripe Dashboard ต้องตั้ง endpoint ชี้ `<convex-url>/stripe/webhook`) | เปิดฟีเจอร์เท่านั้น |
 | `BOOTSTRAP_OWNER_SECRET` | รหัสเปิดใช้งานเจ้าของบริษัทครั้งเดียว (velcenter) — ≥16 ตัวอักษร, ใช้แล้วปิดถาวร (มี owner แล้วใช้ซ้ำไม่ได้) | ตั้งก่อนเปิด velcenter ครั้งแรก |
