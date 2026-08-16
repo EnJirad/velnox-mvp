@@ -87,7 +87,7 @@ export const th = {
     viewDetail: "ดูรายละเอียด",
     soldBy: "ร้านค้า",
     images: "{count} รูป",
-    reorderMonthly: "สั่งรายเดือนทุก X วัน",
+    reorderMonthly: "สั่งรายเดือน (VelRepeat)",
     orderAgain: "ซื้ออีกครั้ง",
     buyAgain: "สั่งซื้ออีกครั้ง",
     interestToast: "บันทึกความสนใจ “{name}” แล้ว 💚",
