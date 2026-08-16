@@ -47,6 +47,18 @@ const RATE_LIMITED_MESSAGE = "ส่งรหัสยืนยันบ่อ�
 const RESEND_API_URL = "https://api.resend.com/emails";
 
 /**
+ * Mask an email for logs: e***@gmail.com. The recipient is the ONLY
+ * personally-identifying field we ever log — never the OTP, never the API
+ * key, never the Authorization header.
+ */
+function maskEmail(email: string): string {
+  const [local, domain] = email.trim().toLowerCase().split("@");
+  if (!domain) return `${local.slice(0, 1)}***`;
+  const head = local.slice(0, Math.min(1, local.length));
+  return `${head}***@${domain}`;
+}
+
+/**
  * Production-grade branded OTP email (inline styles for mail-client
  * compatibility). No database / internal-architecture details are exposed.
  */
@@ -138,8 +150,8 @@ export const emailOtp = Email({
       windowMs: OTP_EMAIL_WINDOW_MS,
     });
     if (rateLimit && !rateLimit.allowed) {
-      // Expected abuse signal — log the address (never the code), generic error.
-      console.error(`[auth] OTP email rate limit exceeded for ${email}`);
+      // Expected abuse signal — log the masked address (never the code).
+      console.error(`[EMAIL OTP] Request rate limit exceeded for ${maskEmail(email)}`);
       throw new Error(RATE_LIMITED_MESSAGE);
     }
 
@@ -178,17 +190,51 @@ export const emailOtp = Email({
       });
 
       if (!res.ok) {
-        // Body may contain a Resend request id — log it server-side only.
-        const detail = (await res.text().catch(() => "")).slice(0, 500);
-        console.error(`[auth] Resend OTP email failed (${res.status}):`, detail);
+        // ---- Diagnostic block: capture the REAL Resend failure ------------
+        // Parse the safe Resend error fields (name/message/statusCode). Never
+        // log the API key, the OTP, the Authorization header or the raw body
+        // (it can echo request data). Recipient is masked.
+        let errorMessage = "";
+        let errorCode = "";
+        try {
+          const parsed = (await res.json()) as {
+            name?: string;
+            message?: string;
+            statusCode?: number;
+          };
+          errorCode = parsed.name ?? "";
+          errorMessage = parsed.message ?? "";
+        } catch {
+          const text = (await res.text().catch(() => "")).slice(0, 300);
+          if (text) errorMessage = text;
+        }
+        console.error(
+          `[EMAIL OTP] Resend request failed\n` +
+            `status: ${res.status}\n` +
+            `error: ${errorMessage || "(no error message)"}\n` +
+            (errorCode ? `code: ${errorCode}\n` : "") +
+            `recipient: ${maskEmail(email)}`,
+        );
         throw new Error(SEND_FAILED_MESSAGE);
+      }
+      // Success — log the delivery acceptance (Resend email id is safe) with
+      // a masked recipient so a login test can be traced end-to-end.
+      try {
+        const accepted = (await res.json()) as { id?: string };
+        console.info(
+          `[EMAIL OTP] Resend accepted email (id: ${accepted.id ?? "unknown"}) recipient: ${maskEmail(email)}`,
+        );
+      } catch {
+        // body may be empty on success — not an error
       }
     } catch (error) {
       if (error instanceof Error && error.message === SEND_FAILED_MESSAGE) {
         throw error;
       }
       // Network / transport failure — technical detail stays server-side.
-      console.error("[auth] Resend OTP email transport error:", error);
+      console.error(
+        `[EMAIL OTP] Resend transport error: ${error instanceof Error ? error.message : "unknown"} recipient: ${maskEmail(email)}`,
+      );
       throw new Error(SEND_FAILED_MESSAGE);
     }
   },
