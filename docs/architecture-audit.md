@@ -30,7 +30,7 @@
    `customerEvents` (product views, searches, cart actions, purchases…) lived only in the Convex
    realtime store — if Convex were lost, the intelligence history was lost.
    **Fixed:** Neon `behavioral_events` (append-only, deduped on `(source, source_event_id)`) +
-   `event_flush_cursor` + `convex/behavioralEvents.ts` cron flush (15 min, idempotent). The full
+   `event_flush_cursor` + `convex/memory.ts` (`flushToNeon`) cron flush (15 min, idempotent). The full
    event history is now durable and the Convex intelligence layer is rebuildable from it.
 
 2. **Stale doc reference:** `docs/production/deploy-runbook.md` still told operators to set
@@ -71,7 +71,7 @@
 
 | # | Item | Status |
 |---|---|---|
-| 1 | Durable behavioral event store (Neon) + cron flush | ✅ done (migration 011, `backend/events.ts`, `convex/behavioralEvents.ts`, `convex/crons.ts`) |
+| 1 | Durable behavioral event store (Neon) + cron flush | ✅ done (migration 011, `backend/events.ts`, `convex/memory.ts` `flushToNeon`, `convex/crons.ts`) |
 | 2 | Rebuild-from-events drill (Convex memory from `behavioral_events`) | 📋 documented in `disaster-recovery.md`; needs an operator-run drill before launch |
 | 3 | VelRepeat prediction (next-purchase-date from durable events) | 📋 foundation in place (`backend/subscriptions.ts` cycle learning); prediction endpoint is next |
 | 4 | Full payment-provider integration (provider abstraction exists; wire real PSP) | 📋 pending credentials |

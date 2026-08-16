@@ -50,7 +50,7 @@ Browser action → customerEvents (Convex, realtime)
 ```
 
 Implemented in: `db/migrations/011_behavioral_events.sql`, `backend/events.ts`,
-`convex/behavioralEvents.ts`, `convex/crons.ts`. See [`realtime.md`](./realtime.md).
+`convex/memory.ts` (`flushToNeon`), `convex/crons.ts`. See [`realtime.md`](./realtime.md).
 
 ## 4. Disaster-recovery implication
 

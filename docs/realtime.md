@@ -60,7 +60,7 @@ Browser (fire-and-forget, rate-limited 300/min/user)
   both), rate-limits, inserts into `customerEvents`. Tracking must never throw into the UI.
 - `memory.ts` (node action): reads the customer's own events (scoped — “ของใคร ของมัน”),
   computes interest/intent via the pure `customer-memory-core` (weights, half-lives, decay).
-- `behavioralEvents.flushToNeon` (cron): scans `customerEvents` since the Neon cursor (with a
+- `memory.flushToNeon` (cron): scans `customerEvents` since the Neon cursor (with a
   60 s overlap), inserts into `behavioral_events` with `ON CONFLICT DO NOTHING`, advances the
   cursor monotonically. Idempotent + best-effort: a Neon outage delays, never breaks, tracking.
 

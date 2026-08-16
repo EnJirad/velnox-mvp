@@ -30,6 +30,11 @@ import type { ActionCtx } from "./_generated/server";
 import type { Id } from "./_generated/dataModel";
 import { api } from "./_generated/api";
 import { getDb } from "../backend/db";
+import {
+  getFlushCursor,
+  insertBehavioralEvents,
+  setFlushCursor,
+} from "../backend/events";
 import { getProduct, listProducts } from "../backend/products";
 import { getShopById } from "../backend/sellers";
 import { listOrdersForCustomer } from "../backend/orders";
@@ -562,5 +567,65 @@ export const marketInsights = action({
       eventCount,
       windowDays: 30,
     };
+  },
+});
+
+// ---------------------------------------------------------------------------
+// Durable event flush (architecture §11, §64)
+// ---------------------------------------------------------------------------
+/**
+ * Durable behavioral event flush — the persistence half of the pipeline:
+ *
+ *   Browser action → customerEvents (Convex, realtime)
+ *                 → flushToNeon (cron, node action) → behavioral_events (Neon)
+ *
+ * Convex `customerEvents` is the fast realtime store; Neon `behavioral_events`
+ * is the durable, append-only copy so the intelligence history survives a
+ * Convex outage and can be rebuilt (`docs/disaster-recovery.md` §Convex).
+ *
+ * Design:
+ *  - Idempotent: Neon upserts dedupe on (source, source_event_id).
+ *  - Cursor: `event_flush_cursor.last_event_at` (Neon) tracks progress; each
+ *    run rescans the last 60s for overlap safety.
+ *  - Best-effort: a Neon outage never breaks the realtime layer — the cron
+ *    retries next run from the same cursor.
+ *  - Scheduled from `convex/crons.ts`.
+ */
+const OVERLAP_MS = 60_000;
+const BATCH_LIMIT = 2000;
+
+export const flushToNeon = action({
+  args: {},
+  handler: async (ctx: ActionCtx) => {
+    const db = getDb();
+    const cursor = await getFlushCursor(db);
+
+    const rows = (await ctx.runQuery(api.memoryEvents._recentEventsSince, {
+      since: Math.max(0, cursor - OVERLAP_MS),
+      limit: BATCH_LIMIT,
+    })) as unknown as EventRow[];
+    if (rows.length === 0) return { scanned: 0, inserted: 0, cursor };
+
+    const events = rows.map((r) => ({
+      sourceEventId: r._id,
+      userId: r.userId ?? null,
+      anonymousId: r.anonymousId ?? null,
+      type: r.type,
+      entityId: r.entityId ?? null,
+      value: r.value ?? null,
+      context:
+        r.context && typeof r.context === "object"
+          ? (r.context as Record<string, unknown>)
+          : null,
+      occurredAt: r.createdAt,
+    }));
+
+    const inserted = await insertBehavioralEvents(db, events);
+
+    // advance only to the newest event actually seen (monotonic in Neon)
+    const lastEventAt = rows.reduce((max, r) => Math.max(max, r.createdAt), cursor);
+    await setFlushCursor(db, lastEventAt);
+
+    return { scanned: rows.length, inserted, cursor: lastEventAt };
   },
 });

@@ -1,3 +1,13 @@
+/**
+ * @deprecated LEGACY Convex-table order module (V3 migration).
+ *
+ * Orders are authoritative in Neon (`backend/orders.ts`, `backend/checkout.ts`).
+ * No frontend references this module (verified 2026-08-16) — the storefront
+ * reads orders via `convex/customer.ts` / `convex/commerce.ts` node actions
+ * (`myOrders`, `orderDetail`, `sellerOrders`). Kept only because removing the
+ * table rows from schema.ts would require a Convex data migration; safe to
+ * delete after `convex/_generated` is regenerated without these functions.
+ */
 import { v } from "convex/values";
 import { mutation, query, QueryCtx } from "./_generated/server";
 import { Doc, Id } from "./_generated/dataModel";

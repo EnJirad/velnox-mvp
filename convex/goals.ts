@@ -1,3 +1,12 @@
+/**
+ * @deprecated LEGACY Convex-table goals module (V3 migration).
+ *
+ * Still referenced by apps/seller/src/pages/SellerGoals.tsx only. Goals are
+ * planning data (targets/KPIs) with no Neon equivalent yet — migrate to a
+ * Neon table (e.g. `goals` under platform/owner scope) before removal, or
+ * accept them as Convex-owned derived/planning state (see
+ * docs/data-ownership.md and docs/neon-migration-report.md §3).
+ */
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
 import { getCurrentUser } from "./users";
