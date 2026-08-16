@@ -27,7 +27,7 @@ export function ShopHeader() {
   const submitSearch = (e: React.FormEvent) => {
     e.preventDefault();
     const q = query.trim();
-    navigate(q ? `/shop/products?q=${encodeURIComponent(q)}` : "/shop/products");
+    navigate(q ? `/products?q=${encodeURIComponent(q)}` : "/products");
   };
 
   const navItem = (to: string, label: string, exact = false) => {
@@ -50,17 +50,17 @@ export function ShopHeader() {
     <header className="sticky top-0 z-40 border-b border-slate-200 bg-white/90 backdrop-blur">
       <div className="mx-auto flex h-16 w-full max-w-6xl items-center gap-2 px-4 sm:px-6">
         {/* Brand */}
-        <Link to="/shop" aria-label={t("header.ariaHome", { name: "VelShop" })} className="shrink-0">
+        <Link to="/" aria-label={t("header.ariaHome", { name: "VelShop" })} className="shrink-0">
           <Logo />
         </Link>
 
         {/* Desktop navigation */}
         <nav className="ml-3 hidden items-center gap-1 md:flex" aria-label={t("nav.home")}>
-          {navItem("/shop", t("nav.home"), true)}
-          {navItem("/shop/products", t("nav.products"))}
-          {navItem("/shop/categories", t("nav.categories"))}
-          {isAuthenticated && navItem("/shop/orders", t("nav.orders"))}
-          {isAuthenticated && navItem("/shop/wishlist", t("nav.wishlist"))}
+          {navItem("/", t("nav.home"), true)}
+          {navItem("/products", t("nav.products"))}
+          {navItem("/categories", t("nav.categories"))}
+          {isAuthenticated && navItem("/orders", t("nav.orders"))}
+          {isAuthenticated && navItem("/wishlist", t("nav.wishlist"))}
         </nav>
 
         {/* Search (desktop) */}
@@ -85,7 +85,7 @@ export function ShopHeader() {
             variant="ghost"
             size="icon"
             className="size-10 cursor-pointer rounded-[10px] text-slate-600 hover:bg-slate-100 lg:hidden"
-            onClick={() => navigate("/shop/products")}
+            onClick={() => navigate("/products")}
             aria-label={t("header.ariaSearch")}
           >
             <Search className="size-5" />
@@ -93,7 +93,7 @@ export function ShopHeader() {
 
           {isAuthenticated && (
             <Link
-              to="/shop/velrepeat"
+              to="/velrepeat"
               className="hidden size-10 items-center justify-center rounded-[10px] text-slate-600 transition-colors hover:bg-slate-100 sm:flex"
               aria-label={t("header.ariaVelrepeat")}
             >
@@ -102,7 +102,7 @@ export function ShopHeader() {
           )}
           {isAuthenticated && (
             <Link
-              to="/shop/notifications"
+              to="/notifications"
               className="hidden size-10 items-center justify-center rounded-[10px] text-slate-600 transition-colors hover:bg-slate-100 sm:flex"
               aria-label={t("header.ariaNotifications")}
             >
@@ -110,7 +110,14 @@ export function ShopHeader() {
             </Link>
           )}
 
-          <LanguageSwitcher variant="mobile" />
+          {/* Desktop language selector shows the full label; mobile uses a
+              compact icon-only trigger. One instance per breakpoint. */}
+          <div className="hidden md:block">
+            <LanguageSwitcher variant="desktop" />
+          </div>
+          <div className="md:hidden">
+            <LanguageSwitcher variant="mobile" />
+          </div>
 
           <Button
             variant="ghost"
@@ -129,7 +136,7 @@ export function ShopHeader() {
 
           {isLoading ? null : isAuthenticated ? (
             <Link
-              to="/shop/profile"
+              to="/profile"
               className="flex size-10 items-center justify-center rounded-[10px] text-slate-600 transition-colors hover:bg-slate-100"
               aria-label={t("header.ariaProfile")}
             >
@@ -141,7 +148,7 @@ export function ShopHeader() {
               className="h-10 border-slate-200 text-slate-700"
               asChild
             >
-              <Link to="/auth?returnTo=/shop">{t("header.login")}</Link>
+              <Link to="/auth?returnTo=/">{t("header.login")}</Link>
             </Button>
           )}
         </div>

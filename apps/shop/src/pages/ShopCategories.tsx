@@ -89,7 +89,7 @@ export default function ShopCategories() {
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {tree.map((root) => {
               const total = countFor(root);
-              const to = `/shop/products?category=${encodeURIComponent(root.slug ?? root.id)}`;
+              const to = `/products?category=${encodeURIComponent(root.slug ?? root.id)}`;
               return (
                 <div
                   key={root.id}
@@ -119,7 +119,7 @@ export default function ShopCategories() {
                       {root.children.map((child) => (
                         <Link
                           key={child.id}
-                          to={`/shop/products?category=${encodeURIComponent(child.slug ?? child.id)}`}
+                          to={`/products?category=${encodeURIComponent(child.slug ?? child.id)}`}
                           className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-medium text-slate-600 transition-colors hover:border-[#10B981]/40 hover:bg-[#ECFDF5] hover:text-emerald-700"
                         >
                           {child.name} · {child.productCount}

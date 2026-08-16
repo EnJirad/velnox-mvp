@@ -27,7 +27,7 @@ export function CartDrawer({ open, onOpenChange }: CartDrawerProps) {
 
   const goCheckout = () => {
     onOpenChange(false);
-    navigate(isAuthenticated ? "/shop/checkout" : "/auth?returnTo=/shop/checkout");
+    navigate(isAuthenticated ? "/checkout" : "/auth?returnTo=/checkout");
   };
 
   return (
@@ -60,7 +60,7 @@ export function CartDrawer({ open, onOpenChange }: CartDrawerProps) {
               className="border-slate-200 text-slate-700"
               onClick={() => {
                 onOpenChange(false);
-                navigate("/shop");
+                navigate("/");
               }}
             >
               {t("cartDrawer.viewProducts")}

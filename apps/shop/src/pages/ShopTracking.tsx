@@ -97,7 +97,7 @@ export default function ShopTracking() {
             <h1 className="mt-4 text-lg font-semibold text-slate-900">{t("tracking.notFound")}</h1>
             <p className="mt-1.5 text-sm text-slate-500">{error ?? t("tracking.notFoundDesc")}</p>
             <Button className="mt-6 gap-1.5 bg-slate-900 text-white hover:bg-slate-800" asChild>
-              <Link to="/shop/orders">
+              <Link to="/orders">
                 <ArrowLeft className="size-4" />
                 {t("tracking.backToOrders")}
               </Link>
@@ -114,7 +114,7 @@ export default function ShopTracking() {
                 <h1 className="mt-1 text-2xl font-bold tracking-tight text-slate-900">{t("tracking.title")}</h1>
               </div>
               <Button variant="outline" className="border-slate-200 text-slate-600" asChild>
-                <Link to={`/shop/orders/${order.id}`}>
+                <Link to={`/orders/${order.id}`}>
                   <Package className="size-4" />
                   {t("tracking.orderDetail")}
                 </Link>

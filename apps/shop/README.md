@@ -30,6 +30,12 @@ bun run dev:shop         # from the repo root → http://localhost:5173
 bun run dev
 ```
 
+The storefront lives at the **domain root** (standalone deploy): `/` is the
+homepage, with `/products`, `/categories`, `/cart`, `/checkout`, `/orders`,
+`/profile`, `/wishlist`, `/velrepeat`, `/addresses`, `/notifications` and
+`/auth`. Set `VITE_SITE_BASENAME` only when serving the app from a sub-path
+(e.g. `/shop` behind a legacy gateway) — the routes below it stay the same.
+
 ## Build
 
 ```bash
@@ -46,8 +52,8 @@ or corporate applications.
 - **Framework:** Vite (auto-detected from `package.json`)
 - **Build Command:** `bun run build` · **Install Command:** `bun install` · **Output Directory:** `dist`
 - `vercel.json` applies security headers and rewrites all routes to `index.html`
-  so `/shop`, `/shop/cart`, … work at the domain root.
-- Set `VITE_SITE_BASENAME=""` for a standalone domain.
+  so `/`, `/products`, `/cart`, … can be opened directly at the domain root.
+- Set `VITE_SITE_BASENAME=""` for a standalone domain (the default).
 
 ## Environment variables (client / Vite)
 

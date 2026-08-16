@@ -156,7 +156,7 @@ export default function ShopProductDetail() {
   const handleAdd = () => {
     if (!product) return;
     if (!isAuthenticated) {
-      navigate("/auth?returnTo=" + encodeURIComponent(`/shop/products/${product.id}`));
+      navigate("/auth?returnTo=" + encodeURIComponent(`/products/${product.id}`));
       return;
     }
     add(
@@ -169,20 +169,20 @@ export default function ShopProductDetail() {
   const handleBuyNow = () => {
     if (!product) return;
     if (!isAuthenticated) {
-      navigate("/auth?returnTo=" + encodeURIComponent(`/shop/products/${product.id}`));
+      navigate("/auth?returnTo=" + encodeURIComponent(`/products/${product.id}`));
       return;
     }
     add(
       { id: product.id, name: product.name, unit: product.unit, price: product.price, stock: available },
       qty,
     );
-    navigate("/shop/checkout");
+    navigate("/checkout");
   };
 
   const handleWishlist = async () => {
     if (!product) return;
     if (!isAuthenticated) {
-      navigate("/auth?returnTo=" + encodeURIComponent(`/shop/products/${product.id}`));
+      navigate("/auth?returnTo=" + encodeURIComponent(`/products/${product.id}`));
       return;
     }
     setWishToggling(true);
@@ -228,7 +228,7 @@ export default function ShopProductDetail() {
           <h1 className="mt-5 text-xl font-bold text-slate-900">{t("productDetail.notFound")}</h1>
           <p className="mt-2 text-sm text-slate-500">{t("productDetail.notFoundDesc")}</p>
           <Button className="mt-6 gap-1.5 bg-slate-900 text-white hover:bg-slate-800" asChild>
-            <Link to="/shop">
+            <Link to="/">
               <ArrowLeft className="size-4" />
               {t("productDetail.backToShop")}
             </Link>
@@ -305,7 +305,7 @@ export default function ShopProductDetail() {
                   {product.name}
                 </h1>
                 <Link
-                  to={`/shop/shops/${product.shopId}`}
+                  to={`/shops/${product.shopId}`}
                   className="mt-2 inline-flex items-center gap-1.5 py-1 text-sm text-slate-500 transition-colors hover:text-[#10B981]"
                 >
                   <Store className="size-4" />
@@ -373,7 +373,7 @@ export default function ShopProductDetail() {
 
             {/* Mobile: sticky bottom action bar (above the app tab bar), like a
                 native commerce app. Desktop keeps the inline buttons. */}
-            <div className="sticky bottom-16 z-40 -mx-4 mt-5 space-y-2.5 border-t border-slate-200 bg-white/95 px-4 py-3 pb-4 backdrop-blur md:static md:mx-0 md:mt-5 md:border-0 md:bg-transparent md:p-0 md:pb-0 md:backdrop-blur-none">
+            <div className="sticky bottom-[calc(4rem+env(safe-area-inset-bottom))] z-40 -mx-4 mt-5 space-y-2.5 border-t border-slate-200 bg-white/95 px-4 py-3 pb-4 backdrop-blur md:static md:mx-0 md:mt-5 md:border-0 md:bg-transparent md:p-0 md:pb-0 md:backdrop-blur-none">
               {outOfStock ? (
                 <Button className="w-full gap-1.5 bg-slate-100 text-slate-400 hover:bg-slate-100" disabled>
                   {t("product.outOfStock")}

@@ -615,7 +615,7 @@ export default function ShopHome() {
               {shops.slice(0, 8).map((shop, i) => (
                 <Link
                   key={shop.id}
-                  to={`/shop/shops/${shop.id}`}
+                  to={`/shops/${shop.id}`}
                   onClick={() => track("SHOP_VIEW", { entityId: shop.id, value: shop.name })}
                   className="flex items-center gap-3 rounded-xl border border-slate-200 bg-white p-4 transition-all duration-200 hover:-translate-y-0.5 hover:border-[#10B981]/40 hover:shadow-[0_12px_30px_rgba(15,23,42,0.06)]"
                 >
@@ -681,7 +681,7 @@ export default function ShopHome() {
                   className="flex flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white transition-all duration-200 hover:-translate-y-0.5 hover:shadow-[0_12px_30px_rgba(15,23,42,0.07)]"
                 >
                   <Link
-                    to={`/shop/products/${product.id}`}
+                    to={`/products/${product.id}`}
                     className="block aspect-square w-full overflow-hidden bg-slate-50"
                     aria-label={t("product.ariaViewDetail", { name: product.name })}
                     onClick={() =>

@@ -18,10 +18,10 @@ import { Link } from "react-router";
 import { toast } from "sonner";
 
 const SECTION_KEYS: Array<{ to: string; labelKey: string; descKey: string; icon: LucideIcon }> = [
-  { to: "/shop/addresses", labelKey: "profile.addresses", descKey: "profile.addressesDesc", icon: MapPin },
-  { to: "/shop/orders", labelKey: "profile.orders", descKey: "profile.ordersDesc", icon: Package },
-  { to: "/shop/wishlist", labelKey: "profile.wishlist", descKey: "profile.wishlistDesc", icon: Heart },
-  { to: "/shop/notifications", labelKey: "profile.notifications", descKey: "profile.notificationsDesc", icon: Bell },
+  { to: "/addresses", labelKey: "profile.addresses", descKey: "profile.addressesDesc", icon: MapPin },
+  { to: "/orders", labelKey: "profile.orders", descKey: "profile.ordersDesc", icon: Package },
+  { to: "/wishlist", labelKey: "profile.wishlist", descKey: "profile.wishlistDesc", icon: Heart },
+  { to: "/notifications", labelKey: "profile.notifications", descKey: "profile.notificationsDesc", icon: Bell },
 ];
 
 export default function ShopProfile() {
@@ -97,7 +97,7 @@ export default function ShopProfile() {
             <ShoppingBag className="size-8 text-slate-300" />
             <p className="mt-3 text-sm text-slate-500">{t("profile.notSignedIn")}</p>
             <Button className="mt-5 bg-slate-900 text-white hover:bg-slate-800" asChild>
-              <Link to="/auth?returnTo=/shop/profile">{t("profile.signIn")}</Link>
+              <Link to="/auth?returnTo=/profile">{t("profile.signIn")}</Link>
             </Button>
           </div>
         )}

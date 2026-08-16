@@ -196,10 +196,10 @@ export default function ShopCheckout() {
 
           <div className="mt-6 flex flex-col gap-2 sm:flex-row">
             <Button className="flex-1 gap-1.5 bg-slate-900 text-white hover:bg-slate-800" asChild>
-              <Link to="/shop/orders">{t("checkout.trackOrder")}</Link>
+              <Link to="/orders">{t("checkout.trackOrder")}</Link>
             </Button>
             <Button variant="outline" className="flex-1 border-slate-200 text-slate-700" asChild>
-              <Link to="/shop">{t("checkout.continueShopping")}</Link>
+              <Link to="/">{t("checkout.continueShopping")}</Link>
             </Button>
           </div>
           <p className="mt-4 text-center text-xs text-slate-400">
@@ -222,7 +222,7 @@ export default function ShopCheckout() {
           <h1 className="mt-5 text-xl font-bold text-slate-900">{t("checkout.emptyTitle")}</h1>
           <p className="mt-2 text-sm text-slate-500">{t("checkout.emptyDesc")}</p>
           <Button className="mt-6 gap-1.5 bg-slate-900 text-white hover:bg-slate-800" asChild>
-            <Link to="/shop">
+            <Link to="/">
               <ArrowLeft className="size-4" />
               {t("checkout.backToShop")}
             </Link>
@@ -239,7 +239,7 @@ export default function ShopCheckout() {
       <main className="mx-auto w-full max-w-6xl px-4 py-8 sm:px-6 sm:py-10">
         <div className="flex items-center gap-3">
           <Button variant="ghost" size="icon" className="size-9 text-slate-500" asChild>
-            <Link to="/shop/cart" aria-label={t("checkout.backToCart")}>
+            <Link to="/cart" aria-label={t("checkout.backToCart")}>
               <ArrowLeft className="size-4" />
             </Link>
           </Button>
@@ -259,7 +259,7 @@ export default function ShopCheckout() {
                   {t("checkout.addressTitle")}
                 </h2>
                 <Button variant="ghost" size="sm" className="gap-1 text-xs text-[#10B981] hover:bg-[#ECFDF5]" asChild>
-                  <Link to="/shop/addresses">{t("checkout.manage")}</Link>
+                  <Link to="/addresses">{t("checkout.manage")}</Link>
                 </Button>
               </div>
 
@@ -274,7 +274,7 @@ export default function ShopCheckout() {
                   <p className="mt-3 text-sm font-medium text-slate-600">{t("checkout.noAddress")}</p>
                   <p className="mt-1 text-xs text-slate-400">{t("checkout.noAddressDesc")}</p>
                   <Button variant="outline" size="sm" className="mt-4 border-slate-200 text-slate-700" asChild>
-                    <Link to="/shop/addresses">{t("checkout.addAddress")}</Link>
+                    <Link to="/addresses">{t("checkout.addAddress")}</Link>
                   </Button>
                 </div>
               ) : (

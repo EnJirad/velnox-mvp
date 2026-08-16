@@ -110,7 +110,7 @@ export default function ShopDetail() {
           <h1 className="mt-4 text-xl font-bold text-slate-900">{t("shopDetail.notFound")}</h1>
           <p className="mt-2 text-sm text-slate-500">{error ?? t("shopDetail.notFoundDesc")}</p>
           <Button className="mt-6 gap-1.5 bg-slate-900 text-white hover:bg-slate-800" asChild>
-            <Link to="/shop">
+            <Link to="/">
               <ArrowLeft className="size-4" />
               {t("shopDetail.backHome")}
             </Link>
@@ -125,7 +125,7 @@ export default function ShopDetail() {
       <ShopHeader />
 
       <main className="mx-auto w-full max-w-6xl px-4 py-8 sm:px-6 sm:py-10">
-        <Link to="/shop" className="flex items-center gap-1.5 text-sm text-slate-500 transition-colors hover:text-slate-900">
+        <Link to="/" className="flex items-center gap-1.5 text-sm text-slate-500 transition-colors hover:text-slate-900">
           <ArrowLeft className="size-4" />
           {t("shopDetail.back")}
         </Link>
@@ -196,7 +196,7 @@ export default function ShopDetail() {
                     key={product.id}
                     className="flex flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white transition-all duration-200 hover:-translate-y-0.5 hover:shadow-[0_12px_30px_rgba(15,23,42,0.07)]"
                   >
-                    <Link to={`/shop/products/${product.id}`} className="block aspect-square w-full overflow-hidden bg-slate-50">
+                    <Link to={`/products/${product.id}`} className="block aspect-square w-full overflow-hidden bg-slate-50">
                       {product.primaryImage ? (
                         <img
                           src={product.primaryImage.displayUrl}
@@ -211,7 +211,7 @@ export default function ShopDetail() {
                       )}
                     </Link>
                     <div className="flex flex-1 flex-col p-4">
-                      <Link to={`/shop/products/${product.id}`} className="line-clamp-2 text-sm font-semibold leading-5 text-slate-900 hover:text-[#10B981]">
+                      <Link to={`/products/${product.id}`} className="line-clamp-2 text-sm font-semibold leading-5 text-slate-900 hover:text-[#10B981]">
                         {product.name}
                       </Link>
                       <p

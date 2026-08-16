@@ -5,7 +5,7 @@ one Convex backend + one Neon database:
 
 | App | Folder | Purpose | Domain | Entry |
 |---|---|---|---|---|
-| **VelShop** | `apps/shop` | Public customer storefront (commerce) | shop.velnox.com | `src/main.tsx` → `/shop` |
+| **VelShop** | `apps/shop` | Public customer storefront (commerce) | shop.velnox.com | `src/main.tsx` → `/` |
 | **VelSeller** | `apps/seller` | Seller platform (goals, products, reorder, orders, income) | seller.velnox.com | `src/main.tsx` → `/seller/goals` |
 | **VelCenter** | `apps/center` | Internal operator platform (RBAC, noindex) | center.velnox.com | `src/main.tsx` → `/` |
 | **Velnox Corporate** | `apps/corporate` | Public company website (no Convex/auth) | velnox.com | `src/main.tsx` → `/` |
