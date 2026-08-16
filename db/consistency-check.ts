@@ -151,12 +151,14 @@ async function run() {
   report(balanceMismatch.rows, "seller_balances", "total_earned != ledger sales", "warn");
 
   // 12. return rate per seller (spec §9: returns / completed orders)
+  //     NOTE: orders.seller_id also exists (migration 005, single-seller orders)
+  //     so seller_id must be qualified — the rate is per order_items.seller_id.
   const returnRates = await pool.query(`
     WITH completed AS (
-      SELECT seller_id, COUNT(*) AS n FROM order_items oi
+      SELECT oi.seller_id, COUNT(*) AS n FROM order_items oi
       JOIN orders o ON o.id = oi.order_id
       WHERE o.status IN ('completed', 'delivered')
-      GROUP BY seller_id
+      GROUP BY oi.seller_id
     ), returned AS (
       SELECT order_id FROM returns WHERE status IN ('approved', 'received', 'refunded')
     )
