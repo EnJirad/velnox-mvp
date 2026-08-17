@@ -86,8 +86,19 @@ export default function ShopAddresses() {
   }, [myAddresses]);
 
   useEffect(() => {
-    void load();
-  }, [load]);
+    let alive = true;
+    myAddresses()
+      .then((res) => {
+        if (alive) setAddresses(res as unknown as AddressRow[]);
+      })
+      .catch((err) => {
+        console.error("Load addresses error:", err);
+        if (alive) setAddresses([]);
+      });
+    return () => {
+      alive = false;
+    };
+  }, [myAddresses]);
 
   const openCreate = () => {
     setEditingId(null);
@@ -130,6 +141,17 @@ export default function ShopAddresses() {
   const handleSave = async () => {
     if (!form.recipientName.trim() || !form.phone.trim() || !form.line1.trim()) {
       toast.error(t("addresses.required"));
+      return;
+    }
+    // Required address fields are validated here so we never call the backend
+    // with an incomplete address (the DB `city` column is NOT NULL — the
+    // backend maps it from the province, so the province itself is required).
+    if (!form.province.trim()) {
+      toast.error(t("addresses.provinceRequired"));
+      return;
+    }
+    if (!form.postalCode.trim()) {
+      toast.error(t("addresses.postalRequired"));
       return;
     }
     if (form.isDefault && (form.latitude == null || form.longitude == null)) {

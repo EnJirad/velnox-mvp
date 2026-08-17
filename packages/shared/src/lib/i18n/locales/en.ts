@@ -351,6 +351,8 @@ export const en: Dict = {
     emptyDesc: "Add an address and pick its location on the map so it can be used for delivery",
     addFirst: "Add your first address",
     required: "Please fill in the recipient name, phone and address",
+    provinceRequired: "Please enter the province",
+    postalRequired: "Please enter the postal code",
     gpsDefaultRequired: "A default address needs GPS coordinates — pick a location on the map before saving",
     saveSuccess: "Address added",
     updateSuccess: "Address updated",

@@ -269,6 +269,9 @@ export const saveAddress = action({
     phone: v.string(),
     line1: v.string(),
     line2: v.optional(v.string()),
+    // Optional: backend derives `city` from the province for Thai addresses;
+    // kept so non-TH clients can send an explicit city.
+    city: v.optional(v.string()),
     subdistrict: v.optional(v.string()),
     district: v.optional(v.string()),
     province: v.optional(v.string()),
@@ -288,6 +291,7 @@ export const saveAddress = action({
       phone: args.phone,
       line1: args.line1,
       line2: args.line2 ?? null,
+      city: args.city ?? null,
       subdistrict: args.subdistrict ?? null,
       district: args.district ?? null,
       province: args.province ?? null,

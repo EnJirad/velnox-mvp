@@ -58,6 +58,11 @@ export const addressInputSchema = z
     phone: phoneSchema,
     line1: z.string().trim().min(1, "กรุณากรอกที่อยู่").max(255),
     line2: z.string().trim().max(255).nullish(),
+    // DB `addresses.city` is NOT NULL. It is optional here on purpose:
+    // the service layer (normalizeAddressInput in backend/addresses.ts)
+    // derives it from the province for Thai addresses and enforces the
+    // NOT NULL contract with a user-friendly error — never a raw SQL error.
+    city: z.string().trim().max(120).nullish(),
     subdistrict: z.string().trim().max(120).nullish(),
     district: z.string().trim().max(120).nullish(),
     province: z.string().trim().max(120).nullish(),
