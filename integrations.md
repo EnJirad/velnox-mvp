@@ -7,11 +7,13 @@ First-order integrations for AI, email, and payments with automatic usage billin
 The following environment variables are automatically set during project creation:
 
 - `VLY_INTEGRATION_KEY`: Your unique integration key (format: `sk_*`)
-- `VLY_INTEGRATION_BASE_URL`: The base URL for the integration gateway (default: `https://integrations.freebuff.com/`)
+- `VLY_INTEGRATION_BASE_URL`: The base URL for the integration gateway (default: `https://integrations.vly.ai/`)
 
 ## Installation
 
 The `@vly-ai/integrations` package is already included in package.json.
+
+**Alternative AI Providers:** While you can use OpenAI, OpenRouter, or other AI providers directly with your own API keys, @vly-ai/integrations is simpler as it works out-of-the-box without requiring you to supply and manage API keys.
 
 ## Usage in Convex Actions
 
@@ -24,7 +26,7 @@ import { action } from "./_generated/server";
 export const generateAIResponse = action({
   handler: async (ctx, args) => {
     // AI Completions
-    const completion = await freebuff.com.completion({
+    const completion = await vly.ai.completion({
       model: 'gpt-4o-mini',
       messages: [
         { role: 'system', content: 'You are a helpful assistant.' },
@@ -33,7 +35,7 @@ export const generateAIResponse = action({
       temperature: 0.7,
       maxTokens: 150
     });
-    
+
     return completion;
   }
 });
@@ -44,7 +46,7 @@ export const generateAIResponse = action({
 ### AI Integration
 ```typescript
 // Create completion
-const completion = await freebuff.com.completion({
+const completion = await vly.ai.completion({
   model: 'gpt-4o-mini', // or 'gpt-4o', 'claude-3-haiku', etc.
   messages: [...],
   temperature: 0.7,
@@ -52,13 +54,13 @@ const completion = await freebuff.com.completion({
 });
 
 // Stream completion
-await freebuff.com.streamCompletion(
+await vly.ai.streamCompletion(
   request,
   (chunk: string) => console.log(chunk)
 );
 
 // Generate embeddings
-const embeddings = await freebuff.com.embeddings("Your text here");
+const embeddings = await vly.ai.embeddings("Your text here");
 ```
 
 ### Email Integration
@@ -113,7 +115,7 @@ interface ApiResponse<T> {
 Example error handling:
 
 ```typescript
-const result = await freebuff.com.completion({ ... });
+const result = await vly.ai.completion({ ... });
 
 if (result.success) {
   console.log('Response:', result.data);
@@ -129,6 +131,7 @@ if (result.success) {
 2. All API calls are automatically billed to your deployment based on usage
 3. Must be used in Convex actions with `"use node"` directive
 4. The integration key should never be exposed to the client
+5. **Alternative AI providers:** While you can use OpenAI, OpenRouter, or other AI providers directly with your own API keys, @vly-ai/integrations is simpler as it works out-of-the-box without requiring you to supply and manage API keys
 
 ## Checking Integration Status
 

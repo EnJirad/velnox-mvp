@@ -1,7 +1,9 @@
-import type { Dict } from "./index";
+/**
+ * VelShop Burmese dictionary (Unicode) — mirrors the Thai key shape.
+ * New auth-flow keys are merged in locales/index.ts (see `myAuthPatch`).
+ */
 
-/** VelShop Burmese dictionary (Unicode) — mirrors the Thai key shape (typed). */
-export const my: Dict = {
+export const my = {
   common: {
     loading: "ဖွင့်နေသည်...",
     error: "တစ်ခုခု မှားယွင်းသွားသည်",
