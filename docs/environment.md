@@ -33,11 +33,11 @@
 | `CLOUDINARY_API_SECRET` | `backend/storage.ts` | product image upload |
 | `GOOGLE_CLIENT_ID` | `convex/auth.ts` | **Required for Google Sign-In** (primary login method) — OAuth Client ID (public by design, but set server-side) |
 | `GOOGLE_CLIENT_SECRET` | `convex/auth.ts` | **Required** — OAuth Client Secret. **Never** in `VITE_*`/git; Convex deployment env only |
-| `AUTH_ALLOWED_ORIGINS` | `convex/auth_redirect.ts` | Optional JSON array of post-OAuth redirect origins (default = 4 production domains + localhost) |
+| `AUTH_ALLOWED_ORIGINS` | `convex/auth_redirect.ts` | Optional **JSON array** (parsed with `JSON.parse()` — not comma-separated) of post-OAuth redirect origins, e.g. `["https://velshop.vercel.app","https://velseller.vercel.app","https://velcenter.vercel.app"]` (default = the 3 current production domains + localhost; the env var **replaces** the defaults) |
 | `EMAIL_OTP_ENABLED` | `convex/auth.ts` | Default `"false"` — Google OAuth ON, Email OTP OFF (backend kept; set `"true"` to re-enable) |
 | `FREEBUFF_EMAIL_API_KEY` | `convex/auth/emailOtp.ts` | **Only if Email OTP is enabled** — **Resend API key** (`re_...`), server-side only, never a `VITE_*` var |
 | `EMAIL_FROM` | `convex/auth/emailOtp.ts` | **Required if Email OTP is enabled** — sender under a verified Resend domain, e.g. `Velnox <no-reply@velnox.com>` (must be `velnox.com`, **not** Gmail, **not** `onboarding@resend.dev`). Resend only delivers from verified domains — the sandbox sender 403s for every recipient except the account owner. Missing → server logs a safe config error, users see the generic failure message |
-| `SITE_URL` | `convex/auth_redirect.ts` + Stripe return URL | canonical origin (e.g. `https://shop.velnox.com`) — single URL, never multi-value |
+| `SITE_URL` | `convex/auth_redirect.ts` + Stripe return URL | canonical origin (e.g. `https://velshop.vercel.app`) — single URL, never multi-value; must be an allowlisted origin |
 
 Managed by Convex Auth (do not set manually): `JWT_PRIVATE_KEY`, `JWKS`.
 

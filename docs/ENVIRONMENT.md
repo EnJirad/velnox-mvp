@@ -29,10 +29,10 @@ Version: 1.0 · Phase 7
 | `CLOUDINARY_CLOUD_NAME` | `src/backend/storage.ts` | `velnox` | product image storage |
 | `CLOUDINARY_API_KEY` | `src/backend/storage.ts` | `123...` | |
 | `CLOUDINARY_API_SECRET` | `src/backend/storage.ts` | `abc...` | |
-| `SITE_URL` | `convex/auth_redirect.ts` + Stripe return URL | `https://shop.velnox.com` | fallback origin สำหรับ redirect หลัง OAuth (single URL — ไม่ใช่ multi-value) |
+| `SITE_URL` | `convex/auth_redirect.ts` + Stripe return URL | `https://velshop.vercel.app` | fallback origin สำหรับ redirect หลัง OAuth (single URL — ไม่ใช่ multi-value; ต้องเป็น origin ที่อยู่ใน allowlist) |
 | `GOOGLE_CLIENT_ID` | `convex/auth.ts` (Google OAuth) | `1234567890-abc.apps.googleusercontent.com` | **จำเป็นสำหรับ Google Sign-In** (วิธีล็อกอินหลัก) — Client ID เปิดเผยได้ (ตาม OAuth design) แต่ตั้งไว้ที่ Convex env ฝั่ง server |
 | `GOOGLE_CLIENT_SECRET` | `convex/auth.ts` (Google OAuth) | `GOCSPX-...` | **จำเป็น** — secret ของ Google OAuth Client **ห้าม**ใส่ใน `VITE_*`/git; ตั้งที่ Keys/API keys UI เท่านั้น |
-| `AUTH_ALLOWED_ORIGINS` | `convex/auth_redirect.ts` | `["https://shop.velnox.com",...]` | ทางเลือก — JSON array ของ origins ที่ redirect ได้หลัง OAuth (ค่าเริ่มต้น = 4 domains prod + localhost) |
+| `AUTH_ALLOWED_ORIGINS` | `convex/auth_redirect.ts` | `["https://velshop.vercel.app","https://velseller.vercel.app","https://velcenter.vercel.app"]` | ทางเลือก — **JSON array** (ไม่ใช่ comma-separated string — โค้ดใช้ `JSON.parse()`) ของ origins ที่ redirect ได้หลัง OAuth (ค่าเริ่มต้น = 3 domains prod ปัจจุบัน + localhost; env นี้ *แทนที่* defaults) |
 | `EMAIL_OTP_ENABLED` | `convex/auth.ts` | `"false"` | **ค่าเริ่มต้น `"false"`** — Google OAuth = ON, Email OTP = OFF (backend เก็บไว้ เปิดได้ด้วย `"true"`) |
 | `FREEBUFF_EMAIL_API_KEY` | `convex/auth/emailOtp.ts` | `re_...` | **เฉพาะเมื่อเปิด Email OTP** — ตั้งค่าเป็น **Resend API key** (ชื่อตัวแปรคงเดิมเพื่อความเข้ากันได้) ถ้าไม่มี key นี้ การส่ง OTP จะ fail และผู้ใช้เห็นข้อความ generic (รายละเอียด technical อยู่ใน server log เท่านั้น) |
 | `EMAIL_FROM` | `convex/auth/emailOtp.ts` | `Velnox <no-reply@velnox.com>` | **จำเป็น (required)** ผู้ส่งอีเมล OTP — ต้องเป็น address ภายใต้ domain ที่ verify กับ Resend แล้ว (เช่น `velnox.com`) **ห้ามใช้ Gmail หรือ sandbox `onboarding@resend.dev`** (sandbox ส่งได้เฉพาะอีเมลเจ้าของ account — recipient อื่นเจอ HTTP 403). ถ้าไม่ตั้ง → server log configuration error อย่างปลอดภัย และผู้ใช้เห็นข้อความ generic (ไม่ expose secret) |

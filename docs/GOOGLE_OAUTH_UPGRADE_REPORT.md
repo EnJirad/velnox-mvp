@@ -42,11 +42,12 @@ Redirect ตาม role (server-side authorization ยังบังคับ�
 | OAuth ชนิด | Authorization Code + PKCE (Convex Auth จัดการ verifier/state เอง) — ฝั่ง client เก็บ verifier ใน sessionStorage |
 | หลัง callback | ตรวจ allowlist origin (multi-frontend) → redirect กลับ frontend พร้อม `code` → client แลกเป็น session |
 
-**Redirect allowlist (ใหม่):** `convex/auth_redirect.ts` — หลัง OAuth สำเร็จ browser จะถูกส่งกลับไปเฉพาะ origin ในรายการนี้เท่านั้น:
+**Redirect allowlist (ใหม่):** `convex/auth_redirect.ts` — หลัง OAuth สำเร็จ browser จะถูกส่งกลับไปเฉพาะ origin ในรายการนี้เท่านั้น (อัปเดต 2026-08-17 เป็น production domains ปัจจุบัน):
 
-`https://velnox.com` · `https://shop.velnox.com` · `https://seller.velnox.com` · `https://center.velnox.com` + local dev (`localhost:5173/3000/4173`)
-- ตั้ง `AUTH_ALLOWED_ORIGINS` (JSON array) เพื่อ override รายการนี้
-- จุดปลอดภัยเมื่อ destination ไม่อยู่ในรายการ → `{SITE_URL}/auth` (ไม่ redirect ไป domain แปลกปลอม)
+`https://velshop.vercel.app` · `https://velseller.vercel.app` · `https://velcenter.vercel.app` + local dev (`localhost:5173/3000/4173`)
+- ตั้ง `AUTH_ALLOWED_ORIGINS` (**JSON array** — โค้ดใช้ `JSON.parse()`, ไม่ใช่ comma-separated) เพื่อ override รายการนี้ เช่น `["https://velshop.vercel.app","https://velseller.vercel.app","https://velcenter.vercel.app"]`
+- จุดปลอดภัยเมื่อ destination ไม่อยู่ในรายการ → `{SITE_URL}/auth` (fallback = `https://velshop.vercel.app/auth` — ไม่ redirect ไป domain แปลกปลอม)
+- โดเมน `velnox.com` / `shop|seller|center.velnox.com` ยังไม่ใช้งาน — ห้ามใช้เป็น production config จนกว่าจะตั้ง domain จริง
 
 ## 3. CONVEX AUTH
 
@@ -168,7 +169,7 @@ Redirect ตาม role (server-side authorization ยังบังคับ�
    - `https://strong-buffalo-427.convex.site/api/auth/callback/google`
    - เพิ่ม custom domain ของ Convex deployment (ถ้ามี Pro) → `https://<custom-domain>/api/auth/callback/google`
 4. **Authorized JavaScript origins** (เผื่อใช้ GIS ในอนาคต):
-   - `https://velnox.com` · `https://shop.velnox.com` · `https://seller.velnox.com` · `https://center.velnox.com` · `http://localhost:5173`
+   - `https://velshop.vercel.app` · `https://velseller.vercel.app` · `https://velcenter.vercel.app` · `http://localhost:5173`
 5. คัดลอก Client ID / Client Secret → ตั้ง env ข้างบน
 
 ## Convex configuration (ต้องทำ)

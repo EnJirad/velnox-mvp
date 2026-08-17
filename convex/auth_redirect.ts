@@ -1,8 +1,8 @@
 /**
  * Velnox — OAuth post-sign-in redirect policy (pure, unit-testable).
  *
- * Velnox runs FOUR frontends (velnox.com · shop.velnox.com ·
- * seller.velnox.com · center.velnox.com) against ONE Convex deployment.
+ * Velnox runs THREE production frontends (velshop.vercel.app ·
+ * velseller.vercel.app · velcenter.vercel.app) against ONE Convex deployment.
  * Convex Auth's default redirect callback only allows URLs under the single
  * `SITE_URL` env var — not enough for a multi-domain platform. This module
  * implements the allowlist used by `callbacks.redirect` in convex/auth.ts:
@@ -18,10 +18,12 @@
  *    own role-based redirect takes over after the frontend sees the session.
  */
 export const DEFAULT_OAUTH_ORIGINS: readonly string[] = [
-  "https://velnox.com",
-  "https://shop.velnox.com",
-  "https://seller.velnox.com",
-  "https://center.velnox.com",
+  // Current production frontends (Vercel). Custom domains (velnox.com,
+  // shop/seller/center.velnox.com) will replace these once they are set up —
+  // add them to this list or to AUTH_ALLOWED_ORIGINS at that time.
+  "https://velshop.vercel.app",
+  "https://velseller.vercel.app",
+  "https://velcenter.vercel.app",
   // Local development (Vite dev servers + preview)
   "http://localhost:5173",
   "http://localhost:3000",
@@ -29,16 +31,16 @@ export const DEFAULT_OAUTH_ORIGINS: readonly string[] = [
 ];
 
 /** Fallback origin when SITE_URL is not configured (must be an allowlisted origin). */
-export const OAUTH_FALLBACK_ORIGIN = "https://shop.velnox.com";
+export const OAUTH_FALLBACK_ORIGIN = "https://velshop.vercel.app";
 
 /** Path of the auth page used as the safe fallback destination. */
 export const OAUTH_FALLBACK_PATH = "/auth";
 
 /**
  * Origins the OAuth callback may send the browser back to. Defaults to the
- * four production domains plus local dev servers. Deployments can override
+ * three production frontends plus local dev servers. Deployments can override
  * with the `AUTH_ALLOWED_ORIGINS` Convex env var — a JSON array of origins,
- * e.g. '["https://shop.velnox.com","https://preview.example.com"]'.
+ * e.g. '["https://velshop.vercel.app","https://preview.example.com"]'.
  * The env var REPLACES the defaults (it is the explicit production list).
  */
 export function allowedOAuthOrigins(

@@ -7,7 +7,7 @@
  *   - classifyGoogleError — safe, user-facing error kinds (never internals).
  *   - cancellation detection (GOOGLE_AUTH_START marker) helpers.
  *   - convex/auth_redirect.ts — the backend post-OAuth redirect allowlist
- *     (multi-frontend: shop/seller/center/corporate + local dev).
+ *     (multi-frontend: velshop/velseller/velcenter.vercel.app + local dev).
  *
  * The real OAuth exchange (Google → Convex callback → session) is exercised
  * end-to-end only in the browser; these tests lock the deterministic logic.
@@ -32,35 +32,35 @@ import {
 
 describe("buildGoogleRedirectTo", () => {
   it("returns the auth page on the given origin", () => {
-    expect(buildGoogleRedirectTo("https://shop.velnox.com", null)).toBe(
-      "https://shop.velnox.com/auth",
+    expect(buildGoogleRedirectTo("https://velshop.vercel.app", null)).toBe(
+      "https://velshop.vercel.app/auth",
     );
   });
 
   it("keeps a safe relative returnTo as a query param", () => {
-    expect(buildGoogleRedirectTo("https://shop.velnox.com", "/checkout")).toBe(
-      "https://shop.velnox.com/auth?returnTo=%2Fcheckout",
+    expect(buildGoogleRedirectTo("https://velshop.vercel.app", "/checkout")).toBe(
+      "https://velshop.vercel.app/auth?returnTo=%2Fcheckout",
     );
   });
 
   it("drops returnTo values that are not safe relative paths (open-redirect guard)", () => {
-    expect(buildGoogleRedirectTo("https://shop.velnox.com", "https://evil.example")).toBe(
-      "https://shop.velnox.com/auth",
+    expect(buildGoogleRedirectTo("https://velshop.vercel.app", "https://evil.example")).toBe(
+      "https://velshop.vercel.app/auth",
     );
-    expect(buildGoogleRedirectTo("https://shop.velnox.com", "//evil.example")).toBe(
-      "https://shop.velnox.com/auth",
+    expect(buildGoogleRedirectTo("https://velshop.vercel.app", "//evil.example")).toBe(
+      "https://velshop.vercel.app/auth",
     );
-    expect(buildGoogleRedirectTo("https://shop.velnox.com", "")).toBe(
-      "https://shop.velnox.com/auth",
+    expect(buildGoogleRedirectTo("https://velshop.vercel.app", "")).toBe(
+      "https://velshop.vercel.app/auth",
     );
-    expect(buildGoogleRedirectTo("https://shop.velnox.com", undefined)).toBe(
-      "https://shop.velnox.com/auth",
+    expect(buildGoogleRedirectTo("https://velshop.vercel.app", undefined)).toBe(
+      "https://velshop.vercel.app/auth",
     );
   });
 
   it("handles an origin with a trailing slash", () => {
-    expect(buildGoogleRedirectTo("https://seller.velnox.com/", "/seller/goals")).toBe(
-      "https://seller.velnox.com/auth?returnTo=%2Fseller%2Fgoals",
+    expect(buildGoogleRedirectTo("https://velseller.vercel.app/", "/seller/goals")).toBe(
+      "https://velseller.vercel.app/auth?returnTo=%2Fseller%2Fgoals",
     );
   });
 });
@@ -127,14 +127,14 @@ describe("Google flow cancellation marker", () => {
 // ---------------------------------------------------------------------------
 
 describe("allowedOAuthOrigins", () => {
-  it("defaults to the four platform origins plus local dev", () => {
+  it("defaults to the three production frontends plus local dev", () => {
     expect(allowedOAuthOrigins({})).toEqual([...DEFAULT_OAUTH_ORIGINS]);
   });
 
   it("uses AUTH_ALLOWED_ORIGINS (JSON array) when provided", () => {
-    const env = { AUTH_ALLOWED_ORIGINS: '["https://shop.velnox.com","https://preview.example.com"]' };
+    const env = { AUTH_ALLOWED_ORIGINS: '["https://velshop.vercel.app","https://preview.example.com"]' };
     expect(allowedOAuthOrigins(env)).toEqual([
-      "https://shop.velnox.com",
+      "https://velshop.vercel.app",
       "https://preview.example.com",
     ]);
   });
@@ -155,26 +155,39 @@ describe("allowedOAuthOrigins", () => {
 describe("resolveOAuthRedirect", () => {
   it("returns an allowlisted absolute destination as-is", () => {
     expect(
-      resolveOAuthRedirect("https://shop.velnox.com/auth?returnTo=%2Fcheckout", {}),
-    ).toBe("https://shop.velnox.com/auth?returnTo=%2Fcheckout");
+      resolveOAuthRedirect("https://velshop.vercel.app/auth?returnTo=%2Fcheckout", {}),
+    ).toBe("https://velshop.vercel.app/auth?returnTo=%2Fcheckout");
+  });
+
+  it("accepts every production frontend origin", () => {
+    expect(resolveOAuthRedirect("https://velseller.vercel.app/auth?returnTo=%2Fseller%2Fgoals", {})).toBe(
+      "https://velseller.vercel.app/auth?returnTo=%2Fseller%2Fgoals",
+    );
+    expect(resolveOAuthRedirect("https://velcenter.vercel.app/auth", {})).toBe(
+      "https://velcenter.vercel.app/auth",
+    );
   });
 
   it("resolves a relative path against SITE_URL", () => {
-    expect(resolveOAuthRedirect("/seller/goals", { SITE_URL: "https://seller.velnox.com" })).toBe(
-      "https://seller.velnox.com/seller/goals",
+    expect(resolveOAuthRedirect("/seller/goals", { SITE_URL: "https://velseller.vercel.app" })).toBe(
+      "https://velseller.vercel.app/seller/goals",
     );
   });
 
   it("falls back to /auth for unknown origins (open-redirect guard)", () => {
     expect(resolveOAuthRedirect("https://evil.example/phish", {})).toBe(
-      "https://shop.velnox.com/auth",
+      "https://velshop.vercel.app/auth",
+    );
+    // The old custom-domain origins are no longer allowlisted by default.
+    expect(resolveOAuthRedirect("https://shop.velnox.com/dashboard", {})).toBe(
+      "https://velshop.vercel.app/auth",
     );
   });
 
   it("falls back to /auth for malformed destinations", () => {
-    expect(resolveOAuthRedirect("not a url", {})).toBe("https://shop.velnox.com/auth");
-    expect(resolveOAuthRedirect(undefined, {})).toBe("https://shop.velnox.com/auth");
-    expect(resolveOAuthRedirect("", {})).toBe("https://shop.velnox.com/auth");
+    expect(resolveOAuthRedirect("not a url", {})).toBe("https://velshop.vercel.app/auth");
+    expect(resolveOAuthRedirect(undefined, {})).toBe("https://velshop.vercel.app/auth");
+    expect(resolveOAuthRedirect("", {})).toBe("https://velshop.vercel.app/auth");
   });
 
   it("respects AUTH_ALLOWED_ORIGINS when set", () => {
@@ -182,10 +195,10 @@ describe("resolveOAuthRedirect", () => {
     expect(resolveOAuthRedirect("https://preview.example.com/auth", env)).toBe(
       "https://preview.example.com/auth",
     );
-    // The production domains are NOT in the override list → the destination
-    // is forced to the safe fallback auth page (on the shop origin).
-    expect(resolveOAuthRedirect("https://shop.velnox.com/dashboard", env)).toBe(
-      "https://shop.velnox.com/auth",
+    // Origins NOT in the override list are forced to the safe fallback auth
+    // page (on the shop origin).
+    expect(resolveOAuthRedirect("https://velshop.vercel.app/dashboard", env)).toBe(
+      "https://velshop.vercel.app/auth",
     );
   });
 });
