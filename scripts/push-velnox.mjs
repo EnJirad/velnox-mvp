@@ -79,15 +79,29 @@ console.log(`blobs done: ${done}/${files.length}`);
 const tree = await gh("POST", `/repos/${REPO}/git/trees`, { tree: treeItems });
 console.log("tree:", tree.sha);
 
+let parent = null;
+try {
+  const head = await gh("GET", `/repos/${REPO}/git/ref/heads/${BRANCH}`);
+  parent = head.object.sha;
+} catch (e) {
+  console.log("no existing branch:", e.message);
+}
+
 const now = new Date();
 const commit = await gh("POST", `/repos/${REPO}/git/commits`, {
   message: "chore: Velnox MVP - VelShop/VelSeller/VelCenter + Convex backend snapshot",
   author: { name: "EnJirad", email: "130825937+EnJirad@users.noreply.github.com", date: now.toISOString() },
   committer: { name: "EnJirad", email: "130825937+EnJirad@users.noreply.github.com", date: now.toISOString() },
   tree: tree.sha,
+  parents: parent ? [parent] : [],
 });
-console.log("commit:", commit.sha);
+console.log("commit:", commit.sha, parent ? `(parent ${parent.slice(0, 7)})` : "(root)");
 
-const ref = await gh("POST", `/repos/${REPO}/git/refs`, { ref: `refs/heads/${BRANCH}`, sha: commit.sha });
+let ref;
+if (parent) {
+  ref = await gh("PATCH", `/repos/${REPO}/git/refs/heads/${BRANCH}`, { sha: commit.sha, force: false });
+} else {
+  ref = await gh("POST", `/repos/${REPO}/git/refs`, { ref: `refs/heads/${BRANCH}`, sha: commit.sha });
+}
 console.log("ref:", ref.ref, "->", ref.object.sha);
 console.log("PUSH OK -> https://github.com/EnJirad/velnox/tree/main");
