@@ -6,14 +6,16 @@ import { Input } from "@velnox/shared/components/ui/input";
 import { useAuth } from "@velnox/shared/hooks/use-auth";
 import { useCart } from "@/lib/cart";
 import { useLanguage } from "@/lib/i18n";
-import { Bell, Heart, RefreshCw, Search, ShoppingCart, User } from "lucide-react";
+import { Search, ShoppingCart, User } from "lucide-react";
 import { useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router";
 
 /**
- * VelShop header — a pure shopping header. No website switcher, no links to
- * Center/Corporate, no seller platform navigation (the only public cross-site
- * entry lives in the footer). Desktop and mobile get dedicated compositions.
+ * VelShop header — kept deliberately minimal so shopping stays the focus.
+ * Desktop: logo · Home/Products/Categories · search · language · cart · account.
+ * Mobile: logo · search · cart · account (the bottom tab bar is the menu).
+ * Everything else (wishlist, notifications, VelRepeat) lives in the profile
+ * hub, not the header.
  */
 export function ShopHeader() {
   const { isAuthenticated, isLoading } = useAuth();
@@ -48,7 +50,7 @@ export function ShopHeader() {
 
   return (
     <header className="sticky top-0 z-40 border-b border-slate-200 bg-white/90 backdrop-blur">
-      <div className="mx-auto flex h-16 w-full max-w-6xl items-center gap-2 px-4 sm:px-6">
+      <div className="mx-auto flex h-14 w-full max-w-6xl items-center gap-2 px-4 sm:px-6">
         {/* Brand */}
         <Link to="/" aria-label={t("header.ariaHome", { name: "VelShop" })} className="shrink-0">
           <Logo />
@@ -59,21 +61,19 @@ export function ShopHeader() {
           {navItem("/", t("nav.home"), true)}
           {navItem("/products", t("nav.products"))}
           {navItem("/categories", t("nav.categories"))}
-          {isAuthenticated && navItem("/orders", t("nav.orders"))}
-          {isAuthenticated && navItem("/wishlist", t("nav.wishlist"))}
         </nav>
 
         {/* Search (desktop) */}
         <form
           onSubmit={submitSearch}
-          className="relative ml-auto hidden w-full max-w-[260px] lg:block"
+          className="relative ml-auto hidden w-full max-w-[240px] lg:block"
         >
           <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-slate-400" />
           <Input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder={t("header.searchPlaceholder")}
-            className="h-10 rounded-[10px] border-slate-200 bg-slate-50 pl-9 pr-3 text-sm focus:bg-white"
+            className="h-9 rounded-[10px] border-slate-200 bg-slate-50 pl-9 pr-3 text-sm focus:bg-white"
             aria-label={t("header.ariaSearch")}
           />
         </form>
@@ -91,41 +91,8 @@ export function ShopHeader() {
             <Search className="size-5" />
           </Button>
 
-          {isAuthenticated && (
-            <Link
-              to="/velrepeat"
-              className="hidden size-10 items-center justify-center rounded-[10px] text-slate-600 transition-colors hover:bg-slate-100 sm:flex"
-              aria-label={t("header.ariaVelrepeat")}
-            >
-              <RefreshCw className="size-5" />
-            </Link>
-          )}
-          {isAuthenticated && (
-            <Link
-              to="/notifications"
-              className="hidden size-10 items-center justify-center rounded-[10px] text-slate-600 transition-colors hover:bg-slate-100 sm:flex"
-              aria-label={t("header.ariaNotifications")}
-            >
-              <Bell className="size-5" />
-            </Link>
-          )}
-          {/* Wishlist — icon on every breakpoint (mobile: from the header, since
-              the bottom nav is fixed to Home/Products/Cart/Orders/Profile) */}
-          <Link
-            to="/wishlist"
-            className="flex size-10 items-center justify-center rounded-[10px] text-slate-600 transition-colors hover:bg-slate-100"
-            aria-label={t("header.ariaWishlist")}
-          >
-            <Heart className="size-5" />
-          </Link>
-
-          {/* Desktop language selector shows the full label; mobile uses a
-              compact icon-only trigger. One instance per breakpoint. */}
           <div className="hidden md:block">
             <LanguageSwitcher variant="desktop" />
-          </div>
-          <div className="md:hidden">
-            <LanguageSwitcher variant="mobile" />
           </div>
 
           <Button
@@ -154,7 +121,7 @@ export function ShopHeader() {
           ) : (
             <Button
               variant="outline"
-              className="h-10 border-slate-200 text-slate-700"
+              className="h-9 border-slate-200 text-slate-700"
               asChild
             >
               <Link to="/auth?returnTo=/">{t("header.login")}</Link>

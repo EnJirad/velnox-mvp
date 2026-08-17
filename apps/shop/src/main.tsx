@@ -3,6 +3,7 @@ import { RequireAuth } from "@velnox/shared/components/RequireAuth";
 import { ConvexAuthProvider } from "@convex-dev/auth/react";
 import { ConvexReactClient } from "convex/react";
 import { CartProvider } from "@/lib/cart";
+import { CookieConsentProvider } from "@/lib/cookie-consent";
 import { LanguageProvider, useLanguage } from "@/lib/i18n";
 import {
   RootErrorBoundary,
@@ -62,6 +63,7 @@ const ShopAddresses = lazy(() => import("@/pages/ShopAddresses"));
 const ShopProfile = lazy(() => import("@/pages/ShopProfile"));
 const ShopAccount = lazy(() => import("@/pages/ShopAccount"));
 const ShopNotifications = lazy(() => import("@/pages/ShopNotifications"));
+const CookiePolicy = lazy(() => import("@/pages/CookiePolicy"));
 const AuthPage = lazy(() => import("@velnox/shared/pages/Auth"));
 const NotFound = lazy(() => import("@velnox/shared/pages/NotFound"));
 
@@ -75,6 +77,7 @@ createRoot(document.getElementById("root")!).render(
         <BrowserRouter basename={siteBasename("velshop")}>
         <RouteSyncer />
         <CartProvider>
+          <CookieConsentProvider>
           <div className="site-app">
           <SiteSuspense>
             <Routes>
@@ -165,11 +168,13 @@ createRoot(document.getElementById("root")!).render(
                 }
               />
               <Route path="/auth" element={<AuthPage />} />
+              <Route path="/cookies" element={<CookiePolicy />} />
               <Route path="*" element={<NotFound />} />
             </Routes>
           </SiteSuspense>
           <ShopTabBar />
           </div>
+          </CookieConsentProvider>
         </CartProvider>
       </BrowserRouter>          <Toaster />
         </ConvexAuthProvider>

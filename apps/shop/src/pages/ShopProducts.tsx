@@ -1,3 +1,4 @@
+import { ProductCard } from "@/components/shop/ProductCard";
 import { ShopHeader } from "@/components/shop/ShopHeader";
 import { ShopFooter } from "@/components/shop/ShopFooter";
 import { Button } from "@velnox/shared/components/ui/button";
@@ -25,7 +26,6 @@ import { useLanguage } from "@/lib/i18n";
 import { useTracking } from "@velnox/shared/lib/track";
 import {
   PRODUCT_CATEGORY_META,
-  formatBaht,
   type StoreProduct,
   type StoreProductCategory,
 } from "@velnox/shared/lib/commerce";
@@ -35,18 +35,15 @@ import {
   ChevronLeft,
   ChevronRight,
   Filter,
-  ImageOff,
   PackageSearch,
-  Plus,
   RotateCcw,
   Search,
   SlidersHorizontal,
-  Star,
   Store,
   X,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Link, useSearchParams } from "react-router";
+import { useNavigate, useSearchParams } from "react-router";
 import { toast } from "sonner";
 
 const PAGE_SIZE = 24;
@@ -77,6 +74,7 @@ export default function ShopProducts() {
   const { add } = useCart();
   const { t } = useLanguage();
   const { track } = useTracking();
+  const navigate = useNavigate();
 
   const q = params.get("q") ?? "";
   const category = params.get("category") ?? "all";
@@ -149,9 +147,34 @@ export default function ShopProducts() {
     });
   }, [q, category, t]);
 
+  // Initial catalog load — inline so no state is set synchronously in the
+  // effect body (the `load` callback above is reused by the retry button).
   useEffect(() => {
-    void load();
-  }, [load]);
+    let alive = true;
+    (async () => {
+      try {
+        const result = (await catalog({
+          q: q || undefined,
+          category: category !== "all" ? category : undefined,
+          shopId: shopId || undefined,
+          minPrice: minPrice ? Number(minPrice) : undefined,
+          maxPrice: maxPrice ? Number(maxPrice) : undefined,
+          inStock: inStock || undefined,
+          sortBy,
+          limit: PAGE_SIZE,
+          offset: (page - 1) * PAGE_SIZE,
+        })) as unknown as CatalogResult;
+        if (alive) setData(result);
+      } catch (err) {
+        if (alive) setError(err instanceof Error ? err.message : t("products.loadError"));
+      } finally {
+        if (alive) setLoading(false);
+      }
+    })();
+    return () => {
+      alive = false;
+    };
+  }, [catalog, q, category, shopId, minPrice, maxPrice, inStock, sortBy, page, t]);
 
   // CPNS: completed searches + category views are interest signals.
   const lastSearchTracked = useRef("");
@@ -455,9 +478,9 @@ export default function ShopProducts() {
             {/* Grid */}
             <div className="mt-5">
               {loading ? (
-                <div className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-3 xl:grid-cols-4">
+                <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-4">
                   {Array.from({ length: 8 }).map((_, i) => (
-                    <Skeleton key={i} className="h-72 rounded-2xl" />
+                    <Skeleton key={i} className="h-64 rounded-xl" />
                   ))}
                 </div>
               ) : error ? (
@@ -486,112 +509,28 @@ export default function ShopProducts() {
               ) : (
                 <>
                   <div className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-3 xl:grid-cols-4">
-                    {(data?.items ?? []).map((product) => {
-                      const available = product.inventory?.available ?? product.inventory?.quantity ?? 0;
-                      const outOfStock = available <= 0;
-                      const hasReviews = (product.reviewCount ?? 0) > 0 && product.rating != null;
-                      return (
-                        <div
-                          key={product.id}
-                          className="group flex flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white transition-all duration-200 hover:-translate-y-0.5 hover:shadow-[0_12px_30px_rgba(15,23,42,0.07)]"
-                        >
-                          <Link
-                            to={`/products/${product.id}`}
-                            className="relative block aspect-square w-full overflow-hidden bg-slate-50"
-                            aria-label={t("product.ariaViewDetail", { name: product.name })}
-                            onClick={() =>
-                              track("PRODUCT_CLICK", {
-                                entityId: product.id,
-                                value: product.name,
-                                context: { category: product.category },
-                              })
-                            }
-                          >
-                            {product.primaryImage ? (
-                              <img
-                                src={product.primaryImage.displayUrl}
-                                alt={product.primaryImage.alt || product.name}
-                                className="size-full object-cover transition-transform duration-300 group-hover:scale-105"
-                                loading="lazy"
-                              />
-                            ) : (
-                              <span className="flex size-full items-center justify-center">
-                                <ImageOff className="size-8 text-slate-300" />
-                              </span>
-                            )}
-                            {outOfStock && (
-                              <span className="absolute left-2 top-2 rounded-full bg-slate-900/70 px-2 py-0.5 text-[10px] font-semibold text-white backdrop-blur">
-                                {t("product.outOfStock")}
-                              </span>
-                            )}
-                            {product.soldCount != null && product.soldCount > 0 && (
-                              <span className="absolute bottom-2 right-2 rounded-full bg-slate-900/60 px-2 py-0.5 text-[10px] font-medium text-white backdrop-blur">
-                                {t("product.sold", { count: product.soldCount })}
-                              </span>
-                            )}
-                          </Link>
-                          <div className="flex flex-1 flex-col p-3.5 sm:p-4">
-                            <div className="flex items-start justify-between gap-2">
-                              <h3 className="line-clamp-2 text-sm font-semibold leading-5 text-slate-900">
-                                {product.name}
-                              </h3>
-                            </div>
-                            <div className="mt-1 flex min-h-4 flex-wrap items-center gap-x-2 gap-y-0.5">
-                              {hasReviews ? (
-                                <span className="flex items-center gap-0.5 text-xs text-amber-500">
-                                  <Star className="size-3 fill-amber-400 text-amber-400" />
-                                  <span className="font-semibold tabular-nums text-slate-700">
-                                    {Number(product.rating).toFixed(1)}
-                                  </span>
-                                  <span className="text-slate-400">({product.reviewCount})</span>
-                                </span>
-                              ) : null}
-                              {product.shopName && (
-                                <span className="flex min-w-0 items-center gap-0.5 text-[11px] text-slate-400">
-                                  <Store className="size-3 shrink-0" />
-                                  <span className="truncate">{product.shopName}</span>
-                                </span>
-                              )}
-                            </div>
-                            <p className="mt-2 text-base font-bold tabular-nums tracking-tight text-slate-900 sm:text-lg">
-                              {formatBaht(product.price)}
-                              <span className="ml-1 text-[11px] font-normal text-slate-400">
-                                {t("cart.perUnit", { unit: product.unit })}
-                              </span>
-                            </p>
-                            <p
-                              className={`mt-1 text-[11px] ${
-                                outOfStock ? "font-medium text-red-500" : "text-slate-400"
-                              }`}
-                            >
-                              {outOfStock
-                                ? t("product.outOfStock")
-                                : product.soldCount != null && product.soldCount > 0
-                                  ? t("product.soldShort", { count: product.soldCount })
-                                  : t("product.inStockShort")}
-                            </p>
-                            <div className="mt-3 flex items-center gap-2 border-t border-slate-100 pt-3">
-                              <Button
-                                size="sm"
-                                className="h-9 flex-1 gap-1.5 bg-slate-900 text-white hover:bg-slate-800 disabled:bg-slate-100 disabled:text-slate-400"
-                                disabled={outOfStock || product.price <= 0}
-                                onClick={() => {
-                                  add(
-                                    { id: product.id, name: product.name, unit: product.unit, price: product.price, stock: available },
-                                    1,
-                                  );
-                                  toast.success(t("cart.added", { name: product.name }));
-                                }}
-                              >
-                                <Plus className="size-3.5" />
-                                <span className="sm:hidden">{t("product.addToCartSm")}</span>
-                                <span className="hidden sm:inline">{t("product.addToCart")}</span>
-                              </Button>
-                            </div>
-                          </div>
-                        </div>
-                      );
-                    })}
+                    {(data?.items ?? []).map((product) => (
+                      <ProductCard
+                        key={product.id}
+                        product={product}
+                        onOpen={(p) => {
+                          track("PRODUCT_CLICK", {
+                            entityId: p.id,
+                            value: p.name,
+                            context: { category: p.category },
+                          });
+                          navigate(`/products/${p.id}`);
+                        }}
+                        onAdd={(p) => {
+                          const available = p.inventory?.available ?? p.inventory?.quantity ?? 0;
+                          add(
+                            { id: p.id, name: p.name, unit: p.unit, price: p.price, stock: available },
+                            1,
+                          );
+                          toast.success(t("cart.added", { name: p.name }));
+                        }}
+                      />
+                    ))}
                   </div>
 
                   {/* Pagination */}

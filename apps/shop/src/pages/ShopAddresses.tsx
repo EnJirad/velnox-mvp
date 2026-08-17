@@ -44,6 +44,8 @@ interface FormState {
   latitude: number | null;
   longitude: number | null;
   isDefault: boolean;
+  /** Coordinates are only valid once the customer confirms them on the map. */
+  locationConfirmed: boolean;
 }
 
 function formatAddress(a: AddressRow): string {
@@ -72,6 +74,7 @@ export default function ShopAddresses() {
     latitude: null,
     longitude: null,
     isDefault: false,
+    locationConfirmed: false,
   });
   const [submitting, setSubmitting] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
@@ -115,12 +118,16 @@ export default function ShopAddresses() {
       latitude: null,
       longitude: null,
       isDefault: false,
+      locationConfirmed: false,
     });
     setDialogOpen(true);
   };
 
   const openEdit = (a: AddressRow) => {
     setEditingId(a.id);
+    // An address that already carries coordinates starts pre-confirmed; if
+    // the customer moves the pin afterwards, confirmation resets (setCoord).
+    const hasCoords = a.latitude != null && a.longitude != null;
     setForm({
       label: a.label,
       recipientName: a.recipientName,
@@ -134,6 +141,7 @@ export default function ShopAddresses() {
       latitude: a.latitude,
       longitude: a.longitude,
       isDefault: a.isDefault,
+      locationConfirmed: hasCoords,
     });
     setDialogOpen(true);
   };
@@ -154,8 +162,10 @@ export default function ShopAddresses() {
       toast.error(t("addresses.postalRequired"));
       return;
     }
-    if (form.isDefault && (form.latitude == null || form.longitude == null)) {
-      toast.error(t("addresses.gpsDefaultRequired"));
+    // Coordinates are REQUIRED data for every address — the customer must
+    // pick and confirm a location on the map before we save (spec §39–43).
+    if (form.latitude == null || form.longitude == null || !form.locationConfirmed) {
+      toast.error(t("addresses.confirmLocationRequired"));
       return;
     }
     setSubmitting(true);
@@ -235,7 +245,8 @@ export default function ShopAddresses() {
     }
   };
 
-  const setCoord = (lat: number, lng: number) => setForm((f) => ({ ...f, latitude: lat, longitude: lng }));
+  const setCoord = (lat: number, lng: number) =>
+    setForm((f) => ({ ...f, latitude: lat, longitude: lng, locationConfirmed: false }));
 
   return (
     <div className="min-h-screen bg-[#F8FAFC] text-slate-900">
@@ -442,14 +453,14 @@ export default function ShopAddresses() {
             </div>
 
             <div className="grid gap-2">
-              <Label>
-                {t("addresses.mapLabel")}{" "}
-                {form.isDefault && <span className="text-amber-600">{t("addresses.mapRequiredNote")}</span>}
-              </Label>
+              <Label>{t("addresses.mapLabel")}</Label>
               <MapPicker
                 latitude={form.latitude}
                 longitude={form.longitude}
                 onChange={setCoord}
+                confirmed={form.locationConfirmed}
+                onConfirm={() => setForm((f) => ({ ...f, locationConfirmed: true }))}
+                autoLocate={editingId === null}
                 height="h-56"
               />
             </div>
