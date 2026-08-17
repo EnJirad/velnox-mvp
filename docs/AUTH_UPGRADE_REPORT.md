@@ -43,7 +43,11 @@ requires upgrading `@convex-dev/auth` and setting `GOOGLE_CLIENT_ID` /
 - OTP: 6 numeric digits from `crypto.getRandomValues`; lifetime 15 minutes
   (`maxAge`), matching the email copy and the client-side expiry mirror.
 - Email: branded HTML (inline styles), Thai copy, security warning, sender
-  `EMAIL_FROM` (falls back to Resend sandbox `onboarding@resend.dev`).
+  `EMAIL_FROM` — **required**, must be under a verified Resend domain
+  (production: `Velnox <no-reply@velnox.com>`). No sandbox fallback: the
+  sandbox sender 403s for every recipient except the account owner. If
+  `EMAIL_FROM` is unset, the server logs a safe config error and the user
+  sees the generic failure message.
 - Key: `FREEBUFF_EMAIL_API_KEY` — server-side Convex env var only, never in
   source, never a `VITE_*` var.
 

@@ -31,7 +31,8 @@
 | `CLOUDINARY_CLOUD_NAME` | `backend/storage.ts` | product image upload |
 | `CLOUDINARY_API_KEY` | `backend/storage.ts` | product image upload |
 | `CLOUDINARY_API_SECRET` | `backend/storage.ts` | product image upload |
-| `VLY_APP_NAME` | `convex/auth/emailOtp.ts` | OTP email sender label (has default) |
+| `FREEBUFF_EMAIL_API_KEY` | `convex/auth/emailOtp.ts` | **Resend API key** (`re_...`) — server-side only, never a `VITE_*` var. No key → OTP emails cannot be sent |
+| `EMAIL_FROM` | `convex/auth/emailOtp.ts` | **Required** sender under a verified Resend domain, e.g. `Velnox <no-reply@velnox.com>` (must be `velnox.com`, **not** Gmail, **not** `onboarding@resend.dev`). Resend only delivers from verified domains — the sandbox sender 403s for every recipient except the account owner. Missing → server logs a safe config error, users see the generic failure message |
 | `SITE_URL` | reserved for auth/SEO origin | canonical origin (e.g. `https://shop.velnox.com`) — single URL, never multi-value |
 
 Managed by Convex Auth (do not set manually): `JWT_PRIVATE_KEY`, `JWKS`.

@@ -13,13 +13,19 @@
  *     → authenticated session
  *
  * The API key is a SERVER-SIDE Convex env var only — never a VITE_* var, never
- * in source. Set on the Convex deployment (https://unique-clownfish-66.convex.cloud):
+ * in source. Set on the Convex deployment:
  *
  *   FREEBUFF_EMAIL_API_KEY  — Resend API key (re_...)
- *   EMAIL_FROM              — sender, e.g. "Velnox <no-reply@velnox.com>"
- *                             (optional; falls back to Resend's sandbox
- *                             sender "Velnox <onboarding@resend.dev>" so the
- *                             flow works before a custom domain is verified)
+ *   EMAIL_FROM              — REQUIRED sender under a VERIFIED domain, e.g.
+ *                             "Velnox <no-reply@velnox.com>" (domain velnox.com
+ *                             must be verified in the Resend account — DNS
+ *                             records SPF/DKIM). There is NO sandbox fallback:
+ *                             Resend's sandbox sender (onboarding@resend.dev)
+ *                             only delivers to the account owner's own email,
+ *                             which fails for every other recipient with HTTP
+ *                             403 validation_error. If EMAIL_FROM is unset the
+ *                             server logs a safe configuration error and the
+ *                             user sees the generic failure message.
  *
  * Error contract: technical detail (provider status, error bodies, request
  * ids) is logged server-side ONLY. Users only ever see the generic Thai
@@ -165,10 +171,19 @@ export const emailOtp = Email({
       );
       throw new Error(SEND_FAILED_MESSAGE);
     }
-    // EMAIL_FROM is optional: falls back to Resend's sandbox sender so the
-    // flow works before a custom domain is verified. Production should set a
-    // verified sender, e.g. "Velnox <no-reply@velnox.com>".
-    const from = process.env.EMAIL_FROM || "Velnox <onboarding@resend.dev>";
+    // EMAIL_FROM is REQUIRED and must be an address under a domain verified
+    // in the Resend account (e.g. "Velnox <no-reply@velnox.com>"). A sandbox
+    // fallback would silently 403 for every recipient except the account
+    // owner, so instead we fail fast with a safe configuration error — the
+    // technical detail stays in the server log, the user only ever sees the
+    // generic message (never the env-var name).
+    const from = process.env.EMAIL_FROM;
+    if (!from) {
+      console.error(
+        "[auth] EMAIL_FROM is not set on the Convex deployment — set it to a sender under the verified Resend domain, e.g. \"Velnox <no-reply@velnox.com>\"",
+      );
+      throw new Error(SEND_FAILED_MESSAGE);
+    }
     const expiresInMinutes = Math.max(
       1,
       Math.round((expires.getTime() - Date.now()) / 60000),
