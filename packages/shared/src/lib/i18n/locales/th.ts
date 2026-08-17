@@ -17,6 +17,7 @@ export const th = {
     products: "สินค้า",
     items: "รายการ",
     notFound: "ไม่พบสิ่งที่ต้องการ",
+    notFoundDesc: "หน้าที่คุณกำลังหาอาจถูกย้าย ลบ หรือยังไม่มีในระบบ",
     confirm: "ยืนยัน",
     remove: "ลบ",
     edit: "แก้ไข",

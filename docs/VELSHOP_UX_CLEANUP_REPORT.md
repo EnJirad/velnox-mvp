@@ -17,6 +17,7 @@
 | **Address** (`ShopAddresses.tsx`) | บังคับ **ยืนยันพิกัด** ก่อนบันทึกทุกที่อยู่ |
 | **Cookie Consent** (`lib/cookie-consent.tsx` ใหม่) | banner + settings dialog + เก็บ localStorage |
 | **Cookie Policy** (`pages/CookiePolicy.tsx` ใหม่) | หน้า `/cookies` + ปุ่มเปิดตั้งค่า |
+| **404** (`@velnox/shared/pages/NotFound.tsx`) | เขียนใหม่จากหน้าเก่า (framer-motion + สี gray + ข้อความอังกฤษตายตัว) → ใช้ theme token (`bg-background`/`muted`) + i18n (`common.notFound` / `common.notFoundDesc` ใหม่ใน th/en/my) + ปุ่มกลับหน้าแรก — ใช้ร่วม velshop/velseller/velcenter |
 
 ## 2. Footer — ลดอะไรออกบ้าง
 
@@ -73,7 +74,7 @@ Cart/Checkout/Orders/OrderDetail/Tracking/VelRepeat/Wishlist/Notifications/Accou
 
 ## 9. Files ที่แก้/เพิ่ม
 
-แก้: `apps/shop/src/main.tsx` · `components/shop/ShopHeader.tsx` · `ShopFooter.tsx` · `MapPicker.tsx` · `pages/ShopHome.tsx` · `ShopProducts.tsx` · `ShopAddresses.tsx` · `packages/shared/src/lib/i18n/locales/{th,en,index}.ts`
+แก้: `apps/shop/src/main.tsx` · `components/shop/ShopHeader.tsx` · `ShopFooter.tsx` · `MapPicker.tsx` · `pages/ShopHome.tsx` · `ShopProducts.tsx` · `ShopAddresses.tsx` · `packages/shared/src/pages/NotFound.tsx` · `packages/shared/src/lib/i18n/locales/{th,en,my}.ts` (เพิ่ม `common.notFoundDesc`)
 เพิ่ม: `components/shop/ProductCard.tsx` · `lib/cookie-consent.tsx` · `pages/CookiePolicy.tsx` · `docs/VELSHOP_UX_CLEANUP_REPORT.md`
 
 ## 10. หมายเหตุ

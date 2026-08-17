@@ -1,26 +1,35 @@
-import { motion } from "framer-motion";
+import { Logo } from "@velnox/shared/components/Logo";
+import { Button } from "@velnox/shared/components/ui/button";
+import { useLanguage } from "@velnox/shared/lib/i18n";
+import { Compass } from "lucide-react";
+import { Link } from "react-router";
 
+/**
+ * Shared 404 page (rendered inside each app's router: velshop, velseller,
+ * velcenter). Matches the clean slate design system and the app theme tokens
+ * so it looks native in every app, in both light and dark mode.
+ */
 export default function NotFound() {
-  return (
-    <motion.div
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      transition={{ duration: 0.5 }}
-      className="min-h-screen flex flex-col"
-    >
+  const { t } = useLanguage();
 
-      
-      {/* Main Content */}
-      <div className="flex-1 flex flex-col items-center justify-center">
-        <div className="max-w-5xl mx-auto relative px-4">
-          <div className="flex items-center justify-center min-h-[200px]">
-            <div className="text-center">
-              <h1 className="text-4xl font-bold text-gray-900 mb-4">404</h1>
-              <p className="text-lg text-gray-600">Page Not Found</p>
-            </div>
-          </div>
-        </div>
+  return (
+    <div className="flex min-h-screen flex-col bg-background text-foreground">
+      <div className="flex flex-1 flex-col items-center justify-center px-4 py-16 text-center">
+        <Logo />
+
+        <span className="mt-10 flex size-14 items-center justify-center rounded-2xl bg-muted">
+          <Compass className="size-7 text-muted-foreground" />
+        </span>
+        <h1 className="mt-5 text-2xl font-bold tracking-tight">
+          404 — {t("common.notFound")}
+        </h1>
+        <p className="mt-2 max-w-sm text-sm leading-6 text-muted-foreground">
+          {t("common.notFoundDesc")}
+        </p>
+        <Button className="mt-6 gap-1.5" asChild>
+          <Link to="/">{t("common.back")}</Link>
+        </Button>
       </div>
-    </motion.div>
+    </div>
   );
 }

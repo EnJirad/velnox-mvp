@@ -16,6 +16,7 @@ export const en: Dict = {
     products: "Products",
     items: "items",
     notFound: "Not found",
+    notFoundDesc: "The page you're looking for may have moved, been removed, or doesn't exist yet",
     confirm: "Confirm",
     remove: "Remove",
     edit: "Edit",
