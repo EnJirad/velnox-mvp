@@ -1,7 +1,13 @@
 # Velnox — Production-Grade Authentication / Login UX Upgrade
 
+> ⚠️ **SUPERSEDED 2026-08-17** — Primary login is now **Google OAuth** (see
+> [`GOOGLE_OAUTH_UPGRADE_REPORT.md`](./GOOGLE_OAUTH_UPGRADE_REPORT.md)); the Email
+> OTP flow below is kept as a **back-end fallback only** (`EMAIL_OTP_ENABLED=false`
+> by default, no OTP UI). This report documents the OTP implementation for
+> reference/history.
+
 > Date: 2026-08-17
-> Scope: Email OTP 2-step sign-in (password-less for customers), production-grade
+> Scope (historical): Email OTP 2-step sign-in (password-less for customers), production-grade
 > UX for VelShop / VelSeller / VelCenter. No fake UI — every action calls the
 > real Convex Auth backend (`auth:signIn`), which sends real OTP emails through
 > Resend and creates real sessions.

@@ -82,4 +82,4 @@ npx convex deploy --cmd 'bun run build' --prod
 
 ## 9. Post-Deploy Smoke Test (§62)
 
-เปิดทั้ง 4 เว็บ: homepage · login (OTP) · product/cart/checkout (staging data หรือ test seller) · center dashboard — ตาม `docs/E2E-TESTING.md`
+เปิดทั้ง 4 เว็บ: homepage · login (Google OAuth) · product/cart/checkout (staging data หรือ test seller) · center dashboard — ตาม `docs/E2E-TESTING.md`

@@ -31,9 +31,13 @@
 | `CLOUDINARY_CLOUD_NAME` | `backend/storage.ts` | product image upload |
 | `CLOUDINARY_API_KEY` | `backend/storage.ts` | product image upload |
 | `CLOUDINARY_API_SECRET` | `backend/storage.ts` | product image upload |
-| `FREEBUFF_EMAIL_API_KEY` | `convex/auth/emailOtp.ts` | **Resend API key** (`re_...`) — server-side only, never a `VITE_*` var. No key → OTP emails cannot be sent |
-| `EMAIL_FROM` | `convex/auth/emailOtp.ts` | **Required** sender under a verified Resend domain, e.g. `Velnox <no-reply@velnox.com>` (must be `velnox.com`, **not** Gmail, **not** `onboarding@resend.dev`). Resend only delivers from verified domains — the sandbox sender 403s for every recipient except the account owner. Missing → server logs a safe config error, users see the generic failure message |
-| `SITE_URL` | reserved for auth/SEO origin | canonical origin (e.g. `https://shop.velnox.com`) — single URL, never multi-value |
+| `GOOGLE_CLIENT_ID` | `convex/auth.ts` | **Required for Google Sign-In** (primary login method) — OAuth Client ID (public by design, but set server-side) |
+| `GOOGLE_CLIENT_SECRET` | `convex/auth.ts` | **Required** — OAuth Client Secret. **Never** in `VITE_*`/git; Convex deployment env only |
+| `AUTH_ALLOWED_ORIGINS` | `convex/auth_redirect.ts` | Optional JSON array of post-OAuth redirect origins (default = 4 production domains + localhost) |
+| `EMAIL_OTP_ENABLED` | `convex/auth.ts` | Default `"false"` — Google OAuth ON, Email OTP OFF (backend kept; set `"true"` to re-enable) |
+| `FREEBUFF_EMAIL_API_KEY` | `convex/auth/emailOtp.ts` | **Only if Email OTP is enabled** — **Resend API key** (`re_...`), server-side only, never a `VITE_*` var |
+| `EMAIL_FROM` | `convex/auth/emailOtp.ts` | **Required if Email OTP is enabled** — sender under a verified Resend domain, e.g. `Velnox <no-reply@velnox.com>` (must be `velnox.com`, **not** Gmail, **not** `onboarding@resend.dev`). Resend only delivers from verified domains — the sandbox sender 403s for every recipient except the account owner. Missing → server logs a safe config error, users see the generic failure message |
+| `SITE_URL` | `convex/auth_redirect.ts` + Stripe return URL | canonical origin (e.g. `https://shop.velnox.com`) — single URL, never multi-value |
 
 Managed by Convex Auth (do not set manually): `JWT_PRIVATE_KEY`, `JWKS`.
 
@@ -49,6 +53,7 @@ Managed by Convex Auth (do not set manually): `JWT_PRIVATE_KEY`, `JWKS`.
 
 - [ ] `VITE_CONVEX_URL` in all four Vercel projects points to the production Convex deployment
 - [ ] `DATABASE_URL` is the production Neon URL, set only in the Convex deployment env
+- [ ] `GOOGLE_CLIENT_ID` + `GOOGLE_CLIENT_SECRET` set in the Convex deployment env, and the Google Cloud OAuth Client includes the `/api/auth/callback/google` redirect URI (see `docs/GOOGLE_OAUTH_UPGRADE_REPORT.md`)
 - [ ] No `.env*` committed; `git status` clean of secrets
 - [ ] No `process.env.<SECRET>` referenced from any `apps/*/src` or `packages/shared/src`
 - [ ] Rotate any leaked credential immediately

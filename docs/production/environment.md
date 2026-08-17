@@ -7,12 +7,15 @@ Version: 1.0 · Phase 9 — รายละเอียดเต็ม: [`../ENV
 | ตัวแปร | ใช้ทำอะไร | จำเป็น |
 |---|---|---|
 | `DATABASE_URL` | Neon connection (prod DB) | ✅ |
-| `SITE_URL` | Auth redirects | ✅ |
-| `JWT_PRIVATE_KEY` | Convex Auth signing | ✅ |
-| `JWKS` | Convex Auth public keys | ✅ |
+| `SITE_URL` | fallback origin สำหรับ redirect หลัง OAuth (single URL) | ✅ |
+| `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | **Google Sign-In (วิธีล็อกอินหลัก)** — OAuth Client จาก Google Cloud; secret อยู่ฝั่ง server เท่านั้น + ตั้ง redirect URI `/api/auth/callback/google` ใน Google Cloud Console (ดู `docs/GOOGLE_OAUTH_UPGRADE_REPORT.md`) | ✅ |
+| `AUTH_ALLOWED_ORIGINS` | (ทางเลือก) JSON array ของ origins ที่ redirect หลัง OAuth ได้ | optional |
+| `EMAIL_OTP_ENABLED` | ปิด default (`"false"`) — Google OAuth = ON, Email OTP = OFF; ตั้ง `"true"` เพื่อเปิด | optional |
+| `JWT_PRIVATE_KEY` | Convex Auth signing (Convex จัดการ) | ✅ |
+| `JWKS` | Convex Auth public keys (Convex จัดการ) | ✅ |
 | `CLOUDINARY_CLOUD_NAME` / `_API_KEY` / `_API_SECRET` | product image storage | ✅ |
-| `FREEBUFF_EMAIL_API_KEY` | OTP sign-in email (velshop) — ตั้งค่าเป็น **Resend API key** (`re_...`) — server-only | ✅ |
-| `EMAIL_FROM` | sender ของ OTP email เช่น `Velnox <no-reply@velnox.com>` (domain ต้อง verify กับ Resend; ไม่ตั้ง = fallback เป็น sandbox sender) | เปิด production เท่านั้น |
+| `FREEBUFF_EMAIL_API_KEY` | **เฉพาะเมื่อเปิด Email OTP** — Resend API key (`re_...`) — server-only | เปิดฟีเจอร์เท่านั้น |
+| `EMAIL_FROM` | sender ของ OTP email เช่น `Velnox <no-reply@velnox.com>` (domain ต้อง verify กับ Resend; ไม่ตั้ง = fail อย่างปลอดภัย ไม่มี sandbox fallback) | เปิดฟีเจอร์เท่านั้น |
 | `STRIPE_SECRET_KEY` | ชำระเงินออนไลน์ (วิธี "online" — บัตร/PromptPay, hosted Checkout) — ถ้าไม่มี วิธีนี้ถูกซ่อน + fallback manual | เปิดฟีเจอร์เท่านั้น |
 | `STRIPE_WEBHOOK_SECRET` | verify signature webhook `/stripe/webhook` (Stripe Dashboard ต้องตั้ง endpoint ชี้ `<convex-url>/stripe/webhook`) | เปิดฟีเจอร์เท่านั้น |
 | `BOOTSTRAP_OWNER_SECRET` | รหัสเปิดใช้งานเจ้าของบริษัทครั้งเดียว (velcenter) — ≥16 ตัวอักษร, ใช้แล้วปิดถาวร (มี owner แล้วใช้ซ้ำไม่ได้) | ตั้งก่อนเปิด velcenter ครั้งแรก |

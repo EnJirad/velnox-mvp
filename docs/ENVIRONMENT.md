@@ -29,8 +29,12 @@ Version: 1.0 · Phase 7
 | `CLOUDINARY_CLOUD_NAME` | `src/backend/storage.ts` | `velnox` | product image storage |
 | `CLOUDINARY_API_KEY` | `src/backend/storage.ts` | `123...` | |
 | `CLOUDINARY_API_SECRET` | `src/backend/storage.ts` | `abc...` | |
-| `SITE_URL` | (auth/SEO อนาคต) | `https://velnox.com` | ตั้งที่ hosting platform |
-| `FREEBUFF_EMAIL_API_KEY` | `convex/auth/emailOtp.ts` | `re_...` | **จำเป็นสำหรับ OTP email** — ตั้งค่าเป็น **Resend API key** (ชื่อตัวแปรคงเดิมเพื่อความเข้ากันได้) ถ้าไม่มี key นี้ การส่ง OTP จะ fail และผู้ใช้เห็นข้อความ generic (รายละเอียด technical อยู่ใน server log เท่านั้น) |
+| `SITE_URL` | `convex/auth_redirect.ts` + Stripe return URL | `https://shop.velnox.com` | fallback origin สำหรับ redirect หลัง OAuth (single URL — ไม่ใช่ multi-value) |
+| `GOOGLE_CLIENT_ID` | `convex/auth.ts` (Google OAuth) | `1234567890-abc.apps.googleusercontent.com` | **จำเป็นสำหรับ Google Sign-In** (วิธีล็อกอินหลัก) — Client ID เปิดเผยได้ (ตาม OAuth design) แต่ตั้งไว้ที่ Convex env ฝั่ง server |
+| `GOOGLE_CLIENT_SECRET` | `convex/auth.ts` (Google OAuth) | `GOCSPX-...` | **จำเป็น** — secret ของ Google OAuth Client **ห้าม**ใส่ใน `VITE_*`/git; ตั้งที่ Keys/API keys UI เท่านั้น |
+| `AUTH_ALLOWED_ORIGINS` | `convex/auth_redirect.ts` | `["https://shop.velnox.com",...]` | ทางเลือก — JSON array ของ origins ที่ redirect ได้หลัง OAuth (ค่าเริ่มต้น = 4 domains prod + localhost) |
+| `EMAIL_OTP_ENABLED` | `convex/auth.ts` | `"false"` | **ค่าเริ่มต้น `"false"`** — Google OAuth = ON, Email OTP = OFF (backend เก็บไว้ เปิดได้ด้วย `"true"`) |
+| `FREEBUFF_EMAIL_API_KEY` | `convex/auth/emailOtp.ts` | `re_...` | **เฉพาะเมื่อเปิด Email OTP** — ตั้งค่าเป็น **Resend API key** (ชื่อตัวแปรคงเดิมเพื่อความเข้ากันได้) ถ้าไม่มี key นี้ การส่ง OTP จะ fail และผู้ใช้เห็นข้อความ generic (รายละเอียด technical อยู่ใน server log เท่านั้น) |
 | `EMAIL_FROM` | `convex/auth/emailOtp.ts` | `Velnox <no-reply@velnox.com>` | **จำเป็น (required)** ผู้ส่งอีเมล OTP — ต้องเป็น address ภายใต้ domain ที่ verify กับ Resend แล้ว (เช่น `velnox.com`) **ห้ามใช้ Gmail หรือ sandbox `onboarding@resend.dev`** (sandbox ส่งได้เฉพาะอีเมลเจ้าของ account — recipient อื่นเจอ HTTP 403). ถ้าไม่ตั้ง → server log configuration error อย่างปลอดภัย และผู้ใช้เห็นข้อความ generic (ไม่ expose secret) |
 | `STRIPE_SECRET_KEY` | `backend/stripe.ts` | `sk_test_...` | **ชำระเงินออนไลน์ (วิธี "online" — บัตร/PromptPay)** — ถ้าไม่มี key นี้ วิธีชำระออนไลน์จะซ่อนใน checkout และทุกอย่าง fallback เป็น manual เหมือนเดิม |
 | `STRIPE_WEBHOOK_SECRET` | `backend/stripeVerify.ts` | `whsec_...` | จำเป็นเมื่อเปิดชำระเงินออนไลน์ — ใช้ verify signature ของ webhook `/stripe/webhook` (ตั้ง webhook endpoint ใน Stripe Dashboard ชี้ `<convex-url>/stripe/webhook`, event: `checkout.session.completed` + `checkout.session.async_payment_succeeded/failed`) |
@@ -48,7 +52,8 @@ Version: 1.0 · Phase 7
 1. **Convex env (backend)**: หน้า Keys/API keys UI ของโปรเจกต์ → paste `DATABASE_URL`, `CLOUDINARY_*`
 2. **Frontend env**: hosting platform (Vercel project env) → `VITE_CONVEX_URL` ต่อโปรเจกต์ทั้ง 4
 3. **อย่าแก้ `.env.example` ผ่าน code** — platform ล็อกไฟล์ (ตัวแปรทั้งหมดอธิบายไว้ใน `INSTALL_AND_USAGE.md` §6.7)
-4. **OTP email (velshop sign-in)**: ตั้ง `FREEBUFF_EMAIL_API_KEY` ใน Keys/API keys UI โดยใส่ค่าเป็น **Resend API key** (`re_...`) — คีย์นี้อยู่ฝั่ง server เท่านั้น ห้ามขึ้น frontend/`VITE_*`; ตั้ง `EMAIL_FROM` (optional) ด้วย sender ที่ verify domain แล้ว (เช่น `Velnox <no-reply@velnox.com>`) เพื่อส่งอีเมลจาก domain จริง
+4. **Google Sign-In (velshop/velseller/velcenter — วิธีหลัก)**: ตั้ง `GOOGLE_CLIENT_ID` + `GOOGLE_CLIENT_SECRET` ใน Keys/API keys UI (จาก Google Cloud OAuth Client — ดู `docs/GOOGLE_OAUTH_UPGRADE_REPORT.md` หัวข้อ Google Cloud Console) + เพิ่ม redirect URI `https://<deployment>.convex.site/api/auth/callback/google` ใน Google Cloud Console; ทางเลือก `AUTH_ALLOWED_ORIGINS` / `SITE_URL`
+5. **Email OTP (สำรอง — ปิด default)**: ถ้าจะเปิด `EMAIL_OTP_ENABLED=true` ให้ตั้ง `FREEBUFF_EMAIL_API_KEY` (Resend API key `re_...`) + `EMAIL_FROM` (sender ที่ verify domain แล้ว เช่น `Velnox <no-reply@velnox.com>`) — คีย์อยู่ฝั่ง server เท่านั้น ห้ามขึ้น frontend/`VITE_*`
 5. **ชำระเงินออนไลน์ (velshop checkout)**: ตั้ง `STRIPE_SECRET_KEY` + `STRIPE_WEBHOOK_SECRET` + `SITE_URL` (สำหรับ return URL หลังชำระเงิน) — ทั้งหมดอยู่ฝั่ง server เท่านั้น
 
    **VelCenter — ตั้งเจ้าของบริษัท**: ตั้ง `BOOTSTRAP_OWNER_SECRET` (รหัสเปิดใช้งานครั้งเดียว ≥16 ตัว) ใน Keys/API keys UI → คนแรกที่เข้าหน้า velcenter และป้อนรหัสถูกต้องได้สิทธิ์ COMPANY_OWNER (กลไกใช้ครั้งเดียว — ตั้ง owner แล้วรหัสใช้ไม่ได้อีก) เจ้าของสร้างพนักงาน/สิทธิ์ต่อที่หน้า "พนักงาน"
@@ -58,8 +63,8 @@ Version: 1.0 · Phase 7
 - [ ] `VITE_CONVEX_URL` ชี้ production deployment ใน 4 เว็บ
 - [ ] `DATABASE_URL` = Neon production (ไม่ใช่ local)
 - [ ] `CLOUDINARY_*` ตั้งครบ (ถ้าเปิด upload)
-- [ ] `FREEBUFF_EMAIL_API_KEY` ตั้งแล้ว (ค่าเป็น Resend API key `re_...` — OTP email ทำงาน)
-- [ ] (production) `EMAIL_FROM` ตั้งแล้ว และ domain ของ sender verify กับ Resend แล้ว (ไม่ใช้ sandbox `onboarding@resend.dev`)
+- [ ] `GOOGLE_CLIENT_ID` + `GOOGLE_CLIENT_SECRET` ตั้งแล้ว (Convex env) และ Google Cloud Console มี redirect URI `/api/auth/callback/google` ครบ
+- [ ] (ถ้าเปิด Email OTP สำรอง) `FREEBUFF_EMAIL_API_KEY` + `EMAIL_FROM` ตั้งแล้ว และ domain ของ sender verify กับ Resend แล้ว (ไม่ใช้ sandbox `onboarding@resend.dev`)
 - [ ] (ถ้าเปิดชำระเงินออนไลน์) `STRIPE_SECRET_KEY` + `STRIPE_WEBHOOK_SECRET` + `SITE_URL` ตั้งครบ และ webhook endpoint ลงทะเบียนใน Stripe Dashboard
 - [ ] ไม่มี `.env*` ใน git (`git status` สะอาด)
 - [ ] ไม่มี secret ใน git history (ถ้าเคย leak → rotate ทันที §35)

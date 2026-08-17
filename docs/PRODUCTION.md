@@ -9,11 +9,11 @@ Version: 1.0 · Phase 7
 ### Build & Test
 - [x] `bun run build` ผ่าน (tsc -b && vite build — ไม่ต้อง login Convex CLI)
 - [x] `bunx convex dev --once` + `bunx tsc -b --noEmit` ผ่าน
-- [x] Unit tests 48 ผ่าน (`bun test`) — business rules, state machine, security/IDOR, validation/GPS, providers, velrepeat
+- [x] Unit tests 180 ผ่าน (`bun test`) — business rules, state machine, security/IDOR, validation/GPS, providers, velrepeat, auth-flow, Google OAuth redirect
 - [ ] E2E browser test ตาม `docs/E2E-TESTING.md` (manual ยังต้องทำจริงหลัง deploy)
 
 ### Auth & Security
-- [x] Authentication ใช้งานได้ (Email OTP + guest)
+- [x] Authentication ใช้งานได้ (Google OAuth — หลัก; Email OTP ปิด default; guest ยังมี)
 - [x] Authorization matrix ถูกต้อง (backend guards + tests)
 - [x] Critical dependency advisory แก้แล้ว (@auth/core 0.41.3, react-router 7.18.2)
 - [x] Rate limiting สำหรับ write actions (checkout/review/return/subscribe/cancel)
