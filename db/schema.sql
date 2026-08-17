@@ -46,6 +46,8 @@ CREATE TABLE IF NOT EXISTS users (
                 CHECK (role IN ('customer','seller','staff','admin','owner')),
   department    TEXT
                 CHECK (department IN ('marketing','sales','operations','finance','general')),
+  avatar_url    TEXT,                           -- profile photo (Cloudinary URL, metadata only)
+  cover_url     TEXT,                           -- profile cover photo (Cloudinary URL, metadata only)
   created_at    TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 

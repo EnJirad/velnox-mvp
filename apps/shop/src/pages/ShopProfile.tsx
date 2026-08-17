@@ -1,6 +1,17 @@
+import { ProfileImageUpload } from "@/components/shop/ProfileImageUpload";
 import { ShopFooter } from "@/components/shop/ShopFooter";
 import { ShopHeader } from "@/components/shop/ShopHeader";
 import { useLanguage } from "@/lib/i18n";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@velnox/shared/components/ui/alert-dialog";
 import { Button } from "@velnox/shared/components/ui/button";
 import { Skeleton } from "@velnox/shared/components/ui/skeleton";
 import { api } from "@convex/_generated/api";
@@ -9,6 +20,7 @@ import { useAction } from "convex/react";
 import {
   Bell,
   CalendarDays,
+  Camera,
   ChevronRight,
   CircleUserRound,
   Heart,
@@ -16,6 +28,7 @@ import {
   LogOut,
   MapPin,
   Package,
+  Pencil,
   RefreshCw,
   ShieldCheck,
   ShoppingBag,
@@ -51,8 +64,14 @@ export default function ShopProfile() {
     name: string | null;
     email: string | null;
     phone: string | null;
+    avatarUrl: string | null;
+    coverUrl: string | null;
     memberSince: number | null;
   } | null>(null);
+  const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
+  const [coverPreview, setCoverPreview] = useState<string | null>(null);
+  const [signOutOpen, setSignOutOpen] = useState(false);
+  const [signingOut, setSigningOut] = useState(false);
 
   useEffect(() => {
     if (!isAuthenticated) return;
@@ -64,12 +83,16 @@ export default function ShopProfile() {
           name: string | null;
           email: string | null;
           phone: string | null;
+          avatarUrl: string | null;
+          coverUrl: string | null;
           memberSince: number;
         };
         setProfile({
           name: data.name,
           email: data.email,
           phone: data.phone,
+          avatarUrl: data.avatarUrl ?? null,
+          coverUrl: data.coverUrl ?? null,
           memberSince: data.memberSince ?? null,
         });
       })
@@ -82,14 +105,32 @@ export default function ShopProfile() {
   }, [myProfile, isAuthenticated]);
 
   const handleSignOut = async () => {
-    await signOut();
-    setProfile(null);
-    toast.success(t("profile.signedOut"));
+    setSigningOut(true);
+    try {
+      await signOut();
+      setProfile(null);
+      toast.success(t("profile.signedOut"));
+    } finally {
+      setSigningOut(false);
+      setSignOutOpen(false);
+    }
+  };
+
+  const handleAvatarUploaded = (url: string) => {
+    setAvatarPreview(null);
+    setProfile((prev) => (prev ? { ...prev, avatarUrl: url || prev.avatarUrl } : prev));
+  };
+
+  const handleCoverUploaded = (url: string) => {
+    setCoverPreview(null);
+    setProfile((prev) => (prev ? { ...prev, coverUrl: url || prev.coverUrl } : prev));
   };
 
   const displayName = profile?.name ?? user?.name ?? user?.email ?? "";
   const displayEmail = profile?.email ?? user?.email ?? "";
   const memberSince = profile?.memberSince ?? null;
+  const avatarSrc = avatarPreview ?? profile?.avatarUrl ?? user?.image ?? null;
+  const coverSrc = coverPreview ?? profile?.coverUrl ?? null;
 
   const formatMemberSince = (ms: number) =>
     new Intl.DateTimeFormat("th-TH", { day: "numeric", month: "long", year: "numeric" }).format(
@@ -102,31 +143,85 @@ export default function ShopProfile() {
 
       <main className="mx-auto w-full max-w-2xl px-4 py-8 sm:px-6 sm:py-10">
         {isLoading ? (
+          // Skeleton mirrors the real layout (cover → avatar → info) so nothing jumps.
           <div className="space-y-4">
-            <Skeleton className="h-36 rounded-2xl" />
-            <Skeleton className="h-64 rounded-2xl" />
+            <div className="overflow-hidden rounded-3xl border border-slate-200 bg-white">
+              <Skeleton className="h-40 rounded-none sm:h-44" />
+              <div className="px-5 pb-6">
+                <div className="-mt-12">
+                  <Skeleton className="size-24 rounded-full border-4 border-white bg-slate-200" />
+                </div>
+                <Skeleton className="mt-4 h-6 w-44" />
+                <Skeleton className="mt-2 h-4 w-64" />
+                <Skeleton className="mt-6 h-10 w-36 rounded-[10px]" />
+              </div>
+            </div>
+            <Skeleton className="h-64 rounded-3xl" />
           </div>
         ) : isAuthenticated ? (
           <>
-            {/* Identity header — app-like account hub */}
+            {/* Identity header — cover · avatar · name/email · edit */}
             <section className="overflow-hidden rounded-3xl border border-slate-200 bg-white">
-              <div className="h-20 bg-gradient-to-r from-[#10B981] to-emerald-600" />
-              <div className="px-5 pb-5">
-                <div className="-mt-9 flex items-end justify-between">
-                  <span className="flex size-[72px] shrink-0 items-center justify-center rounded-2xl border-4 border-white bg-[#ECFDF5] text-2xl font-bold text-[#10B981] shadow-sm">
-                    {(displayName || "?").slice(0, 1).toUpperCase()}
-                  </span>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="gap-1.5 border-slate-200 text-slate-600 hover:border-rose-200 hover:bg-rose-50 hover:text-rose-600"
-                    onClick={() => void handleSignOut()}
+              {/* Cover */}
+              <div className="relative h-40 bg-gradient-to-r from-[#0f766e] via-[#10B981] to-[#34d399] sm:h-44">
+                {coverSrc ? (
+                  <img
+                    src={coverSrc}
+                    alt={t("profile.coverAlt", { name: displayName || "VelShop" })}
+                    className="absolute inset-0 size-full object-cover"
+                    onError={(e) => {
+                      // Spec §89: never show a broken image — fall back to the gradient.
+                      (e.currentTarget as HTMLImageElement).style.display = "none";
+                    }}
+                  />
+                ) : null}
+                <div className="absolute bottom-3 right-3">
+                  <ProfileImageUpload
+                    kind="cover"
+                    onPreview={setCoverPreview}
+                    onUploaded={handleCoverUploaded}
                   >
-                    <LogOut className="size-3.5" />
-                    {t("profile.signOut")}
-                  </Button>
+                    <>
+                      <Camera className="size-3.5" />
+                      {t("profile.changeCover")}
+                    </>
+                  </ProfileImageUpload>
                 </div>
-                <div className="mt-3 flex flex-wrap items-start justify-between gap-2">
+              </div>
+
+              {/* Avatar + info */}
+              <div className="px-5 pb-5">
+                <div className="relative -mt-12 flex w-fit">
+                  <span className="flex size-24 shrink-0 items-center justify-center overflow-hidden rounded-full border-4 border-white bg-[#ECFDF5] text-3xl font-bold text-[#10B981] shadow-sm">
+                    {avatarSrc ? (
+                      <img
+                        src={avatarSrc}
+                        alt={t("profile.avatarAlt", { name: displayName || "VelShop" })}
+                        className="size-full object-cover"
+                        onError={(e) => {
+                          // Spec §89: broken avatar → initial-letter fallback.
+                          (e.currentTarget as HTMLImageElement).style.display = "none";
+                        }}
+                      />
+                    ) : (
+                      (displayName || "?").slice(0, 1).toUpperCase()
+                    )}
+                  </span>
+                  <span className="absolute -bottom-1 -right-1">
+                    <ProfileImageUpload
+                      kind="avatar"
+                      onPreview={setAvatarPreview}
+                      onUploaded={handleAvatarUploaded}
+                    >
+                      <>
+                        <Camera className="size-3.5" />
+                        <span className="hidden sm:inline">{t("profile.changeAvatar")}</span>
+                      </>
+                    </ProfileImageUpload>
+                  </span>
+                </div>
+
+                <div className="mt-3 flex flex-wrap items-start justify-between gap-3">
                   <div className="min-w-0">
                     <p className="truncate text-lg font-bold text-slate-900">
                       {displayName || t("profile.member")}
@@ -145,18 +240,22 @@ export default function ShopProfile() {
                       )}
                     </div>
                   </div>
-                  <Link
-                    to="/profile/account"
-                    className="inline-flex shrink-0 items-center gap-1 text-sm font-medium text-[#10B981] hover:text-emerald-700"
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="shrink-0 gap-1.5 border-slate-200 text-slate-700"
+                    asChild
                   >
-                    {t("profile.editProfile")}
-                    <ChevronRight className="size-3.5" />
-                  </Link>
+                    <Link to="/profile/account">
+                      <Pencil className="size-3.5" />
+                      {t("profile.editProfile")}
+                    </Link>
+                  </Button>
                 </div>
               </div>
             </section>
 
-            {/* App-like tappable rows */}
+            {/* Menu rows */}
             <section className="mt-4 overflow-hidden rounded-3xl border border-slate-200 bg-white">
               {SECTIONS.map((s, i) => {
                 const Icon = s.icon;
@@ -180,6 +279,29 @@ export default function ShopProfile() {
                 );
               })}
             </section>
+
+            {/* Logout — separate bottom section, far from the menu (spec §85–86) */}
+            <section className="mt-4 overflow-hidden rounded-3xl border border-slate-200 bg-white">
+              <div className="px-5 py-4">
+                <p className="text-xs font-semibold uppercase tracking-wider text-slate-400">
+                  {t("profile.session")}
+                </p>
+                <Button
+                  variant="outline"
+                  className="mt-3 w-full gap-1.5 border-red-200 text-red-600 hover:bg-red-50 hover:text-red-600"
+                  onClick={() => setSignOutOpen(true)}
+                >
+                  <LogOut className="size-4" />
+                  {t("profile.signOut")}
+                </Button>
+              </div>
+            </section>
+
+            {/* Reassurance (honest — all real capabilities) */}
+            <p className="mt-6 flex items-center justify-center gap-1.5 text-center text-xs text-slate-400">
+              <ShoppingBag className="size-3.5 text-[#10B981]" />
+              {t("profile.accountNote")}
+            </p>
           </>
         ) : (
           <div className="mt-8 flex flex-col items-center rounded-2xl border border-dashed border-slate-300 bg-white px-6 py-16 text-center">
@@ -192,15 +314,27 @@ export default function ShopProfile() {
             </Button>
           </div>
         )}
-
-        {/* Reassurance (honest — all real capabilities) */}
-        {isAuthenticated && (
-          <p className="mt-6 flex items-center justify-center gap-1.5 text-center text-xs text-slate-400">
-            <ShoppingBag className="size-3.5 text-[#10B981]" />
-            {t("profile.accountNote")}
-          </p>
-        )}
       </main>
+
+      {/* Sign-out confirmation (spec §86) */}
+      <AlertDialog open={signOutOpen} onOpenChange={setSignOutOpen}>
+        <AlertDialogContent className="bg-white sm:max-w-sm">
+          <AlertDialogHeader>
+            <AlertDialogTitle className="text-slate-900">{t("profile.signOutTitle")}</AlertDialogTitle>
+            <AlertDialogDescription>{t("profile.signOutDesc")}</AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={signingOut}>{t("common.cancel")}</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-red-600 text-white hover:bg-red-700"
+              onClick={handleSignOut}
+              disabled={signingOut}
+            >
+              {t("profile.signOutConfirm")}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <ShopFooter />
     </div>

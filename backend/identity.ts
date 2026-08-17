@@ -45,6 +45,8 @@ export async function requireIdentity(ctx: ActionCtx): Promise<Identity> {
       name: rows[0].name ?? null,
       role: rows[0].role,
       department: rows[0].department ?? null,
+      avatarUrl: rows[0].avatar_url ?? null,
+      coverUrl: rows[0].cover_url ?? null,
       createdAt: rows[0].created_at,
     };
   }

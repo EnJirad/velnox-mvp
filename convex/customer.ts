@@ -41,6 +41,12 @@ import { AppError } from "../backend/errors";
 import { phoneSchema } from "../backend/validation";
 import { enforceRateLimit } from "./rateLimit";
 import type { Shop } from "../backend/types";
+import {
+  ALLOWED_IMAGE_FORMATS,
+  getStorage,
+  isStorageConfigured,
+  MAX_IMAGE_BYTES,
+} from "../backend/storage";
 
 /* eslint-disable @typescript-eslint/no-explicit-any -- DB row mappers */
 function mapShop(r: Record<string, any>): Shop & { productCount: number; orderCount: number; rating: number | null; reviewCount: number } {
@@ -183,7 +189,106 @@ export const myProfile = action({
       email: user.email,
       phone: user.phone,
       role: user.role,
+      avatarUrl: user.avatarUrl,
+      coverUrl: user.coverUrl,
       memberSince: user.createdAt,
+    };
+  },
+});
+
+// ---------------------------------------------------------------------------
+// profile images — storage (Cloudinary) + URL metadata (Neon users)
+// ---------------------------------------------------------------------------
+/**
+ * Step 1 of profile image upload: the signed-in customer asks the backend for
+ * a signed upload permit. The browser then POSTs the file straight to
+ * Cloudinary with these params (no binary bytes through our server) — the
+ * same provider and flow as product images (spec §90: reuse existing storage).
+ * File type + max size are enforced by Cloudinary via the signed params AND
+ * re-validated in saveProfileImage.
+ */
+export const getProfileImageUploadSignature = action({
+  args: { kind: v.string() },
+  handler: async (ctx, args) => {
+    const kind = args.kind === "cover" ? "cover" : "avatar";
+    if (!isStorageConfigured()) {
+      throw new Error(
+        "Image storage is not configured — set CLOUDINARY_CLOUD_NAME / CLOUDINARY_API_KEY / " +
+          "CLOUDINARY_API_SECRET in the project Keys/API keys UI.",
+      );
+    }
+    const { user } = await requireIdentity(ctx);
+    await enforceRateLimit(ctx, { name: "profile_image_upload", key: user.id, max: 30, windowMs: 3_600_000 });
+    const storage = getStorage();
+    const folder = `velnox/profiles/${user.id}`;
+    const publicId = `${kind}-${user.id.slice(0, 8)}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    return { kind, ...storage.getSignedUploadParams(folder, publicId) };
+  },
+});
+
+/**
+ * Step 2 of profile image upload: persist the URL of a successfully uploaded
+ * image on the signed-in customer's Neon users row. Re-validates file
+ * type/size server-side (never trust the frontend) and builds the canonical
+ * URL from the storage public id. Ownership is implicit — the row belongs to
+ * the authenticated identity (spec §91: no client-supplied userId).
+ */
+export const saveProfileImage = action({
+  args: {
+    kind: v.string(),
+    publicId: v.string(),
+    width: v.optional(v.number()),
+    height: v.optional(v.number()),
+    format: v.optional(v.string()),
+    bytes: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const kind = args.kind === "cover" ? "cover" : "avatar";
+    const { user } = await requireIdentity(ctx);
+    const format = (args.format ?? "").toLowerCase();
+    const allowed = ALLOWED_IMAGE_FORMATS.split(",");
+    if (!allowed.includes(format)) {
+      throw new AppError("INVALID_INPUT", `ไฟล์รูปประเภท .${format || "?"} ไม่ได้รับอนุญาต (รองรับ: ${ALLOWED_IMAGE_FORMATS})`);
+    }
+    if ((args.bytes ?? MAX_IMAGE_BYTES + 1) > MAX_IMAGE_BYTES) {
+      throw new AppError("INVALID_INPUT", "ไฟล์รูปใหญ่เกิน 5 MB");
+    }
+
+    const storage = getStorage();
+    const url = storage.originalUrl(args.publicId);
+    const column = kind === "cover" ? "cover_url" : "avatar_url";
+    const db = getDb();
+    await db(`UPDATE users SET ${column} = $2 WHERE id = $1`, [user.id, url]);
+
+    // Best-effort binary cleanup of the image this one replaces.
+    const oldUrl = kind === "cover" ? user.coverUrl : user.avatarUrl;
+    if (oldUrl && isStorageConfigured()) {
+      try {
+        const oldId = storage.extractPublicId(oldUrl);
+        if (oldId && oldId !== args.publicId) await storage.deleteFile(oldId);
+      } catch (err) {
+        console.error("[customer] profile image delete failed (row updated anyway):", err);
+      }
+    }
+
+    await audit(db, {
+      actorId: user.id,
+      actorRole: user.role,
+      action: kind === "cover" ? "CUSTOMER_UPDATED_COVER" : "CUSTOMER_UPDATED_AVATAR",
+      entityType: "user",
+      entityId: user.id,
+      after: { [column]: url },
+    });
+
+    const fresh = await requireIdentity(ctx);
+    return {
+      name: fresh.user.name,
+      email: fresh.user.email,
+      phone: fresh.user.phone,
+      role: fresh.user.role,
+      avatarUrl: fresh.user.avatarUrl,
+      coverUrl: fresh.user.coverUrl,
+      memberSince: fresh.user.createdAt,
     };
   },
 });

@@ -19,6 +19,8 @@ function mapUser(r: Record<string, any>): User {
     name: r.name ?? null,
     role: r.role,
     department: r.department ?? null,
+    avatarUrl: r.avatar_url ?? null,
+    coverUrl: r.cover_url ?? null,
     createdAt: toMs(r.created_at),
   };
 }

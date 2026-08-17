@@ -72,10 +72,21 @@ Cart/Checkout/Orders/OrderDetail/Tracking/VelRepeat/Wishlist/Notifications/Accou
 | Tablet (768/1024) | ✅ grid 3 คอลัมน์ |
 | Desktop (1280–1920) | ✅ max-w-6xl container, filter sidebar, 4 คอลัมน์ |
 
+## 8.5 Profile / Avatar / Cover + Auth Flash (spec §75–§110)
+
+- **Profile ใหม่** (`ShopProfile.tsx`): COVER → AVATAR (วงกลม, size-24) → ชื่อ/อีเมล/สมาชิกตั้งแต่ → [แก้ไขโปรไฟล์] → เมนู (ออเดอร์/VelRepeat/โปรด/ที่อยู่/แจ้งเตือน/บัญชี/ช่วยเหลือ) → **Logout แยก section ด้านล่างสุด** + AlertDialog ยืนยัน
+- **อัปโหลดรูป** (`ProfileImageUpload.tsx` ใหม่): เลือกไฟล์ → validate ประเภท (JPG/JPEG/PNG/WebP) + ขนาด ≤5 MB ฝั่ง client → preview ทันที (object URL) → ขอ signed params จาก `getProfileImageUploadSignature` → POST ตรงไป Cloudinary (ไม่ผ่าน server, reuse provider เดิม) → `saveProfileImage` (re-validate ฝั่ง server + เก็บ URL ใน Neon `users.avatar_url/cover_url`) → แสดงรูปใหม่ทันที
+- **Migration 014** (`db/migrations/014_profile_images.sql`): `ALTER TABLE users ADD COLUMN IF NOT EXISTS avatar_url/cover_url` (additive, idempotent) + อัปเดต `db/schema.sql`
+- **ความปลอดภัย**: เขียนได้เฉพาะตัวเอง (`requireIdentity`, ไม่มี client userId), ลบไฟล์เก่าบน Cloudinary แบบ best-effort, audit log
+- **Auth flash** (`packages/shared/src/pages/Auth.tsx`): ถ้า `authLoading || isAuthenticated` → แสดง loading state (logo + spinner) แทนฟอร์ม login — ไม่มี Login Page ค้าง, ไม่มี flash ตอน refresh / เปิด /profile ตรง / redirect ทันทีหลัง auth ยืนยัน (ใช้ auth state เป็น source of truth, ไม่ใช้ setTimeout)
+- RequireAuth เดิมตรวจสอบ Auth state ก่อน render protected page อยู่แล้ว (loading → redirect) — ไม่แตะระบบ auth/backend เดิม
+
 ## 9. Files ที่แก้/เพิ่ม
 
 แก้: `apps/shop/src/main.tsx` · `components/shop/ShopHeader.tsx` · `ShopFooter.tsx` · `MapPicker.tsx` · `pages/ShopHome.tsx` · `ShopProducts.tsx` · `ShopAddresses.tsx` · `packages/shared/src/pages/NotFound.tsx` · `packages/shared/src/lib/i18n/locales/{th,en,my}.ts` (เพิ่ม `common.notFoundDesc`)
-เพิ่ม: `components/shop/ProductCard.tsx` · `lib/cookie-consent.tsx` · `pages/CookiePolicy.tsx` · `docs/VELSHOP_UX_CLEANUP_REPORT.md`
+เพิ่ม: `components/shop/ProductCard.tsx` · `lib/cookie-consent.tsx` · `pages/CookiePolicy.tsx` · `components/shop/ProfileImageUpload.tsx` · `db/migrations/014_profile_images.sql` · `docs/VELSHOP_UX_CLEANUP_REPORT.md`
+
+**หลัง deploy ต้องรัน migration:** `DATABASE_URL=... bun run db:migrate` (เพิ่มคอลัมน์ `users.avatar_url` / `users.cover_url` — additive, ปลอดภัย ไม่แตะข้อมูลเดิม)
 
 ## 10. หมายเหตุ
 

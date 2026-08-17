@@ -32,6 +32,8 @@ export interface User {
   name: string | null;
   role: Role;
   department: Department | null;
+  avatarUrl: string | null;
+  coverUrl: string | null;
   createdAt: number;
 }
 

@@ -16,6 +16,7 @@ interface ProfileData {
   name: string | null;
   email: string | null;
   phone: string | null;
+  avatarUrl: string | null;
   memberSince: number | null;
 }
 
@@ -39,12 +40,14 @@ export default function ShopAccount() {
           name: string | null;
           email: string | null;
           phone: string | null;
+          avatarUrl: string | null;
           memberSince: number;
         };
         setProfile({
           name: data.name,
           email: data.email,
           phone: data.phone,
+          avatarUrl: data.avatarUrl ?? null,
           memberSince: data.memberSince ?? null,
         });
         setName(data.name ?? "");
@@ -86,6 +89,7 @@ export default function ShopAccount() {
         name: res.name,
         email: profile?.email ?? null,
         phone: res.phone,
+        avatarUrl: profile?.avatarUrl ?? null,
         memberSince: res.memberSince ?? profile?.memberSince ?? null,
       });
       setName(res.name ?? "");
@@ -132,8 +136,19 @@ export default function ShopAccount() {
             {/* Account summary */}
             <section className="mt-8 rounded-3xl border border-slate-200 bg-white p-5">
               <div className="flex items-center gap-3.5">
-                <span className="flex size-12 shrink-0 items-center justify-center rounded-2xl bg-[#ECFDF5] text-lg font-bold text-[#10B981]">
-                  {(profile?.name ?? "?").slice(0, 1).toUpperCase()}
+                <span className="flex size-12 shrink-0 items-center justify-center overflow-hidden rounded-full bg-[#ECFDF5] text-lg font-bold text-[#10B981]">
+                  {profile?.avatarUrl ? (
+                    <img
+                      src={profile.avatarUrl}
+                      alt=""
+                      className="size-full object-cover"
+                      onError={(e) => {
+                        (e.currentTarget as HTMLImageElement).style.display = "none";
+                      }}
+                    />
+                  ) : (
+                    (profile?.name ?? "?").slice(0, 1).toUpperCase()
+                  )}
                 </span>
                 <div className="min-w-0 flex-1">
                   <p className="flex items-center gap-1.5 truncate text-sm font-semibold text-slate-900">

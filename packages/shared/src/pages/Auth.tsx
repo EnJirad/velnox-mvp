@@ -201,6 +201,21 @@ function Auth() {
 
   const busy = signingIn || guestLoading;
 
+  // No login-form flash (spec §92–§97, §99–§100): while the session is still
+  // loading — or right after authentication resolved but before the redirect
+  // effect navigates — show a quiet loading state instead of the login form.
+  // The auth state is the source of truth; the form only ever renders for a
+  // confirmed UNAUTHENTICATED session.
+  if (authLoading || isAuthenticated) {
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center bg-background px-4">
+        <Logo />
+        <Loader2 className="mt-8 size-6 animate-spin text-muted-foreground" />
+        <p className="mt-3 text-sm text-muted-foreground">{t("common.loading")}</p>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen flex flex-col bg-background">
       {/* Auth Content — centered card on desktop, app-like on mobile */}
