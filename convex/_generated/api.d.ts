@@ -10,6 +10,7 @@
 
 import type * as auth from "../auth.js";
 import type * as auth_emailOtp from "../auth/emailOtp.js";
+import type * as auth_redirect from "../auth_redirect.js";
 import type * as center from "../center.js";
 import type * as centerAdmin from "../centerAdmin.js";
 import type * as commerce from "../commerce.js";
@@ -41,6 +42,7 @@ import type {
 declare const fullApi: ApiFromModules<{
   auth: typeof auth;
   "auth/emailOtp": typeof auth_emailOtp;
+  auth_redirect: typeof auth_redirect;
   center: typeof center;
   centerAdmin: typeof centerAdmin;
   commerce: typeof commerce;

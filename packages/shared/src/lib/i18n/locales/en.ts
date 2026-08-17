@@ -627,6 +627,17 @@ export const en: Dict = {
     employeePassword: "Password",
     employeeSubmit: "Sign in",
     employeeError: "Sign-in failed. Check your employee ID/email and password.",
+    // ---- Google OAuth (primary login) ----
+    welcome: "Welcome to Velnox",
+    googleDesc: "Sign in with your Google account",
+    googleContinue: "Continue with Google",
+    signingInGoogle: "Connecting to Google...",
+    googleError: "Unable to sign in with Google. Please try again.",
+    googleCancelled: "Sign-in was cancelled",
+    noAccess: "This account does not have access to this area",
+    terms: "By signing in you agree to the Terms of Service and Privacy Policy",
+    termsLink: "Terms of Service",
+    privacyLink: "Privacy Policy",
   },
 
   mapPicker: {

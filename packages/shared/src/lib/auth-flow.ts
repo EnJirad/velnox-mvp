@@ -127,3 +127,84 @@ export function classifyVerifyError(
 export function tickResendCountdown(seconds: number): number {
   return Math.max(0, seconds - 1);
 }
+
+// ---------------------------------------------------------------------------
+// Google OAuth sign-in (primary Velnox login — replaces email OTP in the UI)
+// ---------------------------------------------------------------------------
+
+/**
+ * sessionStorage marker set when a Google flow is started and inspected when
+ * the auth page mounts again: if we're back on /auth without a session and
+ * without an in-flight `code`, the user cancelled at Google's Account
+ * Chooser. Value is a timestamp so stale markers (e.g. the tab was closed
+ * mid-flow) can be ignored.
+ */
+export const GOOGLE_AUTH_START_KEY = "velnox.googleAuthStart";
+
+/** Stale-flow window: treat an unfinished flow as cancelled only within this. */
+export const GOOGLE_AUTH_START_MAX_AGE_MS = 10 * 60 * 1000;
+
+/** Error kinds the Auth page can present for Google sign-in failures. */
+export type GoogleAuthErrorKind = "cancelled" | "network" | "generic";
+
+/**
+ * Classify an error thrown by `signIn("google", ...)`. The OAuth flow
+ * itself redirects to Google, so errors here are transport/config failures
+ * (or the client's own errors) — never raw provider internals. Everything
+ * unknown maps to a safe generic message.
+ */
+export function classifyGoogleError(error: unknown): GoogleAuthErrorKind {
+  const message = errorMessage(error);
+  if (!message || isNetworkErrorMessage(message)) return "network";
+  if (/cancel/i.test(message)) return "cancelled";
+  return "generic";
+}
+
+/**
+ * Build the absolute `redirectTo` for signIn("google", ...). The browser
+ * must return to the SAME frontend origin that started the flow, so we pin
+ * the origin explicitly and keep the original returnTo (if any) as a query
+ * param for the auth page's post-sign-in redirect logic.
+ *
+ * Example: ("https://shop.velnox.com", "/checkout")
+ *   → "https://shop.velnox.com/auth?returnTo=%2Fcheckout"
+ */
+export function buildGoogleRedirectTo(
+  origin: string,
+  returnTo: string | null | undefined,
+): string {
+  const url = new URL("/auth", origin);
+  const safeReturnTo =
+    typeof returnTo === "string" &&
+    returnTo.startsWith("/") &&
+    !returnTo.startsWith("//")
+      ? returnTo
+      : "";
+  if (safeReturnTo !== "") url.searchParams.set("returnTo", safeReturnTo);
+  return url.toString();
+}
+
+/**
+ * True when an OAuth `code` is currently in the URL (the Convex Auth client
+ * consumes it on mount to finish the sign-in). While true, the auth page must
+ * NOT report the flow as cancelled.
+ */
+export function hasPendingOAuthCode(search: string): boolean {
+  return new URLSearchParams(search).has("code");
+}
+
+/**
+ * Decide whether a stale GOOGLE_AUTH_START marker counts as a cancellation.
+ * Returns the marker's timestamp when the flow is recent enough to report,
+ * or null when the marker is absent / too old / invalid.
+ */
+export function recentGoogleAuthStart(
+  raw: string | null,
+  now: number,
+): number | null {
+  if (raw === null) return null;
+  const startedAt = Number(raw);
+  if (!Number.isFinite(startedAt)) return null;
+  if (now - startedAt > GOOGLE_AUTH_START_MAX_AGE_MS) return null;
+  return startedAt;
+}

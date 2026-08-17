@@ -629,6 +629,17 @@ export const th = {
     employeePassword: "รหัสผ่าน",
     employeeSubmit: "เข้าสู่ระบบพนักงาน",
     employeeError: "เข้าสู่ระบบไม่สำเร็จ กรุณาตรวจสอบรหัสพนักงาน/อีเมลและรหัสผ่าน",
+    // ---- Google OAuth (primary login) ----
+    welcome: "ยินดีต้อนรับสู่ Velnox",
+    googleDesc: "เข้าสู่ระบบด้วยบัญชี Google ของคุณ",
+    googleContinue: "ดำเนินการต่อด้วย Google",
+    signingInGoogle: "กำลังเชื่อมต่อกับ Google...",
+    googleError: "ไม่สามารถเข้าสู่ระบบด้วย Google ได้ กรุณาลองใหม่",
+    googleCancelled: "การเข้าสู่ระบบถูกยกเลิก",
+    noAccess: "บัญชีนี้ไม่มีสิทธิ์เข้าถึงส่วนนี้",
+    terms: "การเข้าสู่ระบบแสดงว่าคุณยอมรับข้อกำหนดการใช้งานและนโยบายความเป็นส่วนตัว",
+    termsLink: "ข้อกำหนดการใช้งาน",
+    privacyLink: "นโยบายความเป็นส่วนตัว",
   },
 
   mapPicker: {

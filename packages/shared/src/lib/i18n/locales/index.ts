@@ -31,6 +31,17 @@ const myAuthPatch = {
   otpExpired: "ကုဒ်သက်တမ်းကုန်ပါပြီ ကုဒ်အသစ် တောင်းပါ",
   otpTooMany: "မှားယွင်းမှု များလွန်းပါသည် ကုဒ်အသစ် တောင်းပါ",
   verifySuccess: "အောင်မြင်စွာ ဝင်ရောက်ပြီးပါပြီ",
+  // ---- Google OAuth (primary login) ----
+  welcome: "Velnox မှ ကြိုဆိုပါသည်",
+  googleDesc: "သင့် Google အကောင့်ဖြင့် ဝင်ရောက်ပါ",
+  googleContinue: "Google ဖြင့် ဆက်လုပ်ရန်",
+  signingInGoogle: "Google သို့ ချိတ်ဆက်နေသည်...",
+  googleError: "Google ဖြင့် ဝင်ရောက်၍မရပါ ထပ်ကြိုးစားပါ",
+  googleCancelled: "ဝင်ရောက်မှုကို ပယ်ဖျက်လိုက်ပါသည်",
+  noAccess: "ဤအကောင့်သည် ဤနေရာကို ဝင်ရောက်ခွင့်မရှိပါ",
+  terms: "ဝင်ရောက်ခြင်းဖြင့် ဝန်ဆောင်မှုစည်းမျဉ်းနှင့် ကိုယ်ရေးအချက်အလက်မူဝါဒကို သဘောတူပါသည်",
+  termsLink: "ဝန်ဆောင်မှုစည်းမျဉ်း",
+  privacyLink: "ကိုယ်ရေးအချက်အလက်မူဝါဒ",
 } satisfies Partial<Dict["auth"]>;
 
 /**
