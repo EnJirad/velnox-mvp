@@ -1,14 +1,11 @@
 import { ShopHeader } from "@/components/shop/ShopHeader";
 import { ShopFooter } from "@/components/shop/ShopFooter";
 import { Button } from "@velnox/shared/components/ui/button";
-import { api } from "@convex/_generated/api";
 import { useAuth } from "@velnox/shared/hooks/use-auth";
 import { useCart } from "@/lib/cart";
 import { useLanguage } from "@/lib/i18n";
 import { formatBaht } from "@velnox/shared/lib/commerce";
-import { useAction } from "convex/react";
 import {
-  ArrowLeft,
   ImageOff,
   Loader2,
   Minus,
@@ -57,23 +54,16 @@ export default function ShopCart() {
     <div className="flex min-h-screen flex-col bg-[#F8FAFC] text-slate-900">
       <ShopHeader />
 
-      <main className="mx-auto w-full max-w-6xl flex-1 px-4 py-8 sm:px-6 sm:py-10">
-        <div className="flex items-center gap-3">
-          <Button variant="ghost" size="icon" className="size-10 text-slate-500" asChild>
-            <Link to="/" aria-label={t("cartPage.ariaBack")}>
-              <ArrowLeft className="size-4" />
-            </Link>
-          </Button>
-          <div>
-            <h1 className="text-2xl font-bold tracking-tight text-slate-900">{t("cart.title")}</h1>
-            <p className="mt-0.5 text-sm text-slate-500">
-              {syncing
-                ? t("cartPage.loading")
-                : count > 0
-                  ? t("cartPage.summary", { count, shops: grouped.length })
-                  : t("cartPage.allHere")}
-            </p>
-          </div>
+      <main className="mx-auto w-full max-w-6xl flex-1 px-4 py-8 pb-28 sm:px-6 sm:py-10 lg:pb-10">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight text-slate-900">{t("cart.title")}</h1>
+          <p className="mt-0.5 text-sm text-slate-500">
+            {syncing
+              ? t("cartPage.loading")
+              : count > 0
+                ? t("cartPage.summary", { count, shops: grouped.length })
+                : t("cartPage.allHere")}
+          </p>
         </div>
 
         {syncing ? (
@@ -217,6 +207,28 @@ export default function ShopCart() {
           </div>
         )}
       </main>
+
+      {/* Mobile sticky checkout bar (app-like) — total + checkout always in reach */}
+      {!syncing && lines.length > 0 && (
+        <div className="fixed inset-x-0 bottom-[calc(5rem+env(safe-area-inset-bottom))] z-30 px-3 lg:hidden">
+          <div className="mx-auto flex w-full max-w-md items-center justify-between gap-3 rounded-2xl border border-slate-200/80 bg-white/95 p-3 shadow-[0_10px_34px_rgba(15,23,42,0.16)] backdrop-blur">
+            <div className="min-w-0">
+              <p className="text-[11px] text-slate-400">{t("cartDrawer.totalLabel")}</p>
+              <p className="text-lg font-bold tabular-nums tracking-tight text-slate-900">
+                {formatBaht(total)}
+              </p>
+            </div>
+            <Button
+              className="h-12 flex-1 gap-1.5 rounded-xl bg-slate-900 text-white hover:bg-slate-800"
+              disabled={isLoading || count === 0}
+              onClick={handleCheckout}
+            >
+              <ShieldCheck className="size-4" />
+              {t("cart.checkout")}
+            </Button>
+          </div>
+        </div>
+      )}
 
       <ShopFooter />
     </div>

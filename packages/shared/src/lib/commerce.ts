@@ -61,6 +61,11 @@ export interface StoreProduct {
   inventory?: StoreInventory;
   shopName?: string;
   sellerName?: string;
+  /** real storefront stats (from the backend — never invented) */
+  soldCount?: number;
+  /** average published review rating (0–5), null = no reviews yet */
+  rating?: number | null;
+  reviewCount?: number;
 }
 
 export interface StoreShop {

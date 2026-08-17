@@ -6,7 +6,7 @@ import { Input } from "@velnox/shared/components/ui/input";
 import { useAuth } from "@velnox/shared/hooks/use-auth";
 import { useCart } from "@/lib/cart";
 import { useLanguage } from "@/lib/i18n";
-import { Bell, RefreshCw, Search, ShoppingCart, User } from "lucide-react";
+import { Bell, Heart, RefreshCw, Search, ShoppingCart, User } from "lucide-react";
 import { useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router";
 
@@ -109,6 +109,15 @@ export function ShopHeader() {
               <Bell className="size-5" />
             </Link>
           )}
+          {/* Wishlist — icon on every breakpoint (mobile: from the header, since
+              the bottom nav is fixed to Home/Products/Cart/Orders/Profile) */}
+          <Link
+            to="/wishlist"
+            className="flex size-10 items-center justify-center rounded-[10px] text-slate-600 transition-colors hover:bg-slate-100"
+            aria-label={t("header.ariaWishlist")}
+          >
+            <Heart className="size-5" />
+          </Link>
 
           {/* Desktop language selector shows the full label; mobile uses a
               compact icon-only trigger. One instance per breakpoint. */}

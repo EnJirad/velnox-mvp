@@ -60,6 +60,7 @@ const VelRepeatPage = lazy(() => import("@/pages/VelRepeatPage"));
 const ShopWishlist = lazy(() => import("@/pages/ShopWishlist"));
 const ShopAddresses = lazy(() => import("@/pages/ShopAddresses"));
 const ShopProfile = lazy(() => import("@/pages/ShopProfile"));
+const ShopAccount = lazy(() => import("@/pages/ShopAccount"));
 const ShopNotifications = lazy(() => import("@/pages/ShopNotifications"));
 const AuthPage = lazy(() => import("@velnox/shared/pages/Auth"));
 const NotFound = lazy(() => import("@velnox/shared/pages/NotFound"));
@@ -144,6 +145,14 @@ createRoot(document.getElementById("root")!).render(
                 element={
                   <RequireAuth>
                     <ShopProfile />
+                  </RequireAuth>
+                }
+              />
+              <Route
+                path="/profile/account"
+                element={
+                  <RequireAuth>
+                    <ShopAccount />
                   </RequireAuth>
                 }
               />

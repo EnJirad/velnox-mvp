@@ -38,6 +38,7 @@ import { categoryStats, listProducts } from "../backend/products";
 import { listReviewsByShop } from "../backend/reviews";
 import { audit } from "../backend/audit";
 import { AppError } from "../backend/errors";
+import { phoneSchema } from "../backend/validation";
 import { enforceRateLimit } from "./rateLimit";
 import type { Shop } from "../backend/types";
 
@@ -163,6 +164,90 @@ export const categoryTreeAction = action({
 export const categoryStatsAction = action({
   args: {},
   handler: async () => categoryStats(getDb()),
+});
+
+// ---------------------------------------------------------------------------
+// customer profile (Neon users — the business source of truth)
+// ---------------------------------------------------------------------------
+/**
+ * The signed-in customer's profile: identity + member-since (Neon users row,
+ * created on first sign-in). Ownership is implicit — the row is keyed by the
+ * authenticated Convex identity, never by a client-supplied userId.
+ */
+export const myProfile = action({
+  args: {},
+  handler: async (ctx) => {
+    const { user } = await requireIdentity(ctx);
+    return {
+      name: user.name,
+      email: user.email,
+      phone: user.phone,
+      role: user.role,
+      memberSince: user.createdAt,
+    };
+  },
+});
+
+/**
+ * Update the signed-in customer's profile (display name + phone). Validates
+ * server-side (never trusts the frontend), writes to the Neon users row of
+ * the authenticated identity only.
+ */
+export const updateProfileAction = action({
+  args: {
+    name: v.optional(v.string()),
+    phone: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const { user } = await requireIdentity(ctx);
+    const db = getDb();
+    const sets: string[] = [];
+    const values: unknown[] = [];
+
+    if (args.name !== undefined) {
+      const name = args.name.trim();
+      if (name.length < 2 || name.length > 80) {
+        throw new AppError("INVALID_INPUT", "ชื่อต้องยาว 2–80 ตัวอักษร");
+      }
+      sets.push(`name = $${sets.length + 1}`);
+      values.push(name);
+    }
+    if (args.phone !== undefined) {
+      const phone = args.phone.trim();
+      if (phone === "") {
+        sets.push(`phone = $${sets.length + 1}`);
+        values.push(null);
+      } else {
+        const parsed = phoneSchema.safeParse(phone);
+        if (!parsed.success) {
+          throw new AppError("INVALID_INPUT", "เบอร์โทรศัพท์ไม่ถูกต้อง");
+        }
+        sets.push(`phone = $${sets.length + 1}`);
+        values.push(phone);
+      }
+    }
+
+    if (sets.length > 0) {
+      values.push(user.id);
+      await db(`UPDATE users SET ${sets.join(", ")} WHERE id = $${values.length}`, values);
+      await audit(db, {
+        actorId: user.id,
+        actorRole: user.role,
+        action: "CUSTOMER_UPDATED_PROFILE",
+        entityType: "user",
+        entityId: user.id,
+        after: { name: args.name, phone: args.phone },
+      });
+    }
+    const fresh = await requireIdentity(ctx);
+    return {
+      name: fresh.user.name,
+      email: fresh.user.email,
+      phone: fresh.user.phone,
+      role: fresh.user.role,
+      memberSince: fresh.user.createdAt,
+    };
+  },
 });
 
 // ---------------------------------------------------------------------------

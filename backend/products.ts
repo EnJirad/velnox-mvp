@@ -46,6 +46,9 @@ function mapProduct(r: Record<string, any>): Product {
     updatedAt: toMs(r.updated_at),
     shopName: r.shop_name ?? undefined,
     sellerName: r.seller_name ?? undefined,
+    soldCount: r.sold_count != null ? Number(r.sold_count) : undefined,
+    rating: r.rating_score != null ? Number(r.rating_score) : null,
+    reviewCount: r.review_count != null ? Number(r.review_count) : undefined,
   };
 }
 
@@ -306,7 +309,8 @@ export async function catalogProducts(db: Db, opts: CatalogProductsOptions = {})
             pi.url AS primary_image_url, pi.storage_key AS primary_image_key,
             pi.storage_provider AS primary_image_provider,
             (SELECT COUNT(*)::int FROM order_items oi WHERE oi.product_id = p.id) AS sold_count,
-            (SELECT COALESCE(AVG(rating), 0)::float8 FROM reviews rv WHERE rv.product_id = p.id AND rv.status = 'published') AS rating_score
+            (SELECT COALESCE(AVG(rating), 0)::float8 FROM reviews rv WHERE rv.product_id = p.id AND rv.status = 'published') AS rating_score,
+            (SELECT COUNT(*)::int FROM reviews rv2 WHERE rv2.product_id = p.id AND rv2.status = 'published') AS review_count
      FROM products p
      JOIN shops s ON s.id = p.shop_id
      JOIN sellers sel ON sel.id = s.seller_id
@@ -426,12 +430,18 @@ export async function listProducts(db: Db, opts: ListProductsOptions = {}): Prom
     `SELECT p.*, s.name AS shop_name, sel.name AS seller_name,
             i.id AS inventory_id, i.quantity, i.reserved_quantity, i.reorder_level, i.warehouse,
             pi.url AS primary_image_url, pi.storage_key AS primary_image_key,
-            pi.storage_provider AS primary_image_provider
+            pi.storage_provider AS primary_image_provider,
+            sold_stats.sold AS sold_count,
+            review_stats.score AS rating_score,
+            review_stats.cnt AS review_count
      FROM products p
      JOIN shops s ON s.id = p.shop_id
      JOIN sellers sel ON sel.id = s.seller_id
      LEFT JOIN inventory i ON i.product_id = p.id
-     LEFT JOIN product_images pi ON pi.product_id = p.id AND pi.is_primary = true
+     LEFT JOIN product_images pi ON pi.product_id = p.id AND pi.is_primary = true,
+     LATERAL (SELECT COUNT(*)::int AS sold FROM order_items oi WHERE oi.product_id = p.id) AS sold_stats,
+     LATERAL (SELECT COALESCE(AVG(rating)::numeric, 0)::float8 AS score, COUNT(*)::int AS cnt
+              FROM reviews rv WHERE rv.product_id = p.id AND rv.status = 'published') AS review_stats
      ${whereSql}
      ORDER BY p.created_at DESC
      LIMIT $${values.length - 1} OFFSET $${values.length}`,

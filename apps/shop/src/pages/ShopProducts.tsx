@@ -1,6 +1,5 @@
 import { ShopHeader } from "@/components/shop/ShopHeader";
 import { ShopFooter } from "@/components/shop/ShopFooter";
-import { Badge } from "@velnox/shared/components/ui/badge";
 import { Button } from "@velnox/shared/components/ui/button";
 import { Checkbox } from "@velnox/shared/components/ui/checkbox";
 import { Input } from "@velnox/shared/components/ui/input";
@@ -11,7 +10,14 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@velnox/shared/components/ui/select";
-import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@velnox/shared/components/ui/sheet";
+import {
+  Sheet,
+  SheetClose,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+  SheetTrigger,
+} from "@velnox/shared/components/ui/sheet";
 import { Skeleton } from "@velnox/shared/components/ui/skeleton";
 import { api } from "@convex/_generated/api";
 import { useCart } from "@/lib/cart";
@@ -35,6 +41,7 @@ import {
   RotateCcw,
   Search,
   SlidersHorizontal,
+  Star,
   Store,
   X,
 } from "lucide-react";
@@ -199,6 +206,13 @@ export default function ShopProducts() {
 
   const hasFilters =
     q !== "" || category !== "all" || shopId !== "" || minPrice !== "" || maxPrice !== "" || inStock;
+
+  const activeFilterCount =
+    (category !== "all" ? 1 : 0) +
+    (shopId !== "" ? 1 : 0) +
+    (minPrice !== "" ? 1 : 0) +
+    (maxPrice !== "" ? 1 : 0) +
+    (inStock ? 1 : 0);
 
   const totalPages = Math.max(1, Math.ceil((data?.total ?? 0) / PAGE_SIZE));
   const pageNumbers = useMemo(() => {
@@ -379,23 +393,47 @@ export default function ShopProducts() {
                 )}
               </p>
               <div className="flex items-center gap-2">
-                {/* Mobile filter */}
+                {/* Mobile filter (full-screen sheet, safe spacing + sticky apply/reset) */}
                 <Sheet>
                   <SheetTrigger asChild>
                     <Button variant="outline" className="gap-1.5 border-slate-200 text-slate-600 lg:hidden">
                       <SlidersHorizontal className="size-4" />
                       {t("products.filters")}
-                      {hasFilters && <span className="size-1.5 rounded-full bg-[#10B981]" />}
+                      {activeFilterCount > 0 && (
+                        <span className="flex size-5 items-center justify-center rounded-full bg-[#10B981] text-[10px] font-bold text-white">
+                          {activeFilterCount}
+                        </span>
+                      )}
                     </Button>
                   </SheetTrigger>
-                  <SheetContent side="left" className="w-[300px] overflow-y-auto bg-white">
-                    <SheetHeader>
+                  <SheetContent side="left" className="flex w-[320px] flex-col bg-white p-0">
+                    <SheetHeader className="border-b border-slate-100 px-5 py-4">
                       <SheetTitle className="flex items-center gap-2 text-slate-900">
                         <Filter className="size-4 text-[#10B981]" />
                         {t("products.filterTitle")}
+                        {activeFilterCount > 0 && (
+                          <span className="ml-1 flex size-5 items-center justify-center rounded-full bg-[#10B981] text-[10px] font-bold text-white">
+                            {activeFilterCount}
+                          </span>
+                        )}
                       </SheetTitle>
                     </SheetHeader>
-                    <div className="mt-6">{FiltersPanel}</div>
+                    <div className="flex-1 overflow-y-auto px-5 py-5">{FiltersPanel}</div>
+                    <div className="flex gap-2 border-t border-slate-100 bg-white px-5 py-4">
+                      <Button
+                        variant="outline"
+                        className="flex-1 gap-1.5 border-slate-200 text-slate-600"
+                        onClick={resetFilters}
+                      >
+                        <RotateCcw className="size-3.5" />
+                        {t("products.resetFilters")}
+                      </Button>
+                      <SheetClose asChild>
+                        <Button className="flex-1 gap-1.5 bg-slate-900 text-white hover:bg-slate-800">
+                          {t("products.applyFilters")}
+                        </Button>
+                      </SheetClose>
+                    </div>
                   </SheetContent>
                 </Sheet>
 
@@ -417,9 +455,9 @@ export default function ShopProducts() {
             {/* Grid */}
             <div className="mt-5">
               {loading ? (
-                <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-                  {Array.from({ length: 9 }).map((_, i) => (
-                    <Skeleton key={i} className="h-80 rounded-2xl" />
+                <div className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-3 xl:grid-cols-4">
+                  {Array.from({ length: 8 }).map((_, i) => (
+                    <Skeleton key={i} className="h-72 rounded-2xl" />
                   ))}
                 </div>
               ) : error ? (
@@ -447,18 +485,19 @@ export default function ShopProducts() {
                 </div>
               ) : (
                 <>
-                  <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+                  <div className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-3 xl:grid-cols-4">
                     {(data?.items ?? []).map((product) => {
                       const available = product.inventory?.available ?? product.inventory?.quantity ?? 0;
                       const outOfStock = available <= 0;
+                      const hasReviews = (product.reviewCount ?? 0) > 0 && product.rating != null;
                       return (
                         <div
                           key={product.id}
-                          className="flex flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white transition-all duration-200 hover:-translate-y-0.5 hover:shadow-[0_12px_30px_rgba(15,23,42,0.07)]"
+                          className="group flex flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white transition-all duration-200 hover:-translate-y-0.5 hover:shadow-[0_12px_30px_rgba(15,23,42,0.07)]"
                         >
                           <Link
                             to={`/products/${product.id}`}
-                            className="block aspect-square w-full overflow-hidden bg-slate-50"
+                            className="relative block aspect-square w-full overflow-hidden bg-slate-50"
                             aria-label={t("product.ariaViewDetail", { name: product.name })}
                             onClick={() =>
                               track("PRODUCT_CLICK", {
@@ -472,7 +511,7 @@ export default function ShopProducts() {
                               <img
                                 src={product.primaryImage.displayUrl}
                                 alt={product.primaryImage.alt || product.name}
-                                className="size-full object-cover transition-transform duration-300 hover:scale-105"
+                                className="size-full object-cover transition-transform duration-300 group-hover:scale-105"
                                 loading="lazy"
                               />
                             ) : (
@@ -480,41 +519,61 @@ export default function ShopProducts() {
                                 <ImageOff className="size-8 text-slate-300" />
                               </span>
                             )}
+                            {outOfStock && (
+                              <span className="absolute left-2 top-2 rounded-full bg-slate-900/70 px-2 py-0.5 text-[10px] font-semibold text-white backdrop-blur">
+                                {t("product.outOfStock")}
+                              </span>
+                            )}
+                            {product.soldCount != null && product.soldCount > 0 && (
+                              <span className="absolute bottom-2 right-2 rounded-full bg-slate-900/60 px-2 py-0.5 text-[10px] font-medium text-white backdrop-blur">
+                                {t("product.sold", { count: product.soldCount })}
+                              </span>
+                            )}
                           </Link>
-                          <div className="flex flex-1 flex-col p-4">
+                          <div className="flex flex-1 flex-col p-3.5 sm:p-4">
                             <div className="flex items-start justify-between gap-2">
                               <h3 className="line-clamp-2 text-sm font-semibold leading-5 text-slate-900">
                                 {product.name}
                               </h3>
-                              <Badge className="shrink-0 rounded-full bg-slate-100 text-slate-500 ring-1 ring-inset ring-slate-600/10 hover:bg-slate-100">
-                                {PRODUCT_CATEGORY_META[product.category].label}
-                              </Badge>
                             </div>
-                            {product.shopName && (
-                              <p className="mt-1 flex items-center gap-1 text-xs text-slate-400">
-                                <Store className="size-3" />
-                                {product.shopName}
-                              </p>
-                            )}
-                            <p className="mt-3 text-lg font-bold tabular-nums tracking-tight text-slate-900">
+                            <div className="mt-1 flex min-h-4 flex-wrap items-center gap-x-2 gap-y-0.5">
+                              {hasReviews ? (
+                                <span className="flex items-center gap-0.5 text-xs text-amber-500">
+                                  <Star className="size-3 fill-amber-400 text-amber-400" />
+                                  <span className="font-semibold tabular-nums text-slate-700">
+                                    {Number(product.rating).toFixed(1)}
+                                  </span>
+                                  <span className="text-slate-400">({product.reviewCount})</span>
+                                </span>
+                              ) : null}
+                              {product.shopName && (
+                                <span className="flex min-w-0 items-center gap-0.5 text-[11px] text-slate-400">
+                                  <Store className="size-3 shrink-0" />
+                                  <span className="truncate">{product.shopName}</span>
+                                </span>
+                              )}
+                            </div>
+                            <p className="mt-2 text-base font-bold tabular-nums tracking-tight text-slate-900 sm:text-lg">
                               {formatBaht(product.price)}
-                              <span className="ml-1 text-xs font-normal text-slate-400">
+                              <span className="ml-1 text-[11px] font-normal text-slate-400">
                                 {t("cart.perUnit", { unit: product.unit })}
                               </span>
                             </p>
                             <p
-                              className={`mt-1 text-xs ${
+                              className={`mt-1 text-[11px] ${
                                 outOfStock ? "font-medium text-red-500" : "text-slate-400"
                               }`}
                             >
                               {outOfStock
                                 ? t("product.outOfStock")
-                                : t("product.inStock", { count: available, unit: product.unit })}
+                                : product.soldCount != null && product.soldCount > 0
+                                  ? t("product.soldShort", { count: product.soldCount })
+                                  : t("product.inStockShort")}
                             </p>
                             <div className="mt-3 flex items-center gap-2 border-t border-slate-100 pt-3">
                               <Button
                                 size="sm"
-                                className="flex-1 gap-1.5 bg-slate-900 text-white hover:bg-slate-800 disabled:bg-slate-100 disabled:text-slate-400"
+                                className="h-9 flex-1 gap-1.5 bg-slate-900 text-white hover:bg-slate-800 disabled:bg-slate-100 disabled:text-slate-400"
                                 disabled={outOfStock || product.price <= 0}
                                 onClick={() => {
                                   add(
@@ -525,7 +584,8 @@ export default function ShopProducts() {
                                 }}
                               >
                                 <Plus className="size-3.5" />
-                                {t("product.addToCartSm")}
+                                <span className="sm:hidden">{t("product.addToCartSm")}</span>
+                                <span className="hidden sm:inline">{t("product.addToCart")}</span>
                               </Button>
                             </div>
                           </div>

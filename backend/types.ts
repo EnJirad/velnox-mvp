@@ -111,6 +111,11 @@ export interface Product {
   /** joined for the storefront */
   shopName?: string;
   sellerName?: string;
+  /** real storefront stats (joined — never invented) */
+  soldCount?: number;
+  /** average published review rating (0–5, rounded to 1dp), null = no reviews */
+  rating?: number | null;
+  reviewCount?: number;
 }
 
 export interface Inventory {

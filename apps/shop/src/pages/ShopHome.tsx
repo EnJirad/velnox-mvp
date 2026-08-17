@@ -20,22 +20,33 @@ import { useTracking } from "@velnox/shared/lib/track";
 import { useAction } from "convex/react";
 import { motion } from "framer-motion";
 import {
+  ArrowRight,
   BellRing,
   CalendarClock,
+  Headset,
   Heart,
   History,
   ImageOff,
   Megaphone,
+  Package,
+  PackageOpen,
   Plus,
+  RefreshCw,
+  RotateCcw,
   Search,
+  ShieldCheck,
+  ShoppingBasket,
   ShoppingBag,
   Sparkles,
   Star,
   Store,
   TrendingUp,
+  Truck,
+  UtensilsCrossed,
+  type LucideIcon,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Link } from "react-router";
+import { Link, useNavigate } from "react-router";
 import { toast } from "sonner";
 
 interface RecommendedRow {
@@ -45,28 +56,15 @@ interface RecommendedRow {
   views: number;
 }
 
-interface ReorderReminderRow {
-  product: StoreProduct;
-  times: number;
-  avgCycleDays: number;
-  lastOrderedAt: number;
-  nextDueAt: number;
-  daysLeft: number;
-  emoji: string;
-}
-
-interface MemorySummary {
-  categories: { category: string; label: string; score: number; count: number }[];
-  searches: { q: string; count: number }[];
-  shops: { shopId: string; shopName: string; score: number; count: number }[];
-  intent: "low" | "medium" | "high";
-  eventCount: number;
-  viewCount: number;
-  purchaseCount: number;
-  cartAddCount: number;
-  wishlistCount: number;
-  checkoutCount: number;
-}
+/** Icon per product category — one consistent icon set (app-like). */
+const CATEGORY_ICONS: Record<StoreProductCategory, LucideIcon> = {
+  general: Package,
+  food: UtensilsCrossed,
+  daily: ShoppingBasket,
+  beauty: Sparkles,
+  packaging: PackageOpen,
+  other: Package,
+};
 
 /** Tiny loader for action-backed (non-reactive) data. */
 function useCommerceData<T>(load: () => Promise<T>) {
@@ -97,10 +95,10 @@ export default function ShopHome() {
   const recommendAction = useAction(api.memory.recommendForCustomer);
   const regularsAction = useAction(api.commerce.customerRegulars);
   const remindersAction = useAction(api.memory.dueReorderReminders);
-  const memoryAction = useAction(api.memory.myMemory);
   const publicShops = useAction(api.customer.publicShops);
   const recordInterest = useAction(api.commerce.recordInterest);
   const { track } = useTracking();
+  const navigate = useNavigate();
   const storefrontSettings = useAction(api.storefront.settings);
   const [settings, setSettings] = useState<{
     shopName?: string | null;
@@ -135,12 +133,8 @@ export default function ShopHome() {
   const remindersData = useCommerceData(
     useCallback(() => remindersAction(), [remindersAction]),
   );
-  const memoryData = useCommerceData(
-    useCallback(() => memoryAction(), [memoryAction]),
-  );
 
   const [query, setQuery] = useState("");
-  const [category, setCategory] = useState<StoreProductCategory | "all">("all");
   const [detailProduct, setDetailProduct] = useState<StoreProduct | null>(null);
   const [subProduct, setSubProduct] = useState<StoreProduct | null>(null);
 
@@ -151,17 +145,27 @@ export default function ShopHome() {
   );
   const regulars = useMemo(() => regularsData.data ?? [], [regularsData.data]);
   const reminders = useMemo(() => remindersData.data ?? [], [remindersData.data]);
-  const memory = useMemo(() => memoryData.data as MemorySummary | null, [memoryData.data]);
   const shops = useMemo(() => shopsData.data ?? [], [shopsData.data]);
 
-  const filtered = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    return products.filter((p) => {
-      if (category !== "all" && p.category !== category) return false;
-      if (q && !p.name.toLowerCase().includes(q)) return false;
-      return true;
-    });
-  }, [products, query, category]);
+  /** Real categories (only ones that actually have published products). */
+  const popularCategories = useMemo(() => {
+    const counts = new Map<StoreProductCategory, number>();
+    for (const p of products) {
+      counts.set(p.category, (counts.get(p.category) ?? 0) + 1);
+    }
+    return Array.from(counts.entries())
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 6);
+  }, [products]);
+
+  /** Trending = real sold counts from the commerce core (never invented). */
+  const trending = useMemo(
+    () =>
+      [...products]
+        .sort((a, b) => (b.soldCount ?? 0) - (a.soldCount ?? 0) || b.createdAt - a.createdAt)
+        .slice(0, 8),
+    [products],
+  );
 
   // CPNS: a settled search is an interest signal.
   const lastSearchTracked = useRef("");
@@ -173,15 +177,12 @@ export default function ShopHome() {
     }
   }, [query, track]);
 
-  const handleCategory = (id: StoreProductCategory | "all") => {
-    setCategory(id);
-    if (id !== "all") {
-      track("CATEGORY_VIEW", {
-        entityId: id,
-        value: id,
-        context: { label: PRODUCT_CATEGORY_META[id].label },
-      });
-    }
+  const handleCategory = (id: StoreProductCategory) => {
+    track("CATEGORY_VIEW", {
+      entityId: id,
+      value: id,
+      context: { label: PRODUCT_CATEGORY_META[id].label },
+    });
   };
 
   const handleAdd = (product: StoreProduct, qty = 1) => {
@@ -214,116 +215,295 @@ export default function ShopHome() {
     }
   };
 
-  const shopName = settings?.shopName || t("home.defaultShopName");
   const tagline = settings?.tagline || "Commerce that remembers you · จำแทนคุณ";
 
   useEffect(() => {
     setSeo({
-      title: t("home.seoTitle", { shop: shopName }),
+      title: t("home.seoTitle", { shop: "VelShop" }),
       description: t("home.seoDesc", { tagline }),
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [shopName, tagline, t]);
+  }, [tagline, t]);
 
   const stockOf = (p: StoreProduct) => p.inventory?.available ?? p.inventory?.quantity ?? 0;
-
   const firstName = user?.name?.split(" ")[0] ?? user?.email?.split("@")[0] ?? "";
 
-  const CATEGORIES = useMemo(
-    () =>
-      [
-        { id: "all" as const, label: t("common.all") },
-        ...Object.entries(PRODUCT_CATEGORY_META).map(([id, meta]) => ({
-          id: id as StoreProductCategory,
-          label: meta.label,
-        })),
-      ],
-    [t],
-  );
+  /** Product card shared by trending + recommendations + grid rows. */
+  const renderProductCard = (
+    product: StoreProduct,
+    opts: { index?: number; reason?: string; badgeLabel?: string } = {},
+  ) => {
+    const outOfStock = stockOf(product) <= 0;
+    const lowStock = !outOfStock && stockOf(product) <= 5;
+    const hasReviews = (product.reviewCount ?? 0) > 0 && product.rating != null;
+    return (
+      <motion.div
+        key={product.id}
+        initial={{ opacity: 0, y: 12 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.3, delay: Math.min((opts.index ?? 0) * 0.04, 0.3) }}
+        className="group flex flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white transition-all duration-200 hover:-translate-y-0.5 hover:border-[#10B981]/40 hover:shadow-[0_12px_30px_rgba(15,23,42,0.08)]"
+      >
+        <button
+          type="button"
+          className="relative block aspect-square w-full cursor-pointer overflow-hidden bg-slate-50"
+          onClick={() => {
+            setDetailProduct(product);
+            track("PRODUCT_CLICK", {
+              entityId: product.id,
+              value: product.name,
+              context: { category: product.category, source: opts.badgeLabel ?? "home" },
+            });
+          }}
+          aria-label={t("product.ariaViewDetail", { name: product.name })}
+        >
+          {product.primaryImage ? (
+            <img
+              src={product.primaryImage.displayUrl}
+              alt={product.primaryImage.alt || product.name}
+              className="size-full object-cover transition-transform duration-300 group-hover:scale-105"
+              loading="lazy"
+            />
+          ) : (
+            <span className="flex size-full items-center justify-center">
+              <ImageOff className="size-8 text-slate-300" />
+            </span>
+          )}
+          {outOfStock && (
+            <span className="absolute left-2 top-2 rounded-full bg-slate-900/70 px-2 py-0.5 text-[10px] font-semibold text-white backdrop-blur">
+              {t("product.outOfStock")}
+            </span>
+          )}
+          {opts.badgeLabel && !outOfStock && (
+            <span className="absolute left-2 top-2 rounded-full bg-[#10B981] px-2 py-0.5 text-[10px] font-semibold text-white">
+              {opts.badgeLabel}
+            </span>
+          )}
+          {product.soldCount != null && product.soldCount > 0 && (
+            <span className="absolute bottom-2 right-2 rounded-full bg-slate-900/60 px-2 py-0.5 text-[10px] font-medium text-white backdrop-blur">
+              {t("product.sold", { count: product.soldCount })}
+            </span>
+          )}
+        </button>
 
-  const INTENT_LABEL: Record<string, string> = useMemo(
-    () => ({
-      low: t("home.intentLow"),
-      medium: t("home.intentMedium"),
-      high: t("home.intentHigh"),
-    }),
-    [t],
-  );
+        <div className="flex flex-1 flex-col p-3.5 sm:p-4">
+          <div className="flex items-start justify-between gap-2">
+            <h3 className="line-clamp-2 text-sm font-semibold leading-5 text-slate-900">
+              {product.name}
+            </h3>
+          </div>
+
+          {/* rating + shop */}
+          <div className="mt-1 flex min-h-4 flex-wrap items-center gap-x-2 gap-y-0.5">
+            {hasReviews ? (
+              <span className="flex items-center gap-0.5 text-xs text-amber-500">
+                <Star className="size-3 fill-amber-400 text-amber-400" />
+                <span className="font-semibold tabular-nums text-slate-700">
+                  {Number(product.rating).toFixed(1)}
+                </span>
+                <span className="text-slate-400">({product.reviewCount})</span>
+              </span>
+            ) : null}
+            {product.shopName && (
+              <span className="flex min-w-0 items-center gap-0.5 text-[11px] text-slate-400">
+                <Store className="size-3 shrink-0" />
+                <span className="truncate">{product.shopName}</span>
+              </span>
+            )}
+          </div>
+
+          <div className="mt-2 flex items-end justify-between gap-2">
+            <p className="text-base font-bold tabular-nums tracking-tight text-slate-900 sm:text-lg">
+              {formatBaht(product.price)}
+              <span className="ml-1 text-[11px] font-normal text-slate-400">
+                {t("cart.perUnit", { unit: product.unit })}
+              </span>
+            </p>
+          </div>
+
+          <p
+            className={`mt-1 text-[11px] ${
+              outOfStock
+                ? "font-medium text-red-500"
+                : lowStock
+                  ? "font-medium text-amber-600"
+                  : "text-slate-400"
+            }`}
+          >
+            {outOfStock
+              ? t("product.outOfStock")
+              : lowStock
+                ? t("product.lowStock", { count: stockOf(product), unit: product.unit })
+                : product.soldCount != null && product.soldCount > 0
+                  ? t("product.soldShort", { count: product.soldCount })
+                  : t("product.inStockShort")}
+          </p>
+
+          {opts.reason && (
+            <p className="mt-1 line-clamp-1 text-[11px] leading-4 text-[#10B981]">{opts.reason}</p>
+          )}
+
+          <div className="mt-3 flex items-center gap-2 border-t border-slate-100 pt-3">
+            <Button
+              variant="outline"
+              size="icon"
+              className="size-9 shrink-0 border-slate-200 text-slate-500 hover:border-rose-300 hover:bg-rose-50 hover:text-rose-500"
+              onClick={() => handleInterest(product)}
+              aria-label={t("product.ariaInterest", { name: product.name })}
+            >
+              <Heart className="size-4" />
+            </Button>
+            <Button
+              className="h-9 flex-1 gap-1.5 bg-slate-900 text-white hover:bg-slate-800 disabled:bg-slate-100 disabled:text-slate-400"
+              disabled={outOfStock || product.price <= 0}
+              onClick={() => handleAdd(product)}
+            >
+              <Plus className="size-4" />
+              <span className="sm:hidden">{t("product.addToCartSm")}</span>
+              <span className="hidden sm:inline">{t("product.addToCart")}</span>
+            </Button>
+          </div>
+        </div>
+      </motion.div>
+    );
+  };
 
   return (
     <div className="flex min-h-screen flex-col bg-[#F8FAFC] text-slate-900">
       <ShopHeader />
 
-      {/* Storefront hero */}
-      <section className="border-b border-slate-100 bg-white">
-        <div className="mx-auto w-full max-w-6xl px-4 py-10 sm:px-6 sm:py-14">
-          <div className="flex flex-col gap-6 sm:flex-row sm:items-end sm:justify-between">
-            <div>
-              <p className="flex items-center gap-1.5 text-sm font-medium text-slate-400">
-                <Store className="size-4 text-[#10B981]" />
-                {t("home.eyebrow")}
+      {/* Brand hero — product/discovery first, no shop-name billboard */}
+      <section className="relative overflow-hidden border-b border-slate-100 bg-white">
+        <div
+          className="pointer-events-none absolute inset-0 opacity-[0.35]"
+          style={{
+            background:
+              "radial-gradient(600px 240px at 12% -10%, rgba(16,185,129,0.14), transparent 60%), radial-gradient(500px 220px at 88% 0%, rgba(16,185,129,0.10), transparent 60%)",
+          }}
+        />
+        <div className="relative mx-auto w-full max-w-6xl px-4 py-10 sm:px-6 sm:py-14">
+          <div className="mx-auto max-w-2xl text-center">
+            <p className="inline-flex items-center gap-1.5 rounded-full border border-emerald-200 bg-[#ECFDF5] px-3 py-1 text-xs font-semibold text-emerald-700">
+              <Sparkles className="size-3.5" />
+              {isAuthenticated && firstName ? t("home.heroWelcomeShort", { name: firstName }) : t("home.eyebrow")}
+            </p>
+            <h1 className="mt-4 text-3xl font-extrabold leading-tight tracking-tight text-slate-900 sm:text-4xl lg:text-[2.6rem]">
+              {t("home.heroTitle")}
+            </h1>
+            <p className="mx-auto mt-3 max-w-xl text-sm leading-6 text-slate-500 sm:text-base">
+              {t("home.heroDesc")}
+            </p>
+            {settings?.announcement && (
+              <p className="mt-4 inline-flex items-center gap-2 rounded-full border border-amber-200 bg-amber-50 px-3 py-1.5 text-xs font-medium text-amber-700">
+                <Megaphone className="size-3.5" />
+                {settings.announcement}
               </p>
-              <h1 className="mt-2 text-3xl font-extrabold tracking-tight text-slate-900 sm:text-4xl">
-                {shopName}
-              </h1>
-              <p className="mt-2 max-w-lg text-sm leading-6 text-slate-500">{tagline}</p>
-              {isAuthenticated && firstName && (
-                <p className="mt-2 flex items-center gap-1.5 text-sm font-medium text-[#10B981]">
-                  <Sparkles className="size-3.5" />
-                  {t("home.heroWelcome", { name: firstName })}
-                </p>
-              )}
-              {settings?.announcement && (
-                <div className="mt-4 inline-flex items-center gap-2 rounded-full border border-emerald-200 bg-[#ECFDF5] px-3 py-1.5 text-xs font-medium text-emerald-700">
-                  <Megaphone className="size-3.5" />
-                  {settings.announcement}
-                </div>
-              )}
-            </div>
-            <div className="flex flex-col gap-2 sm:items-end">
-              <p className="text-xs text-slate-400">{t("home.availableProducts")}</p>
-              <p className="text-3xl font-bold tabular-nums tracking-tight text-slate-900">
-                {products.length}
-                <span className="ml-1.5 text-sm font-medium text-slate-400">
-                  {t("common.items")}
-                </span>
-              </p>
-            </div>
-          </div>
+            )}
 
-          {/* Search + category filter */}
-          <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:items-center">
-            <div className="relative w-full sm:max-w-xs">
-              <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-slate-400" />
+            {/* Search — the primary discovery action */}
+            <form
+              className="mx-auto mt-6 flex max-w-xl items-center gap-2 rounded-full border border-slate-200 bg-white p-1.5 shadow-[0_8px_24px_rgba(15,23,42,0.06)] transition-shadow focus-within:border-[#10B981]/50 focus-within:shadow-[0_8px_24px_rgba(16,185,129,0.12)]"
+              onSubmit={(e) => {
+                e.preventDefault();
+                const q = query.trim();
+                if (q) track("SEARCH", { value: q.slice(0, 60) });
+                navigate(q ? `/products?q=${encodeURIComponent(q)}` : "/products");
+              }}
+              role="search"
+            >
+              <Search className="ml-3 size-5 shrink-0 text-slate-400" />
               <Input
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
                 placeholder={t("home.searchPlaceholder")}
-                className="h-11 rounded-[10px] border-slate-200 bg-white pl-9"
+                className="h-11 border-0 bg-transparent px-1 text-sm shadow-none focus-visible:ring-0"
                 aria-label={t("header.ariaSearch")}
               />
-            </div>
-            <div className="flex flex-wrap gap-1.5">
-              {CATEGORIES.map((c) => (
-                <button
-                  key={c.id}
-                  type="button"
-                  onClick={() => handleCategory(c.id)}
-                  className={`rounded-full px-3 py-2 text-xs font-medium transition-colors ${
-                    category === c.id
-                      ? "bg-slate-900 text-white"
-                      : "border border-slate-200 bg-white text-slate-500 hover:border-slate-300 hover:text-slate-900"
-                  }`}
-                >
-                  {c.label}
-                </button>
-              ))}
+              <Button type="submit" className="h-10 shrink-0 gap-1.5 rounded-full bg-slate-900 px-5 text-white hover:bg-slate-800">
+                {t("common.search")}
+                <ArrowRight className="size-4" />
+              </Button>
+            </form>
+
+            <div className="mt-6 flex flex-wrap items-center justify-center gap-2.5">
+              <Button className="h-11 gap-1.5 rounded-full bg-[#10B981] px-6 text-white hover:bg-emerald-700" asChild>
+                <Link to="/products">
+                  <ShoppingBag className="size-4" />
+                  {t("home.shopNow")}
+                </Link>
+              </Button>
+              {isAuthenticated ? (
+                <Button variant="outline" className="h-11 gap-1.5 rounded-full border-slate-200 px-6 text-slate-700" asChild>
+                  <Link to="/orders">
+                    <History className="size-4" />
+                    {t("home.myOrders")}
+                  </Link>
+                </Button>
+              ) : (
+                <Button variant="outline" className="h-11 gap-1.5 rounded-full border-slate-200 px-6 text-slate-700" asChild>
+                  <Link to="/auth?returnTo=/wishlist">
+                    <Heart className="size-4" />
+                    {t("nav.wishlist")}
+                  </Link>
+                </Button>
+              )}
             </div>
           </div>
         </div>
       </section>
 
-      {/* Proactive Commerce (CPNS §14) — “ถึงเวลาสั่งซื้อซ้ำแล้ว” */}
+      {/* Popular categories — only categories that actually have products */}
+      {!productsData.loading && popularCategories.length > 0 && (
+        <section className="border-b border-slate-100 bg-white">
+          <div className="mx-auto w-full max-w-6xl px-4 py-8 sm:px-6">
+            <div className="flex items-end justify-between gap-3">
+              <div>
+                <h2 className="text-lg font-bold tracking-tight text-slate-900">
+                  {t("home.categoriesTitle")}
+                </h2>
+                <p className="mt-0.5 text-xs text-slate-400">{t("home.categoriesDesc")}</p>
+              </div>
+              <Link
+                to="/categories"
+                onClick={() => track("CATEGORY_VIEW", { value: "all", context: { label: "explore" } })}
+                className="inline-flex shrink-0 items-center gap-1 text-sm font-medium text-[#10B981] hover:text-emerald-700"
+              >
+                {t("home.viewAllCategories")}
+                <ArrowRight className="size-3.5" />
+              </Link>
+            </div>
+
+            <div className="mt-5 flex gap-3 overflow-x-auto pb-2 sm:grid sm:grid-cols-3 sm:overflow-visible lg:grid-cols-6">
+              {popularCategories.map(([id, count]) => {
+                const Icon = CATEGORY_ICONS[id] ?? Package;
+                const meta = PRODUCT_CATEGORY_META[id];
+                return (
+                  <Link
+                    key={id}
+                    to={`/products?category=${id}`}
+                    onClick={() => handleCategory(id)}
+                    className="group flex min-w-[120px] flex-col items-center gap-2.5 rounded-2xl border border-slate-200 bg-white p-4 text-center transition-all duration-200 hover:-translate-y-0.5 hover:border-[#10B981]/40 hover:shadow-[0_10px_24px_rgba(15,23,42,0.07)] sm:min-w-0"
+                  >
+                    <span className="flex size-12 items-center justify-center rounded-[14px] bg-[#ECFDF5] text-[#10B981] transition-colors group-hover:bg-[#10B981] group-hover:text-white">
+                      <Icon className="size-5" />
+                    </span>
+                    <span className="min-w-0">
+                      <span className="block truncate text-sm font-semibold text-slate-900">
+                        {meta.label}
+                      </span>
+                      <span className="mt-0.5 block text-[11px] text-slate-400">
+                        {t("home.categoryCount", { count })}
+                      </span>
+                    </span>
+                  </Link>
+                );
+              })}
+            </div>
+          </div>
+        </section>
+      )}
+
+      {/* Smart Reorder — “ถึงเวลาสั่งซื้อซ้ำแล้ว” (real purchase-cycle memory) */}
       {!authLoading && isAuthenticated && !remindersData.loading && reminders.length > 0 && (
         <section className="border-b border-slate-100 bg-gradient-to-b from-[#F0FDF9] to-white">
           <div className="mx-auto w-full max-w-6xl px-4 py-8 sm:px-6">
@@ -379,7 +559,7 @@ export default function ShopHome() {
         </section>
       )}
 
-      {/* Customer Memory — Velnox remembers this customer's regular items */}
+      {/* Continue shopping — this customer's regular items (real order history) */}
       {!authLoading && isAuthenticated && !regularsData.loading && regulars.length > 0 && (
         <section className="border-b border-slate-100 bg-white">
           <div className="mx-auto w-full max-w-6xl px-4 py-8 sm:px-6">
@@ -389,14 +569,14 @@ export default function ShopHome() {
               </span>
               <div>
                 <h2 className="text-base font-bold tracking-tight text-slate-900">
-                  {t("home.regularsTitle")}
+                  {t("home.continueShoppingTitle")}
                 </h2>
-                <p className="text-xs text-slate-400">{t("home.regularsDesc")}</p>
+                <p className="text-xs text-slate-400">{t("home.continueShoppingDesc")}</p>
               </div>
             </div>
 
-            <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-              {regulars.map(({ product, times, lastOrderedAt }, i) => (
+            <div className="mt-5 grid grid-cols-2 gap-3 lg:grid-cols-4">
+              {regulars.slice(0, 4).map(({ product, times, lastOrderedAt }, i) => (
                 <motion.div
                   key={product.id}
                   initial={{ opacity: 0, y: 12 }}
@@ -427,7 +607,7 @@ export default function ShopHome() {
                       <h3 className="text-sm font-semibold leading-5 text-slate-900">
                         {product.name}
                       </h3>
-                      <Badge className="shrink-0 gap-1 rounded-full bg-[#ECFDF5] text-emerald-700 ring-1 ring-inset ring-emerald-600/15 hover:bg-[#ECFDF5]">
+                      <Badge className="shrink-0 rounded-full bg-[#ECFDF5] text-emerald-700 ring-1 ring-inset ring-emerald-600/15 hover:bg-[#ECFDF5]">
                         {t("home.regularsOrderedTimes", { times })}
                       </Badge>
                     </div>
@@ -465,51 +645,7 @@ export default function ShopHome() {
         </section>
       )}
 
-      {/* Customer Understanding (CPNS §7) — what Velnox noticed about YOU */}
-      {!authLoading && isAuthenticated && !memoryData.loading && memory && memory.categories.length > 0 && (
-        <section className="border-b border-slate-100 bg-white">
-          <div className="mx-auto w-full max-w-6xl px-4 py-8 sm:px-6">
-            <div className="flex items-center gap-2.5">
-              <span className="flex size-9 items-center justify-center rounded-[10px] bg-[#ECFDF5]">
-                <TrendingUp className="size-4 text-[#10B981]" />
-              </span>
-              <div>
-                <h2 className="text-base font-bold tracking-tight text-slate-900">
-                  {t("home.insightsTitle")}
-                </h2>
-                <p className="text-xs text-slate-400">
-                  {t("home.insightsDesc")}
-                  {memory.intent && (
-                    <span className="ml-1 rounded-full bg-emerald-50 px-2 py-0.5 font-medium text-emerald-700">
-                      {t("home.intentLabel", { label: INTENT_LABEL[memory.intent] })}
-                    </span>
-                  )}
-                </p>
-              </div>
-            </div>
-
-            <div className="mt-4 flex flex-wrap gap-2">
-              {memory.categories.slice(0, 5).map((c) => (
-                <button
-                  key={c.category}
-                  type="button"
-                  onClick={() => handleCategory(c.category as StoreProductCategory)}
-                  className={`rounded-full px-3.5 py-2 text-xs font-medium transition-colors ${
-                    category === c.category
-                      ? "bg-slate-900 text-white"
-                      : "border border-emerald-200 bg-[#F0FDF9] text-emerald-800 hover:border-emerald-300"
-                  }`}
-                >
-                  {c.label}
-                  <span className="ml-1.5 opacity-60">×{c.count}</span>
-                </button>
-              ))}
-            </div>
-          </div>
-        </section>
-      )}
-
-      {/* VelRepeat — แนะนำสำหรับคุณ */}
+      {/* Recommended for you (real personalization or popular fallback) */}
       {!authLoading && recommendations.length > 0 && (
         <section className="border-b border-slate-100 bg-white">
           <div className="mx-auto w-full max-w-6xl px-4 py-8 sm:px-6">
@@ -531,81 +667,46 @@ export default function ShopHome() {
               </div>
             </div>
 
-            <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-              {recommendations.slice(0, 8).map(({ product, reasons, views }, i) => (
-                <motion.div
-                  key={product.id}
-                  initial={{ opacity: 0, y: 12 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ duration: 0.3, delay: Math.min(i * 0.05, 0.3) }}
-                  className="flex flex-col overflow-hidden rounded-xl border border-slate-200 bg-white transition-all duration-200 hover:-translate-y-0.5 hover:border-[#10B981]/40 hover:shadow-[0_12px_30px_rgba(15,23,42,0.06)]"
-                >
-                  <button
-                    type="button"
-                    className="block aspect-[4/3] w-full cursor-pointer overflow-hidden bg-slate-50"
-                    onClick={() => {
-                      setDetailProduct(product);
-                      // CPNS §3 — measuring whether recommendations actually get clicked
-                      track("RECOMMENDATION_CLICK", {
-                        entityId: product.id,
-                        value: product.name,
-                        context: { category: product.category },
-                      });
-                      track("PRODUCT_CLICK", {
-                        entityId: product.id,
-                        value: product.name,
-                        context: { category: product.category, source: "recommendation" },
-                      });
-                    }}
-                  >
-                    {product.primaryImage ? (
-                      <img
-                        src={product.primaryImage.displayUrl}
-                        alt={product.name}
-                        className="size-full object-cover transition-transform duration-300 hover:scale-105"
-                        loading="lazy"
-                      />
-                    ) : (
-                      <span className="flex size-full items-center justify-center">
-                        <ImageOff className="size-6 text-slate-300" />
-                      </span>
-                    )}
-                  </button>
-                  <div className="flex flex-1 flex-col p-4">
-                    <div className="flex items-start justify-between gap-2">
-                      <h3 className="text-sm font-semibold leading-5 text-slate-900">{product.name}</h3>
-                      <Badge className="shrink-0 gap-1 rounded-full bg-slate-100 text-slate-500 ring-1 ring-inset ring-slate-600/10 hover:bg-slate-100">
-                        <Sparkles className="size-3" />
-                        {t("home.recsClicks", { count: views ?? 0 })}
-                      </Badge>
-                    </div>
-                    {reasons && reasons.length > 0 && (
-                      <p className="mt-1 line-clamp-2 text-[11px] leading-4 text-[#10B981]">
-                        {reasons.join(" · ")}
-                      </p>
-                    )}
-                    <p className="mt-1 line-clamp-2 text-xs leading-5 text-slate-400">
-                      {product.description || PRODUCT_CATEGORY_META[product.category].label}
-                    </p>
-                    <div className="mt-3 flex items-end justify-between gap-2 border-t border-slate-100 pt-3">
-                      <p className="text-sm font-bold tabular-nums tracking-tight text-slate-900">
-                        {formatBaht(product.price)}
-                        <span className="ml-1 text-[11px] font-normal text-slate-400">
-                          {t("cart.perUnit", { unit: product.unit })}
-                        </span>
-                      </p>
-                      <Button
-                        size="sm"
-                        className="gap-1.5 bg-slate-900 text-white hover:bg-slate-800"
-                        onClick={() => handleAdd(product)}
-                      >
-                        <Plus className="size-3.5" />
-                        {t("product.addToCartSm")}
-                      </Button>
-                    </div>
-                  </div>
-                </motion.div>
-              ))}
+            <div className="mt-5 grid grid-cols-2 gap-3 lg:grid-cols-4">
+              {recommendations.slice(0, 8).map(({ product, reasons }, i) =>
+                renderProductCard(product, {
+                  index: i,
+                  reason: reasons?.join(" · "),
+                  badgeLabel: t("home.badgeRecommended"),
+                }),
+              )}
+            </div>
+          </div>
+        </section>
+      )}
+
+      {/* Trending — real sold counts from the commerce core */}
+      {!productsData.loading && trending.length > 0 && (
+        <section className="border-b border-slate-100 bg-white">
+          <div className="mx-auto w-full max-w-6xl px-4 py-8 sm:px-6">
+            <div className="flex items-center justify-between gap-3">
+              <div className="flex items-center gap-2.5">
+                <span className="flex size-9 items-center justify-center rounded-[10px] bg-[#ECFDF5]">
+                  <TrendingUp className="size-4 text-[#10B981]" />
+                </span>
+                <div>
+                  <h2 className="text-base font-bold tracking-tight text-slate-900">
+                    {t("home.trendingTitle")}
+                  </h2>
+                  <p className="text-xs text-slate-400">{t("home.trendingDesc")}</p>
+                </div>
+              </div>
+              <Link
+                to="/products"
+                className="hidden shrink-0 items-center gap-1 text-sm font-medium text-[#10B981] hover:text-emerald-700 sm:inline-flex"
+              >
+                {t("common.viewAll")}
+                <ArrowRight className="size-3.5" />
+              </Link>
+            </div>
+
+            <div className="mt-5 grid grid-cols-2 gap-3 lg:grid-cols-4">
+              {trending.map((product, i) => renderProductCard(product, { index: i }))}
             </div>
           </div>
         </section>
@@ -627,15 +728,15 @@ export default function ShopHome() {
               </div>
             </div>
 
-            <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-              {shops.slice(0, 8).map((shop, i) => (
+            <div className="mt-5 grid grid-cols-2 gap-3 lg:grid-cols-4">
+              {shops.slice(0, 8).map((shop) => (
                 <Link
                   key={shop.id}
                   to={`/shops/${shop.id}`}
                   onClick={() => track("SHOP_VIEW", { entityId: shop.id, value: shop.name })}
                   className="flex items-center gap-3 rounded-xl border border-slate-200 bg-white p-4 transition-all duration-200 hover:-translate-y-0.5 hover:border-[#10B981]/40 hover:shadow-[0_12px_30px_rgba(15,23,42,0.06)]"
                 >
-                  <span className="flex size-12 shrink-0 items-center justify-center overflow-hidden rounded-[12px] bg-[#ECFDF5]">
+                  <span className="flex size-11 shrink-0 items-center justify-center overflow-hidden rounded-[12px] bg-[#ECFDF5]">
                     {shop.imageUrl ? (
                       <img src={shop.imageUrl} alt={shop.name} className="size-full object-cover" loading="lazy" />
                     ) : (
@@ -661,10 +762,102 @@ export default function ShopHome() {
         </section>
       )}
 
-      {/* Product grid */}
+      {/* VelRepeat — first-class recurring-commerce explainer (real feature) */}
+      <section className="border-b border-slate-100 bg-gradient-to-br from-[#ECFDF5] via-white to-white">
+        <div className="mx-auto w-full max-w-6xl px-4 py-10 sm:px-6">
+          <div className="grid items-center gap-8 lg:grid-cols-2">
+            <div>
+              <span className="flex size-11 items-center justify-center rounded-2xl bg-[#10B981] text-white">
+                <RefreshCw className="size-5" />
+              </span>
+              <h2 className="mt-4 text-xl font-bold tracking-tight text-slate-900 sm:text-2xl">
+                {t("home.velrepeatTitle")}
+              </h2>
+              <p className="mt-2 max-w-md text-sm leading-6 text-slate-500">
+                {t("home.velrepeatDesc")}
+              </p>
+              <div className="mt-4 flex flex-col gap-2.5">
+                {["velrepeatHow1", "velrepeatHow2", "velrepeatHow3"].map((key) => (
+                  <p key={key} className="flex items-center gap-2.5 text-sm text-slate-600">
+                    <span className="flex size-5 shrink-0 items-center justify-center rounded-full bg-[#10B981]/15 text-[10px] font-bold text-[#10B981]">
+                      <CheckIcon />
+                    </span>
+                    {t(`home.${key}`)}
+                  </p>
+                ))}
+              </div>
+              <Button
+                className="mt-6 h-11 gap-1.5 rounded-full bg-[#10B981] px-6 text-white hover:bg-emerald-700"
+                asChild
+              >
+                <Link to={isAuthenticated ? "/velrepeat" : "/auth?returnTo=/velrepeat"}>
+                  <CalendarClock className="size-4" />
+                  {t("home.velrepeatCta")}
+                </Link>
+              </Button>
+            </div>
+            <div className="grid gap-3 sm:grid-cols-3 lg:grid-cols-1">
+              {[
+                { icon: Package, titleKey: "home.velrepeatStep1", descKey: "home.velrepeatStep1Desc" },
+                { icon: CalendarClock, titleKey: "home.velrepeatStep2", descKey: "home.velrepeatStep2Desc" },
+                { icon: Truck, titleKey: "home.velrepeatStep3", descKey: "home.velrepeatStep3Desc" },
+              ].map((step) => {
+                const Icon = step.icon;
+                return (
+                  <div
+                    key={step.titleKey}
+                    className="flex items-start gap-3 rounded-2xl border border-emerald-200/60 bg-white p-4"
+                  >
+                    <span className="flex size-10 shrink-0 items-center justify-center rounded-[12px] bg-[#ECFDF5] text-[#10B981]">
+                      <Icon className="size-5" />
+                    </span>
+                    <span>
+                      <span className="block text-sm font-semibold text-slate-900">{t(step.titleKey)}</span>
+                      <span className="mt-0.5 block text-xs leading-5 text-slate-500">{t(step.descKey)}</span>
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* Trust — why customers can shop with confidence (all real capabilities) */}
+      <section className="border-b border-slate-100 bg-white">
+        <div className="mx-auto w-full max-w-6xl px-4 py-8 sm:px-6">
+          <h2 className="text-center text-lg font-bold tracking-tight text-slate-900">
+            {t("home.trustTitle")}
+          </h2>
+          <div className="mt-6 grid grid-cols-2 gap-3 lg:grid-cols-4">
+            {[
+              { icon: ShieldCheck, titleKey: "home.trustSecureTitle", descKey: "home.trustSecureDesc" },
+              { icon: Truck, titleKey: "home.trustTrackTitle", descKey: "home.trustTrackDesc" },
+              { icon: RotateCcw, titleKey: "home.trustReturnTitle", descKey: "home.trustReturnDesc" },
+              { icon: Headset, titleKey: "home.trustSupportTitle", descKey: "home.trustSupportDesc" },
+            ].map((item) => {
+              const Icon = item.icon;
+              return (
+                <div
+                  key={item.titleKey}
+                  className="flex flex-col items-center rounded-2xl border border-slate-200 bg-white p-5 text-center"
+                >
+                  <span className="flex size-11 items-center justify-center rounded-[14px] bg-[#ECFDF5] text-[#10B981]">
+                    <Icon className="size-5" />
+                  </span>
+                  <p className="mt-3 text-sm font-semibold text-slate-900">{t(item.titleKey)}</p>
+                  <p className="mt-1 text-xs leading-5 text-slate-500">{t(item.descKey)}</p>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      </section>
+
+      {/* Main product grid — everything else */}
       <main className="mx-auto w-full max-w-6xl flex-1 px-4 py-10 sm:px-6">
         {productsData.loading ? (
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
             {Array.from({ length: 8 }).map((_, i) => (
               <div key={i} className="h-72 animate-pulse rounded-2xl border border-slate-200 bg-white" />
             ))}
@@ -677,128 +870,9 @@ export default function ShopHome() {
             <h2 className="mt-5 text-lg font-semibold text-slate-900">{t("home.emptyTitle")}</h2>
             <p className="mt-1.5 max-w-sm text-sm leading-6 text-slate-500">{t("home.emptyDesc")}</p>
           </div>
-        ) : filtered.length === 0 ? (
-          <div className="flex flex-col items-center rounded-2xl border border-dashed border-slate-300 bg-white px-6 py-16 text-center">
-            <Search className="size-8 text-slate-300" />
-            <h2 className="mt-4 text-lg font-semibold text-slate-900">{t("home.noResults")}</h2>
-            <p className="mt-1.5 text-sm text-slate-500">{t("home.noResultsDesc")}</p>
-          </div>
         ) : (
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            {filtered.map((product, i) => {
-              const outOfStock = stockOf(product) <= 0;
-              const lowStock = !outOfStock && stockOf(product) <= 5;
-              return (
-                <motion.div
-                  key={product.id}
-                  initial={{ opacity: 0, y: 12 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ duration: 0.3, delay: Math.min(i * 0.03, 0.3) }}
-                  className="flex flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white transition-all duration-200 hover:-translate-y-0.5 hover:shadow-[0_12px_30px_rgba(15,23,42,0.07)]"
-                >
-                  <Link
-                    to={`/products/${product.id}`}
-                    className="block aspect-square w-full overflow-hidden bg-slate-50"
-                    aria-label={t("product.ariaViewDetail", { name: product.name })}
-                    onClick={() =>
-                      track("PRODUCT_CLICK", {
-                        entityId: product.id,
-                        value: product.name,
-                        context: { category: product.category },
-                      })
-                    }
-                  >
-                    {product.primaryImage ? (
-                      <img
-                        src={product.primaryImage.displayUrl}
-                        alt={product.primaryImage.alt || product.name}
-                        className="size-full object-cover transition-transform duration-300 hover:scale-105"
-                        loading="lazy"
-                      />
-                    ) : (
-                      <span className="flex size-full items-center justify-center">
-                        <ImageOff className="size-8 text-slate-300" />
-                      </span>
-                    )}
-                    {product.images && product.images.length > 1 && (
-                      <span className="absolute right-2 top-2 rounded-full bg-slate-900/60 px-2 py-0.5 text-[10px] font-medium text-white backdrop-blur">
-                        {t("product.images", { count: product.images.length })}
-                      </span>
-                    )}
-                  </Link>
-
-                  <div className="flex flex-1 flex-col p-4">
-                    <div className="flex items-start justify-between gap-2">
-                      <h3 className="text-sm font-semibold leading-5 text-slate-900">{product.name}</h3>
-                      <Badge className="shrink-0 rounded-full bg-slate-100 text-slate-500 ring-1 ring-inset ring-slate-600/10 hover:bg-slate-100">
-                        {PRODUCT_CATEGORY_META[product.category].label}
-                      </Badge>
-                    </div>
-                    {product.description ? (
-                      <p className="mt-1 line-clamp-2 text-xs leading-5 text-slate-400">{product.description}</p>
-                    ) : (
-                      <p className="mt-1 text-xs text-slate-300">{product.shopName ?? t("home.defaultShopName")}</p>
-                    )}
-
-                    <div className="mt-4">
-                      <p className="text-lg font-bold tabular-nums tracking-tight text-slate-900">
-                        {formatBaht(product.price)}
-                        <span className="ml-1 text-xs font-normal text-slate-400">
-                          {t("cart.perUnit", { unit: product.unit })}
-                        </span>
-                      </p>
-                    </div>
-
-                    <p
-                      className={`mt-1.5 text-xs ${
-                        outOfStock
-                          ? "font-medium text-red-500"
-                          : lowStock
-                            ? "font-medium text-amber-600"
-                            : "text-slate-400"
-                      }`}
-                    >
-                      {outOfStock
-                        ? t("product.outOfStock")
-                        : lowStock
-                          ? t("product.lowStock", { count: stockOf(product), unit: product.unit })
-                          : t("product.inStock", { count: stockOf(product), unit: product.unit })}
-                    </p>
-
-                    <div className="mt-3 flex items-center gap-2">
-                      <Button
-                        variant="outline"
-                        size="icon"
-                        className="size-10 shrink-0 border-slate-200 text-slate-500 hover:border-rose-300 hover:bg-rose-50 hover:text-rose-500"
-                        onClick={() => handleInterest(product)}
-                        aria-label={t("product.ariaInterest", { name: product.name })}
-                      >
-                        <Heart className="size-4" />
-                      </Button>
-                      <Button
-                        className="flex-1 gap-1.5 bg-slate-900 text-white hover:bg-slate-800 disabled:bg-slate-100 disabled:text-slate-400"
-                        disabled={outOfStock || product.price <= 0}
-                        onClick={() => handleAdd(product)}
-                      >
-                        <Plus className="size-4" />
-                        {t("product.addToCart")}
-                      </Button>
-                    </div>
-
-                    {!outOfStock && product.price > 0 && (
-                      <Button
-                        variant="ghost"
-                        className="mt-1.5 h-10 w-full gap-1.5 text-xs text-slate-500 hover:bg-[#ECFDF5] hover:text-emerald-700"
-                        onClick={() => setSubProduct(product)}
-                      >
-                        <CalendarClock className="size-3.5" />
-                        {t("product.reorderMonthly")}
-                      </Button>
-                    )}
-                  </div>
-                </motion.div>
-              );
-            })}
+          <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+            {products.map((product, i) => renderProductCard(product, { index: i }))}
           </div>
         )}
       </main>
@@ -825,4 +899,11 @@ export default function ShopHome() {
   );
 }
 
-
+/** Inline check icon for the VelRepeat benefit list. */
+function CheckIcon() {
+  return (
+    <svg viewBox="0 0 16 16" className="size-2.5" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round">
+      <path d="M3 8.5 6.5 12 13 4.5" />
+    </svg>
+  );
+}
