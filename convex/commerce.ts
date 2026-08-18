@@ -656,7 +656,7 @@ export const saveProductImage = action({
       throw new AppError("INVALID_INPUT", `ไฟล์รูปประเภท .${format || "?"} ไม่ได้รับอนุญาต (รองรับ: ${ALLOWED_IMAGE_FORMATS})`);
     }
     if ((args.bytes ?? MAX_IMAGE_BYTES + 1) > MAX_IMAGE_BYTES) {
-      throw new AppError("INVALID_INPUT", "ไฟล์รูปใหญ่เกิน 5 MB");
+      throw new AppError("INVALID_INPUT", "ไฟล์รูปใหญ่เกิน 10 MB");
     }
 
     const storage = getStorage();

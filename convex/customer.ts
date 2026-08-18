@@ -265,16 +265,26 @@ export const saveProfileImage = action({
       throw new AppError("PROFILE_SAVE_FAILED", "อัปโหลดรูปสำเร็จ แต่ไม่สามารถบันทึกโปรไฟล์ได้ กรุณาลองอีกครั้ง");
     }
 
-    // Best-effort binary cleanup of the image this one replaces.
-    const oldUrl = kind === "cover" ? user.coverUrl : user.avatarUrl;
-    if (oldUrl && isStorageConfigured()) {
-      try {
-        const oldId = storage.extractPublicId(oldUrl);
-        if (oldId && oldId !== args.publicId) await storage.deleteFile(oldId);
-      } catch (err) {
-        console.error("[customer] profile image delete failed (row updated anyway):", err);
+  // Old-image cleanup — AFTER the DB row uses the new image (§31/§38 order:
+  // upload → save → delete old). The old public id comes from the DB row of
+  // the authenticated user only (never from the client), so ownership is
+  // implicit and an attacker cannot make us delete someone else's asset. If
+  // the delete fails the new image is KEPT and the failure is logged — never
+  // roll back to the old image.
+  const oldUrl = kind === "cover" ? user.coverUrl : user.avatarUrl;
+  if (oldUrl && isStorageConfigured()) {
+    try {
+      const oldId = storage.extractPublicId(oldUrl);
+      // §34 — never delete when the ids match (would delete the just-uploaded image).
+      if (oldId && oldId !== args.publicId) {
+        console.log(`[ProfileImageCleanup] Deleting old ${kind}`, { publicId: oldId, kind });
+        await storage.deleteFile(oldId);
+        console.log(`[ProfileImageCleanup] Old ${kind} deleted`, { publicId: oldId });
       }
+    } catch (err) {
+      console.error(`[ProfileImageCleanup] Failed to delete old ${kind} (row updated anyway; orphan asset)`, err);
     }
+  }
 
     await audit(db, {
       actorId: user.id,

@@ -4,68 +4,121 @@
 
 ## CURRENT SNAPSHOT
 - date: 2026-08-18
-- commit: ดู commit ล่าสุดในประวัติของ branch main (รอบ verify นี้ push commit ใหม่บน main)
+- commit: push รอบนี้ (ดู commit ล่าสุดบน main)
 - branch: main
 
 ## ARCHITECTURE (LOCKED — ห้ามเปลี่ยน)
 - Bun-workspace monorepo: `apps/{shop,seller,center,corporate}` + `packages/shared` (@velnox/shared)
 - Backend: `backend/` = Neon commerce core (server-side business rules), `convex/` = shared Convex layer, `db/` = schema/migrations
-- แต่ละ app เป็น Vite app อิสระ (Vercel Root Directory = `apps/<app>`), แชร์ Convex deployment เดียว, UI kit/auth อยู่ใน packages/shared
+- แต่ละ app เป็น Vite app อิสระ, แชร์ Convex deployment เดียว, UI kit/auth อยู่ใน packages/shared
 - Stack: Bun · Vite · React 19 · TypeScript · React Router v7 · Tailwind v4 · shadcn/ui · lucide-react · Convex + Convex Auth · Neon PostgreSQL · Cloudinary · Leaflet
 - ห้าม: สร้าง backend/db/auth/storage ใหม่, เปลี่ยน schema โดยไม่จำเป็น, เปลี่ยน architecture
 
 ## COMPLETED (ตรวจสอบก่อนคิดว่า "ยังไม่มี")
-- VelShop storefront (apps/shop): product catalog/detail, cart, checkout, orders + order detail/tracking, wishlist, categories, VelRepeat, notifications, search
-- Home page de-clutter (task 2026-08-18)
-- Profile: avatar + cover upload ผ่าน Cloudinary signed upload (reuse backend/storage.ts), edit profile, logout ล่างสุด + confirmation
-- Auth: Convex Auth (Google + guest), use-auth แยก loading/authenticated/unauthenticated, RequireAuth, Auth page โชว์ loading (กัน login flash, ไม่มี setTimeout)
-- Cookie consent: Necessary/Preferences/Analytics/Marketing (ไม่มี provider เพิ่มเอง)
-- Header/Footer compact ใช้ร่วมทุกหน้า
-- Profile image 10 MB + FIXED CENTER-PIN map picker (task 2026-08-18) — ดูรายละเอียดเดิมในประวัติ AI_HANDOFF
-- **รอบ FINAL VERIFY (2026-08-18):**
-  - **พบและแก้ bug จริงจากรอบก่อน**: `convex/customer.ts` ใช้ `AppError("PROFILE_SAVE_FAILED", …)` แต่ `PROFILE_SAVE_FAILED` ไม่มีใน `ErrorCode` union ของ `backend/errors.ts` → **TypeScript fail** แก้โดยเพิ่ม code + Thai message ใน errors.ts (ห้ามใช้ @ts-ignore / any — แก้ type ให้ถูกต้อง)
-  - เพิ่ม `tests/storage.test.ts` (6 tests): ล็อก MAX_IMAGE_BYTES = 10 MB, signature = HMAC-SHA1 เหนือ 5 params ที่ browser ส่งพอดี (timestamp/folder/public_id/allowed_formats/max_bytes — กัน Invalid Signature), allowed formats ครอบคลุม JPG/PNG/WebP, extractPublicId round-trip
-  - `ProfileImageUpload.tsx`: ตอน save fail โชว์ข้อความจริงจาก backend (AppError message) แทน fallback generic — ตาม convention ของแอป
-  - Verify จริงในเครื่อง: typecheck / tests / shop build / tile URLs / Nominatim search
+- VelShop storefront: product catalog/detail, cart, checkout, orders/tracking, wishlist, categories, VelRepeat, notifications, search, home de-clutter
+- Profile: avatar + cover upload ผ่าน Cloudinary signed upload, edit profile, logout ล่างสุด + confirmation
+- Auth: Convex Auth, use-auth แยก loading/authenticated/unauthenticated, RequireAuth, กัน login flash (ไม่มี setTimeout)
+- Cookie consent, header/footer compact, 10 MB limit, fixed center-pin map picker (รายละเอียดเดิมในประวัติ)
+- **รอบนี้ — DEBUG REAL CLOUDINARY UPLOAD FAILURE: พบ ROOT CAUSE จริงแล้ว**
+  - ดู section ROOT CAUSE ด้านล่าง — นี่คือสาเหตุที่แท้จริงที่ upload ล้มเหลวแม้ Convex action จะ SUCCESS
 
-## STILL PENDING (ต้อง test บน browser จริง — ยังทำไม่ได้ใน environment นี้)
-- Upload avatar/cover จริง: 100KB / 1MB / 5MB / 9MB / 10MB / >10MB (JPG, PNG, WebP) + refresh → รูปยังอยู่
-- Cloudinary runtime config: ต้อง confirm ว่า CLOUDINARY_CLOUD_NAME / CLOUDINARY_API_KEY / CLOUDINARY_API_SECRET ตั้งอยู่ใน Convex deployment (Keys/API keys UI) แล้ว — environment นี้เข้าถึง deployment ไม่ได้
-- Map บน browser: satellite แสดงจริง, ลากแผนที่ → พิกัด = center, แตะแผนที่ไม่เลือก, หมุดลากไม่ได้, confirm → save, search → center ไปผลค้นหา, responsive (mobile/tablet/desktop)
-- Login flash verify บน deployed app
+## ROOT CAUSE (เจอแล้ว — พิสูจน์ได้)
+**Cloudinary signature ถูกสร้างด้วยอัลกอริทึมผิด**
 
-## KNOWN BUGS
-- ~~TypeScript error: PROFILE_SAVE_FAILED ไม่อยู่ใน ErrorCode~~ → **แก้แล้ว** (เพิ่มใน backend/errors.ts) — verify ด้วย `tsc -b --noEmit` exit 0
-- ไม่พบ bug ที่ยืนยันได้เหลือในโค้ด (static + unit test level)
-- สิ่งที่ยังไม่ยืนยัน: พฤติกรรม runtime บน browser (upload จริง / satellite render จริง) — ต้อง deploy แล้ว test
+- `backend/storage.ts` `sha1Sign()` ใช้ **HMAC-SHA1** (`createHmac("sha1", apiSecret).update(sorted)`)
+- แต่ Cloudinary (และ SDK ทางการ cloudinary_npm `api_sign_request`) ใช้ **SHA-1 แบบธรรมดา**:
+  `SHA1(alphabetically_sorted_params + api_secret)` — ต่อ secret ต่อท้าย string แล้ว hash
+- ผลลัพธ์: signature ที่ Convex สร้าง **ไม่ตรงกับที่ Cloudinary คำนวณเสมอ** → Cloudinary ตอบ
+  **401 Invalid Signature** ทุกรอบ → frontend โชว์ "อัปโหลดรูปไม่สำเร็จ กรุณาลองอีกครั้ง"
+- สอดคล้องกับอาการทุกจุดที่รายงานมา: `getProfileImageUploadSignature` (Convex) SUCCESS
+  (มันแค่ "คำนวณ signature สำเร็จ" — ไม่ได้เอาไปตรวจกับ Cloudinary) แต่ Cloudinary reject ตอน POST จริง
+- **พิสูจน์ด้วย test vector จาก docs ของ Cloudinary เอง**:
+  params `eager=w_400,h_300,c_pad|w_260,h_200,c_crop&public_id=sample_image&timestamp=1315060510` + secret `abcd`
+  → SHA1 ได้ `bfd09f95f331f558cbd1320e67aa8d488770583e` (ตรงกับ docs ✅)
+  → HMAC-SHA1 ได้ `bf4af4c380b1d7a6a830a7a16fd9827c08e2b57d` (ไม่ตรง ❌)
+- **Bug ซ้อน #2**: `max_bytes` **ไม่ใช่ parameter ของ Cloudinary Upload API** (ยืนยันจาก
+  image_upload_api_reference.md + SDK ทางการ ไม่มี `max_bytes` เลย) — การส่ง `max_bytes` ใน request
+  ทำให้ Cloudinary ตอบ **400 Unknown parameter** เพิ่มอีกชั้น
+- **Bug ซ้อน #3 (old-image cleanup)**: `extractPublicId()` คืนแค่ **segment สุดท้าย** ของ public id —
+  แต่ public id จริงมี folder prefix (`velnox/profiles/<userId>/avatar-xxx`) → `deleteFile` ลบผิด id
+  ("not found") → รูปเก่าไม่ถูกลบจริง สะสมใน Cloudinary
+
+## FIX
+1. **`backend/storage.ts` `sha1Sign()`**: HMAC-SHA1 → `createHash("sha1").update(sorted + apiSecret).digest("hex")`
+   (ตรงกับ cloudinary_npm เป๊ะ — comment เตือนห้ามเปลี่ยนกลับเป็น HMAC)
+2. **ลบ `max_bytes` ออกจากทั้ง signature และ request** (`UploadSignature` ไม่มี `maxBytes` แล้ว,
+   frontend ไม่ส่ง `max_bytes` แล้ว) — ขนาด 10 MB ยังบังคับที่ client (`MAX_BYTES`) + server re-validation
+   (`saveProfileImage`/`saveProductImage` ตรวจ `bytes > MAX_IMAGE_BYTES`)
+3. **`extractPublicId()`**: คืน full public id path (รวม folder prefix), strip เฉพาะ transform/version segment
+   → cleanup ลบรูปเก่าได้จริง
+4. **`ProfileImageUpload.tsx`**: validate ฟิลด์ signature ครบก่อน POST (ถ้าขาด → toast ใหม่
+   `imageSignatureError` "ไม่สามารถเตรียมการอัปโหลดรูปได้"), staged logging ปลอดภัย
+   (`[ProfileUpload]` signature received / starting upload / Cloudinary response status+body / saved),
+   อ่าน response body จริง (text → JSON) — root cause จะเห็นใน console ชัดเจน,
+   แยก toast: signature stage / Cloudinary stage / DB save stage (ใช้ข้อความ AppError จาก backend)
+5. **`convex/customer.ts`**: cleanup logging `[ProfileImageCleanup]` (เริ่ม/สำเร็จ/ล้มเหลว + publicId + kind
+   — ไม่ log secret); ลำดับยังเป็น upload → save DB → delete old; guard `oldId !== args.publicId`; ownership
+   มาจาก DB row ของ authenticated user เท่านั้น
+6. **`packages/shared/.../seller/ImageUploader.tsx`**: เอาออก `max_bytes` (bug เดียวกัน), client limit
+   5 MB → 10 MB ให้ตรงกับระบบ (fix typecheck ด้วย)
+7. **`convex/commerce.ts`**: ข้อความ error เก่า "ใหญ่เกิน 5 MB" → "10 MB"
 
 ## FILES CHANGED (รอบนี้)
-- backend/errors.ts — เพิ่ม `PROFILE_SAVE_FAILED` ใน ErrorCode + Thai message (fix typecheck)
-- tests/storage.test.ts — **สร้างใหม่** 6 tests (upload contract: 10MB + signed params)
-- apps/shop/src/components/shop/ProfileImageUpload.tsx — toast save-fail แสดงข้อความ backend จริง
+- backend/storage.ts — root cause fix (SHA-1), ลบ max_bytes, extractPublicId full-path
+- apps/shop/src/components/shop/ProfileImageUpload.tsx — validate sig, staged logging, distinct toasts, ไม่ส่ง max_bytes
+- packages/shared/src/components/seller/ImageUploader.tsx — ไม่ส่ง max_bytes, limit 10 MB
+- convex/customer.ts — [ProfileImageCleanup] logging
+- convex/commerce.ts — ข้อความ "5 MB" → "10 MB"
+- packages/shared/src/lib/i18n/locales/{th,en,index}.ts — เพิ่ม key `profile.imageSignatureError` (3 ภาษา)
+- tests/storage.test.ts — ใหม่: test vector SHA-1 จาก docs (กัน regression กลับไป HMAC), 4 signed params
+  (ไม่มี max_bytes), extractPublicId full-path (folder/transform/version)
 - AI_HANDOFF.md — อัปเดต
-- (รอบก่อน: MapPicker.tsx rewrite, ProfileImageUpload.tsx rewrite, backend/storage.ts 10MB, convex/customer.ts, i18n th/en/index)
+
+## VERIFICATION (ผลจริง — run บนเครื่องจาก tarball ของ main + แก้แล้ว)
+- TypeScript (`bun run typecheck` = tsc -b --noEmit): **PASS** (exit 0)
+- Tests (`bun run test` = vitest run): **PASS** — 194/194 (20 files) รวม locale-parity 2/2 + storage 6/6
+- Lint (eslint เฉพาะไฟล์ที่เปลี่ยน): **PASS** (0 errors — commerce.ts มี lint error เดิม 2 จุด
+  (unused vars บรรทัด 205/551) ที่ไม่ได้แตะ เพราะไม่เกี่ยวกับงานนี้)
+- Shop Build (`bun run build:shop`): **PASS** (11.9s)
+- **Signature algorithm**: **PASS** — unit test ใช้ test vector จาก docs ของ Cloudinary ตรงกัน
+- **max_bytes removed**: **PASS** — ไม่มี `max_bytes`/`maxBytes` เหลือใน storage/uploaders/tests
+- **extractPublicId folder path**: **PASS** — unit test ตรวจ full public id + strip transform/version
+- Avatar/cover upload จริง (browser + Cloudinary): **NOT VERIFIED** — environment นี้ไม่มี browser/เข้า deployment ไม่ได้
+  → แต่ root cause (signature ผิด) แก้แล้วและพิสูจน์ด้วย test vector; หลัง deploy ต้อง test จริงตาม checklist ด้านล่าง
+- >10MB rejection จริง: **NOT VERIFIED** (ล็อกด้วย unit test + server re-validation ตรวจแล้ว)
+
+## OLD IMAGE CLEANUP (spec §30–56)
+- Avatar cleanup: **code-level PASS** (upload → save → delete old, log ครบ, guard id ซ้ำ) — browser test **NOT VERIFIED**
+- Cover cleanup: **code-level PASS** (เดียวกัน) — browser test **NOT VERIFIED**
+- Ownership validation: **PASS** (old id อ่านจาก DB row ของ authenticated user เท่านั้น — ไม่รับจาก client)
+- Database ordering: **PASS** (ลบรูปเก่าหลัง DB UPDATE สำเร็จเท่านั้น; DB fail → ไม่ลบรูปเก่า)
+- Delete failure handling: **PASS** (เก็บรูปใหม่ + log `[ProfileImageCleanup] Failed … orphan asset`)
+- ลบรูปเก่าได้จริง (ไม่ "not found" อีก): **PASS** — extractPublicId คืน full id แล้ว (เดิมลบไม่เจอ)
+
+## STILL PENDING (ต้อง test บน browser จริง)
+- Upload avatar/cover จริง: 100KB / 1MB / 5MB / 9MB / 10MB / >10MB (JPG/PNG/WebP) + refresh → รูปยังอยู่
+- เปลี่ยนรูปซ้ำ 2–3 ครั้ง → ตรวจ Cloudinary Media Library ว่ารูปเก่าถูกลบจริง (มีแค่รูปปัจจุบัน)
+- Upload fail (ไฟล์เสีย/ขนาดเกิน) → รูปเก่ายังอยู่
+- Map บน browser, login flash, responsive — ตาม AI_HANDOFF รอบก่อน (ยังค้างเหมือนเดิม)
+
+## KNOWN BUGS
+- ~~Cloudinary Invalid Signature ทุกรอบ (signature action SUCCESS แต่ upload fail)~~ → **แก้แล้ว** (SHA-1 + เอา max_bytes ออก — พิสูจน์ด้วย test vector)
+- ~~extractPublicId ตัด folder prefix → ลบรูปเก่าไม่เจอ~~ → **แก้แล้ว** (คืน full path)
+- commerce.ts: eslint unused vars บรรทัด 205/551 (มีอยู่ก่อน ไม่เกี่ยวกับงานนี้ — ใครแก้ commerce.ts ให้เคลียร์ด้วย)
+- ยังไม่ยืนยัน: พฤติกรรม runtime บน browser (upload จริง / cleanup จริง)
 
 ## DATABASE / BACKEND CHANGES
-- Convex: ไม่มี function ใหม่ (รอบก่อนแก้ error message + wrap DB update เป็น PROFILE_SAVE_FAILED)
+- Convex: ไม่มี function ใหม่/ลบ — แก้ logic ใน saveProfileImage (logging) + ข้อความ error
 - Neon: ไม่มีการเปลี่ยน schema
-- Env: ไม่มีการเปลี่ยนในโค้ด — ต้อง confirm Cloudinary keys ใน Convex deployment
-
-## VERIFICATION (ผลจริง รอบนี้ — run บนเครื่องจาก tarball ของ main)
-- TypeScript (`bun run typecheck` = tsc -b --noEmit): **PASS** (exit 0 — หลังแก้ backend/errors.ts; ก่อนแก้ FAIL ด้วย PROFILE_SAVE_FAILED)
-- Tests (`bun run test` = vitest run): **PASS** — 194/194 (20 files) รวม locale-parity 2/2 + storage ใหม่ 6/6
-- Lint (`bunx eslint` เฉพาะไฟล์ที่เปลี่ยน): **PASS**
-- Shop Build (`bun run build:shop` = vite build): **PASS** (10.9s)
-- Tile URLs: Esri World Imagery satellite **HTTP 200** (15.6KB JPEG), OSM standard **HTTP 200** — ใช้ได้จริง
-- Nominatim search: **HTTP 200 + JSON results** — ใช้ได้จริง
-- Avatar/cover upload จริง (browser + Cloudinary): **NOT VERIFIED** — ไม่มี browser + เข้า Convex deployment/keys ไม่ได้ใน environment นี้
-- 10 MB / >10MB rejection (real upload): **NOT VERIFIED** (ล็อกด้วย unit test แล้ว: constant 10MB ตรงกันทุกชั้น, >10MB ถูก reject ที่ client + `max_bytes` + server)
-- Satellite map render บน browser: **NOT VERIFIED** (tile 200 แล้ว; invalidateSize อยู่ในโค้ด)
-- Center pin / drag / click-selection-removed / marker-drag-removed: **code-level PASS** (ไม่มี `map.on("click")`, ไม่มี `L.marker`/draggable, moveend → getCenter) — browser test **NOT VERIFIED**
-- Address save rule: **PASS** (addresses.test.ts 7/7 + backend ADDRESS_GPS_REQUIRED/requireShippingAddress intact)
-- Cloudinary runtime env (CLOUDINARY_*): **NOT VERIFIED** — ต้อง check ใน Keys/API keys UI
+- Env: ไม่มีการเปลี่ยน — Cloudinary 3 keys อยู่ใน deployment แล้ว (ยืนยันโดย action SUCCESS)
 
 ## NEXT AI INSTRUCTIONS
-- 1) deploy/run `cd apps/shop && bun run dev` 2) test checklist ด้านบน (upload จริง + map บน browser) 3) ถ้า upload fail ให้ดู console.error "Cloudinary upload failed (HTTP …)" (ตอนนี้อ่าน error body แล้ว — root cause จะเห็นชัด: signature/params/size) แล้วแก้ที่ stage นั้นจริง ห้ามปิด validation / swallow error
-- ก่อน test ต้อง confirm: Cloudinary 3 keys อยู่ใน Convex deployment env แล้ว
-- ห้ามแก้/รื้อ: architecture, Neon schema, Convex auth, Cloudinary system, Map center-pin UX ใหม่ (ลากแผนที่ = เลือกตำแหน่ง), save rule (lat/lng + locationConfirmed=true), footer/header ที่ลดรกแล้ว
+- 1) deploy แล้ว test upload จริง: 100KB JPG ก่อน (ถ้ายัง fail ให้ดู console
+  `[ProfileUpload] Cloudinary response` — ตอนนี้แสดง status + error body จริงแล้ว และ
+  `[ProfileUpload] Signature received` — ใช้หาได้ทันทีว่า fail ขั้นไหน)
+- 2) test เปลี่ยนรูปซ้ำ → ดูว่า Media Library เหลือรูปเก่าหรือไม่ (cleanup)
+- 3) ถ้า signature ยัง fail อีกรอบ → เช็ค CLOUDINARY_API_SECRET ว่าตรงกับ cloud/account เดียวกับ
+  CLOUDINARY_CLOUD_NAME/API_KEY (secret ไม่ตรงกัน = Invalid Signature เหมือนกัน)
+- ห้ามแก้/รื้อ: architecture, Neon schema, Convex auth, Cloudinary system, map center-pin UX,
+  save rule (lat/lng + locationConfirmed=true), footer/header ที่ลดรกแล้ว
+- **ห้ามเปลี่ยน `sha1Sign` กลับเป็น HMAC-SHA1** — Cloudinary ใช้ SHA-1 แบบต่อ secret ต่อท้ายเท่านั้น

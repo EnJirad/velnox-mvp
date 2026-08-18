@@ -714,6 +714,7 @@ export const th = {
     imageTypeError: "รูปภาพไม่รองรับ กรุณาเลือก JPG, PNG หรือ WebP",
     imageSizeError: "ไฟล์มีขนาดใหญ่เกินไป กรุณาเลือกรูปที่มีขนาดไม่เกิน 10 MB",
     imageUploadFailed: "อัปโหลดรูปไม่สำเร็จ กรุณาลองอีกครั้ง",
+    imageSignatureError: "ไม่สามารถเตรียมการอัปโหลดรูปได้ กรุณาลองอีกครั้ง",
     imageSaveFailed: "บันทึกรูปไม่สำเร็จ กรุณาลองอีกครั้ง",
     avatarAlt: "รูปโปรไฟล์ของ {name}",
     coverAlt: "รูปปกของ {name}",

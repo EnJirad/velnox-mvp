@@ -50,8 +50,8 @@ export function ImageUploader({ product, onChange }: ImageUploaderProps) {
           toast.error(`ไฟล์ ${file.name} ไม่ใช่รูปภาพที่รองรับ`);
           continue;
         }
-        if (file.size > 5 * 1024 * 1024) {
-          toast.error(`ไฟล์ ${file.name} ใหญ่เกิน 5 MB`);
+        if (file.size > 10 * 1024 * 1024) {
+          toast.error(`ไฟล์ ${file.name} ใหญ่เกิน 10 MB`);
           continue;
         }
         // 1. signed upload permit (server validates the seller owns the product)
@@ -65,7 +65,6 @@ export function ImageUploader({ product, onChange }: ImageUploaderProps) {
         body.append("api_key", sig.apiKey);
         body.append("signature", sig.signature);
         body.append("allowed_formats", sig.allowedFormats);
-        body.append("max_bytes", String(sig.maxBytes));
         const res = await fetch(
           `https://api.cloudinary.com/v1_1/${sig.cloudName}/image/upload`,
           { method: "POST", body },

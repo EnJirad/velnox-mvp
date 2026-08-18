@@ -201,6 +201,7 @@ const myShopPatch = {
     imageTypeError: "ပုံအမျိုးအစား မထောက်ပံ့ပါ — JPG၊ PNG သို့မဟုတ် WebP ရွေးပါ",
     imageSizeError: "ဖိုင်ကြီးလွန်းပါသည် — 10 MB ထက်မပိုသော ပုံ ရွေးပါ",
     imageUploadFailed: "ဓာတ်ပုံတင်မရပါ ထပ်ကြိုးစားပါ",
+    imageSignatureError: "ဓာတ်ပုံတင်ရန် မပြင်ဆင်နိုင်ပါ ထပ်ကြိုးစားပါ",
     imageSaveFailed: "ဓာတ်ပုံ သိမ်း၍မရပါ ထပ်ကြိုးစားပါ",
     avatarAlt: "{name} ၏ ပရိုဖိုင်ဓာတ်ပုံ",
     coverAlt: "{name} ၏ ကာဗာဓာတ်ပုံ",

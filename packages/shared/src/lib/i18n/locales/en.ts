@@ -712,6 +712,7 @@ export const en: Dict = {
     imageTypeError: "Unsupported image — please choose JPG, PNG or WebP",
     imageSizeError: "File is too large — please choose an image no larger than 10 MB",
     imageUploadFailed: "Upload failed — please try again",
+    imageSignatureError: "Couldn't prepare the upload — please try again",
     imageSaveFailed: "Couldn't save the photo — please try again",
     avatarAlt: "Profile photo of {name}",
     coverAlt: "Cover photo of {name}",
