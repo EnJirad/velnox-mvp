@@ -251,14 +251,19 @@ export const saveProfileImage = action({
       throw new AppError("INVALID_INPUT", `ไฟล์รูปประเภท .${format || "?"} ไม่ได้รับอนุญาต (รองรับ: ${ALLOWED_IMAGE_FORMATS})`);
     }
     if ((args.bytes ?? MAX_IMAGE_BYTES + 1) > MAX_IMAGE_BYTES) {
-      throw new AppError("INVALID_INPUT", "ไฟล์รูปใหญ่เกิน 5 MB");
+      throw new AppError("INVALID_INPUT", "ไฟล์รูปใหญ่เกิน 10 MB");
     }
 
     const storage = getStorage();
     const url = storage.originalUrl(args.publicId);
     const column = kind === "cover" ? "cover_url" : "avatar_url";
     const db = getDb();
-    await db(`UPDATE users SET ${column} = $2 WHERE id = $1`, [user.id, url]);
+    try {
+      await db(`UPDATE users SET ${column} = $2 WHERE id = $1`, [user.id, url]);
+    } catch (err) {
+      console.error("[customer] profile image DB update failed:", err);
+      throw new AppError("PROFILE_SAVE_FAILED", "อัปโหลดรูปสำเร็จ แต่ไม่สามารถบันทึกโปรไฟล์ได้ กรุณาลองอีกครั้ง");
+    }
 
     // Best-effort binary cleanup of the image this one replaces.
     const oldUrl = kind === "cover" ? user.coverUrl : user.avatarUrl;
