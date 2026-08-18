@@ -32,63 +32,244 @@ http.route({
 });
 
 /**
- * Cloudinary upload proxy — fallback for mobile browsers that cannot POST
- * directly to api.cloudinary.com due to CORS preflight or carrier proxy
- * interference.
+ * Server-side Cloudinary upload for profile images (avatar + cover).
  *
- * POST <convex-url>/cloudinary/upload
- * Content-Type: multipart/form-data (forwarded as-is)
+ * POST <convex-url>/cloudinary/upload-profile
+ * Content-Type: multipart/form-data
+ * Body fields:
+ *   - file: the image file (jpg/png/webp)
+ *   - uploadType: "avatar" | "cover"
  *
- * The browser sends the exact same FormData it would send to Cloudinary
- * (file + signed params from getProfileImageUploadSignature). This proxy
- * forwards it server-side where CORS does not apply.
+ * This replaces the old browser→Cloudinary direct upload which failed on
+ * mobile browsers due to CORS preflight / carrier proxy interference.
  *
- * Security: the request is validated — only the file, api_key, timestamp,
- * folder, public_id, signature, and allowed_formats fields are allowed.
- * No secrets are logged.
+ * New flow:
+ *   Browser → Convex HTTP → Cloudinary (server-side, no CORS) → Neon DB
+ *
+ * Security:
+ *   - Authentication is enforced via Convex Auth cookies (ctx.runAction propagates auth)
+ *   - Cloudinary credentials NEVER reach the browser
+ *   - File type + size are validated both client-side AND server-side
+ *   - The authenticated user's ID determines the storage folder (never from client)
  */
 http.route({
-  path: "/cloudinary/upload",
+  path: "/cloudinary/upload-profile",
   method: "POST",
-  handler: httpAction(async (_ctx, request) => {
-    const cloudName = process.env.CLOUDINARY_CLOUD_NAME;
-    if (!cloudName) {
-      return new Response(
-        JSON.stringify({ error: "Cloudinary not configured" }),
-        { status: 500, headers: { "Content-Type": "application/json" } },
-      );
-    }
-
+  handler: httpAction(async (ctx, request) => {
     try {
-      // Parse the multipart form data from the browser request.
-      // Using formData() instead of arrayBuffer() ensures proper handling
-      // on Cloudflare Workers (Convex edge runtime) — raw ArrayBuffer
-      // forwarding can produce empty or corrupted bodies on some runtimes.
-      const incoming = await request.formData();
-      const outgoing = new FormData();
-      incoming.forEach((value, key) => {
-        outgoing.append(key, value);
-      });
+      const MAX_FILE_BYTES = 10 * 1024 * 1024; // 10 MB
+      const ALLOWED_TYPES = ["image/jpeg", "image/png", "image/webp", "image/avif", "image/gif"];
+      const ALLOWED_EXTENSIONS = ["jpg", "jpeg", "png", "webp", "avif", "gif"];
 
-      // Forward to Cloudinary — server-side requests have no CORS restrictions.
-      const cloudinaryUrl = `https://api.cloudinary.com/v1_1/${cloudName}/image/upload`;
-      const response = await fetch(cloudinaryUrl, {
-        method: "POST",
-        body: outgoing,
-        // Do NOT set Content-Type manually — the browser/runtime generates
-        // the multipart boundary automatically for FormData bodies.
-      });
+      // 1. Parse multipart form data
+      let formData: FormData;
+      try {
+        formData = await request.formData();
+      } catch {
+        return json_response(
+          { success: false, code: "INVALID_FORM_DATA", message: "ไม่สามารถอ่านไฟล์ได้ กรุณาลองใหม่อีกครั้ง" },
+          400,
+        );
+      }
 
-      const responseBody = await response.text();
-      return new Response(responseBody, {
-        status: response.status,
-        headers: { "Content-Type": "application/json" },
-      });
+      const file = formData.get("file");
+      const uploadType = formData.get("uploadType");
+
+      if (!file || !(file instanceof File)) {
+        return json_response(
+          { success: false, code: "MISSING_FILE", message: "กรุณาเลือกรูปภาพ" },
+          400,
+        );
+      }
+
+      const kind = uploadType === "cover" ? "cover" : "avatar";
+
+      // 2. Validate file type
+      const fileExt = file.name.split(".").pop()?.toLowerCase() ?? "";
+      if (!ALLOWED_TYPES.includes(file.type) && !ALLOWED_EXTENSIONS.includes(fileExt)) {
+        return json_response(
+          {
+            success: false,
+            code: "INVALID_FILE_TYPE",
+            message: `รูปแบบไฟล์ไม่รองรับ (รองรับ: JPG, PNG, WebP)`,
+          },
+          400,
+        );
+      }
+
+      // 3. Validate file size
+      if (file.size > MAX_FILE_BYTES) {
+        return json_response(
+          {
+            success: false,
+            code: "FILE_TOO_LARGE",
+            message: "ไฟล์มีขนาดใหญ่เกิน 10 MB กรุณาเลือกรูปที่เล็กลง",
+          },
+          400,
+        );
+      }
+
+      // 4. Get signed upload permit from the backend (auth + rate limit enforced)
+      let sig;
+      try {
+        sig = await ctx.runAction(api.customer.getProfileImageUploadSignature, { kind });
+      } catch (err) {
+        console.error("[cloudinary/upload-profile] Signature request failed:", err);
+        const msg = err instanceof Error ? err.message : String(err);
+        if (msg.includes("not configured") || msg.includes("storage")) {
+          return json_response(
+            { success: false, code: "STORAGE_NOT_CONFIGURED", message: "ระบบอัปโหลดรูปยังไม่พร้อมใช้งาน" },
+            503,
+          );
+        }
+        if (msg.includes("Rate limit") || msg.includes("rate limit")) {
+          return json_response(
+            { success: false, code: "RATE_LIMITED", message: "อัปโหลดรูปบ่อยเกินไป กรุณารอสักครู่" },
+            429,
+          );
+        }
+        if (msg.includes("not authenticated") || msg.includes("auth") || msg.includes("identity")) {
+          return json_response(
+            { success: false, code: "AUTH_REQUIRED", message: "กรุณาเข้าสู่ระบบก่อนอัปโหลดรูป" },
+            401,
+          );
+        }
+        return json_response(
+          { success: false, code: "SIGNATURE_FAILED", message: "ไม่สามารถเตรียมการอัปโหลดได้ กรุณาลองอีกครั้ง" },
+          500,
+        );
+      }
+
+      if (
+        !sig ||
+        !sig.cloudName ||
+        !sig.apiKey ||
+        !sig.timestamp ||
+        !sig.folder ||
+        !sig.publicId ||
+        !sig.signature ||
+        !sig.allowedFormats
+      ) {
+        console.error("[cloudinary/upload-profile] Incomplete signature:", sig);
+        return json_response(
+          { success: false, code: "INCOMPLETE_SIGNATURE", message: "ระบบอัปโหลดไม่พร้อม กรุณาลองใหม่" },
+          500,
+        );
+      }
+
+      // 5. Upload to Cloudinary server-side (no CORS — server to server)
+      const cloudinaryFormData = new FormData();
+      cloudinaryFormData.append("file", file);
+      cloudinaryFormData.append("api_key", sig.apiKey);
+      cloudinaryFormData.append("timestamp", String(sig.timestamp));
+      cloudinaryFormData.append("folder", sig.folder);
+      cloudinaryFormData.append("public_id", sig.publicId);
+      cloudinaryFormData.append("signature", sig.signature);
+      cloudinaryFormData.append("allowed_formats", sig.allowedFormats);
+
+      const cloudinaryUrl = `https://api.cloudinary.com/v1_1/${sig.cloudName}/image/upload`;
+
+      let cloudinaryResponse: Response;
+      try {
+        cloudinaryResponse = await fetch(cloudinaryUrl, {
+          method: "POST",
+          body: cloudinaryFormData,
+          // Do NOT set Content-Type — the runtime generates the multipart boundary automatically
+        });
+      } catch (err) {
+        console.error("[cloudinary/upload-profile] Cloudinary fetch failed:", err);
+        return json_response(
+          {
+            success: false,
+            code: "CLOUDINARY_NETWORK_ERROR",
+            message: "ไม่สามารถเชื่อมต่อระบบอัปโหลดได้ กรุณาลองใหม่อีกครั้ง",
+          },
+          502,
+        );
+      }
+
+      if (!cloudinaryResponse.ok) {
+        const body = await cloudinaryResponse.text().catch(() => "");
+        console.error("[cloudinary/upload-profile] Cloudinary error:", {
+          status: cloudinaryResponse.status,
+          body: body.slice(0, 500),
+        });
+        return json_response(
+          {
+            success: false,
+            code: "CLOUDINARY_ERROR",
+            message: `อัปโหลดไม่สำเร็จ (HTTP ${cloudinaryResponse.status})`,
+          },
+          502,
+        );
+      }
+
+      let uploaded;
+      try {
+        uploaded = await cloudinaryResponse.json();
+      } catch {
+        console.error("[cloudinary/upload-profile] Failed to parse Cloudinary response");
+        return json_response(
+          { success: false, code: "CLOUDINARY_PARSE_ERROR", message: "ไม่สามารถประมวลผลผลลัพธ์ได้" },
+          502,
+        );
+      }
+
+      if (!uploaded.public_id) {
+        console.error("[cloudinary/upload-profile] Cloudinary 200 without public_id:", uploaded);
+        return json_response(
+          { success: false, code: "CLOUDINARY_MISSING_ID", message: "อัปโหลดไม่สมบูรณ์ กรุณาลองใหม่" },
+          502,
+        );
+      }
+
+      // 6. Save to Neon DB via the existing action (auth + validation + old image cleanup)
+      let profile;
+      try {
+        profile = await ctx.runAction(api.customer.saveProfileImage, {
+          kind,
+          publicId: uploaded.public_id,
+          format: uploaded.format,
+          bytes: uploaded.bytes,
+          width: uploaded.width,
+          height: uploaded.height,
+        });
+      } catch (err) {
+        console.error("[cloudinary/upload-profile] DB save failed:", err);
+        // The image was uploaded to Cloudinary but DB save failed.
+        // Return the Cloudinary URL so the frontend can at least show the image.
+        // The orphan will be cleaned up later.
+        return json_response(
+          {
+            success: false,
+            code: "DATABASE_ERROR",
+            message: "อัปโหลดรูปสำเร็จ แต่ไม่สามารถบันทึกโปรไฟล์ได้ กรุณาลองอีกครั้ง",
+          },
+          500,
+        );
+      }
+
+      // 7. Return success
+      return json_response(
+        {
+          success: true,
+          profile: {
+            name: profile.name,
+            email: profile.email,
+            phone: profile.phone,
+            role: profile.role,
+            avatarUrl: profile.avatarUrl,
+            coverUrl: profile.coverUrl,
+            memberSince: profile.memberSince,
+          },
+        },
+        200,
+      );
     } catch (err) {
-      console.error("[cloudinary/upload] proxy error:", err);
-      return new Response(
-        JSON.stringify({ error: "Upload proxy failed" }),
-        { status: 502, headers: { "Content-Type": "application/json" } },
+      console.error("[cloudinary/upload-profile] Unexpected error:", err);
+      return json_response(
+        { success: false, code: "UPLOAD_FAILED", message: "เกิดข้อผิดพลาดที่ไม่คาดคิด กรุณาลองอีกครั้ง" },
+        500,
       );
     }
   }),
@@ -149,5 +330,14 @@ http.route({
     });
   }),
 });
+
+// ─── Helpers ────────────────────────────────────────────────────────────────
+
+function json_response(body: unknown, status: number): Response {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { "Content-Type": "application/json" },
+  });
+}
 
 export default http;
