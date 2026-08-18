@@ -40,6 +40,7 @@ import {
 } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
+import { ImageUploadButton } from "@/components/ImageUploadButton";
 
 const TABS = [
   { id: "overview", label: "Overview", icon: Store },
@@ -957,6 +958,11 @@ function SellerDesk({
 function SettingsTab({ seller }: { seller: Doc<"sellers"> }) {
   const update = useMutation(api.sellers.updateSellerProfile);
   const [busy, setBusy] = useState(false);
+  const [logoUrl, setLogoUrl] = useState<string | null>(null);
+  const [bannerUrl, setBannerUrl] = useState<string | null>(null);
+
+  const displayLogo = logoUrl ?? seller.logo ?? null;
+  const displayBanner = bannerUrl ?? seller.banner ?? null;
 
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -997,6 +1003,39 @@ function SettingsTab({ seller }: { seller: Doc<"sellers"> }) {
       className="flex max-w-2xl flex-col gap-5 rounded-2xl border border-border/70 bg-card p-6"
     >
       <h2 className="text-lg font-bold tracking-tight">Store settings</h2>
+
+      {/* Store logo + banner upload */}
+      <div className="flex flex-col gap-4 rounded-xl border border-border/60 p-4">
+        <p className="text-sm font-medium text-muted-foreground">Store images</p>
+        <div className="grid gap-4 sm:grid-cols-2">
+          <div>
+            <Label className="mb-2 block">Store logo</Label>
+            <ImageUploadButton
+              uploadType="logo"
+              currentUrl={displayLogo}
+              onUploaded={(url) => {
+                setLogoUrl(url);
+                toast.success("Store logo updated");
+              }}
+              label="Upload logo"
+              aspectClass="aspect-square"
+            />
+          </div>
+          <div>
+            <Label className="mb-2 block">Store banner</Label>
+            <ImageUploadButton
+              uploadType="banner"
+              currentUrl={displayBanner}
+              onUploaded={(url) => {
+                setBannerUrl(url);
+                toast.success("Store banner updated");
+              }}
+              label="Upload banner"
+              aspectClass="aspect-video"
+            />
+          </div>
+        </div>
+      </div>
       <div className="grid gap-4 sm:grid-cols-2">
         <div className="grid gap-2">
           <Label htmlFor="s-name">Store name</Label>

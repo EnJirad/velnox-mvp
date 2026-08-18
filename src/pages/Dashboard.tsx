@@ -14,6 +14,9 @@ import {
 import { Link, useNavigate } from "react-router";
 import { StatusBadge } from "@/components/StatusBadge";
 import { formatMoney } from "@/lib/format";
+import { ImageUploadButton } from "@/components/ImageUploadButton";
+import { useState } from "react";
+import { toast } from "sonner";
 
 export default function Dashboard() {
   const { user, signOut } = useAuth();
@@ -22,6 +25,10 @@ export default function Dashboard() {
   const employee = useQuery(api.center.isEmployee);
   const orders = useQuery(api.orders.myOrders);
 
+  // Track uploaded URLs locally for instant UI update
+  const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
+  const [coverUrl, setCoverUrl] = useState<string | null>(null);
+
   const handleSignOut = async () => {
     await signOut();
     navigate("/");
@@ -29,6 +36,10 @@ export default function Dashboard() {
 
   const recentOrders = orders?.slice(0, 3) ?? [];
   const isSeller = seller?.status === "APPROVED";
+
+  // Priority: custom uploaded → Google image → null
+  const displayAvatar = avatarUrl ?? user?.image ?? null;
+  const displayCover = coverUrl ?? null;
 
   const cards = [
     {
@@ -111,15 +122,64 @@ export default function Dashboard() {
       {/* Content */}
       <main className="flex-1 px-4 py-8 sm:px-8">
         <div className="mx-auto w-full max-w-4xl">
-          <p className="text-sm font-medium text-muted-foreground">
-            {user?.email}
-          </p>
-          <h1 className="mt-1 text-3xl font-bold tracking-tight">
-            Welcome{user?.name ? `, ${user.name}` : ""}
-          </h1>
-          <p className="mt-2 text-sm text-muted-foreground">
-            One account for the whole Velnox network.
-          </p>
+          {/* Cover image */}
+          {displayCover && (
+            <div className="mb-6 aspect-video w-full overflow-hidden rounded-2xl border border-border/60">
+              <img
+                src={displayCover}
+                alt="Cover"
+                className="size-full object-cover"
+              />
+            </div>
+          )}
+
+          <div className="flex items-start gap-5">
+            {/* Profile avatar — clickable to upload */}
+            <div className="shrink-0">
+              <ImageUploadButton
+                uploadType="profile"
+                currentUrl={displayAvatar}
+                onUploaded={(url) => {
+                  setAvatarUrl(url);
+                  toast.success("Profile image updated");
+                }}
+                label="Avatar"
+                aspectClass="size-20 rounded-full"
+                className="w-auto"
+              />
+              {!displayAvatar && (
+                <div className="size-20 rounded-full bg-muted flex items-center justify-center text-xl font-bold text-muted-foreground">
+                  {user?.name?.[0]?.toUpperCase() ?? user?.email?.[0]?.toUpperCase() ?? "?"}
+                </div>
+              )}
+            </div>
+
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-medium text-muted-foreground">
+                {user?.email}
+              </p>
+              <h1 className="mt-1 text-3xl font-bold tracking-tight">
+                Welcome{user?.name ? `, ${user.name}` : ""}
+              </h1>
+              <p className="mt-2 text-sm text-muted-foreground">
+                One account for the whole Velnox network.
+              </p>
+            </div>
+          </div>
+
+          {/* Cover upload */}
+          <div className="mt-4">
+            <ImageUploadButton
+              uploadType="cover"
+              currentUrl={displayCover}
+              onUploaded={(url) => {
+                setCoverUrl(url);
+                toast.success("Cover image updated");
+              }}
+              label={displayCover ? "Change cover" : "Upload cover"}
+              aspectClass="aspect-video"
+            />
+          </div>
 
           <div className="mt-8 grid gap-4 sm:grid-cols-3">
             {cards.map((card) => (
