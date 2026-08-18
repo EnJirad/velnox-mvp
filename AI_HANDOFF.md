@@ -4,7 +4,7 @@
 
 ## CURRENT SNAPSHOT
 - date: 2026-08-18
-- commit: precheck-removed round
+- commit: google-avatar-crossorigin-fix
 - branch: main
 
 ## ARCHITECTURE (LOCKED — ห้ามเปลี่ยน)
@@ -21,68 +21,94 @@
 - **Network diagnostics round**: Full STEP logging, error ID, preflight test, fetch timing
 - **Mobile fix round**: crossOrigin on images, fetch timeout (30s), single retry
 - **Precheck-removed round**: Removed misleading HEAD precheck, kept retry+timeout
+- **Google avatar fix round**: Conditional crossOrigin for Cloudinary vs Google CDN images
 
-## MOBILE PROFILE IMAGE — ROOT CAUSE & CURRENT STATE
+## GOOGLE DEFAULT PROFILE IMAGE — ROOT CAUSE & FIX (THIS ROUND)
 
-### Cross-Device Evidence
-| Device | Upload | Image Display |
-|--------|--------|---------------|
-| Desktop Firefox | ✅ PASS | ✅ PASS |
-| Android #1 | ❌ FAIL | ❌ FAIL |
-| Android #2 | ❌ FAIL | — |
-| iPhone | ❌ FAIL | — |
+### Problem
+Google default profile image from OAuth works on Desktop Firefox but does NOT display on Mobile (Android + iPhone).
 
-### Critical Test Result
-Mobile browser navigation to `https://api.cloudinary.com` → **HTTP 403 Forbidden nginx**
+### Root Cause
+The previous fix added `crossOrigin="anonymous"` to ALL profile `<img>` tags. This works for Cloudinary CDN images but **breaks Google CDN images**.
 
-This proves: **Cloudinary endpoint IS reachable from mobile**. The problem is NOT network connectivity.
+**Why it fails:**
+- Google profile images are hosted on `lh3.googleusercontent.com`
+- Google's CDN requires a `Referer` header to serve images
+- `crossOrigin="anonymous"` on `<img>` causes the browser to send a CORS request **without** the `Referer` header
+- Google blocks the request → image is invisible → `onError` hides the element
 
-### Root Cause: CORS Pre-check (FIXED)
-The previous HEAD precheck used `fetch()` with `mode: "cors"` which triggers a browser **CORS preflight** (OPTIONS request). Cloudinary's upload endpoint returns403 without CORS headers for HEAD requests. The browser blocks the response entirely → TypeError → reported as "precheck: FAIL".
+**Why Desktop Firefox still works:**
+- Desktop browsers are more lenient with `<img>` CORS enforcement
+- Mobile browsers (Chrome Android, Safari iOS) strictly enforce CORS for `<img>` tags
 
-Direct browser navigation works (403) because navigation is NOT subject to CORS.
+### The Fix
+Changed from unconditional `crossOrigin="anonymous"` to **conditional**:
+```jsx
+crossOrigin={isCloudinary(url) ? "anonymous" : undefined}
+```
 
-The actual upload POST works differently: Cloudinary returns proper CORS headers for POST with FormData.
+Where `isCloudinary` checks if the URL contains `cloudinary.com`:
+- **Cloudinary** (`res.cloudinary.com`): supports CORS → `crossOrigin="anonymous"` → works ✅
+- **Google** (`lh3.googleusercontent.com`): requires Referer → no crossOrigin → works ✅
+- **Other CDNs**: no crossOrigin → default browser behavior → works ✅
 
-### What Was Fixed
-1. **Removed the HEAD precheck entirely** — it was testing a different endpoint/method that lacks CORS headers. The real upload POST IS the connectivity test.
-2. **ShopProfile.tsx** — Added `crossOrigin="anonymous"` + `loading="eager"` to cover and avatar `<img>` tags → fixes mobile image display
-3. **ShopAccount.tsx** — Added `crossOrigin="anonymous"` + `loading="eager"` to avatar `<img>` tag
-4. **ProfileImageUpload.tsx** — Kept retry (30s timeout, single retry) + improved error diagnostics
+### Image Flow (verified)
+```
+Google OAuth → user.image (lh3.googleusercontent.com URL)
+  ↓
+useAuth() → user?.image
+  ↓
+const avatarSrc = avatarPreview ?? profile?.avatarUrl ?? user?.image ?? null
+  ↓
+<img src={avatarSrc} crossOrigin={isCloudinary(avatarSrc) ? "anonymous" : undefined} />
+```
+
+For Cloudinary-uploaded images:
+```
+Browser → Cloudinary signed upload → secure_url (res.cloudinary.com)
+  ↓
+saveProfileImage → database avatar_url
+  ↓
+myProfile() → avatarUrl
+  ↓
+const avatarSrc = profile.avatarUrl
+  ↓
+<img src={avatarSrc} crossOrigin="anonymous" />  ← works because Cloudinary supports CORS
+```
+
+### Files Changed
+- `apps/shop/src/pages/ShopProfile.tsx` — Added `isCloudinary()` helper; cover and avatar `<img>` use conditional `crossOrigin`
+- `apps/shop/src/pages/ShopAccount.tsx` — Added `isCloudinary()` helper; avatar `<img>` uses conditional `crossOrigin`
 
 ### TypeScript Status
 ✅ `bun run typecheck` — PASS (no errors)
 
 ## STILL PENDING — REQUIRES USER BROWSER TESTING
 
-### Upload Test (Deploy → Try on Mobile)
-After deploying, test on mobile and check console for:
+### Mobile Upload Test (Deploy → Try on Mobile)
+After deploying, test upload on mobile and check console:
 ```
 [ProfileUpload] STEP 5 — Fetch attempt 1/2     → completed or FAILED?
-[ProfileUpload] STEP 5 — Fetch attempt 2/2     → (only if attempt 1 failed)
 ```
 
-**If completed with HTTP status (even 400/403):** Cloudinary is reachable, check the response body.
+### Mobile Image Display Test
+After deploying, test on mobile:
+1. Login with Google on mobile
+2. Check if Google default profile avatar shows
+3. Upload a Cloudinary avatar → check if it shows
+4. Check cover image
 
-**If FAILED with TypeError:** 
-- Test in **Incognito mode** first (rules out ad-blocker)
-- If Incognito works → ad-blocker/extension is the cause
-- If Incognito also fails → the browser itself is blocking the CORS POST from mobile
+**Expected results:**
+| Image Source | Desktop | Mobile |
+|---|---|---|
+| Google default avatar | ✅ shows | ✅ should now show |
+| Cloudinary uploaded avatar | ✅ shows | ✅ should show |
+| Cloudinary cover | ✅ shows | ✅ should show |
 
-### Image Display Test
-After deploying, test on mobile Android:
-1. Go to Profile page
-2. Check if existing avatar/cover images load
-3. If still broken, check console for CORS errors
-
-## FILES CHANGED (this round)
+## PREVIOUSLY FIXED
 - `apps/shop/src/components/shop/ProfileImageUpload.tsx` — Removed HEAD precheck, kept retry+timeout, improved diagnostics
-- `apps/shop/src/pages/ShopProfile.tsx` — Added crossOrigin + loading="eager" to img tags
-- `apps/shop/src/pages/ShopAccount.tsx` — Added crossOrigin + loading="eager" to img tag
-- `AI_HANDOFF.md` — Updated
-
-## PREVIOUSLY CHANGED
-- `apps/shop/src/components/shop/ProfileImageUpload.tsx` — Cloudinary URL log, FormData log, fetch timing, detailed catch
+- `apps/shop/src/pages/ShopProfile.tsx` — Added crossOrigin (now conditional)
+- `apps/shop/src/pages/ShopAccount.tsx` — Added crossOrigin (now conditional)
 
 ## VERIFICATION
 - [x] TypeScript compiles clean
@@ -90,11 +116,13 @@ After deploying, test on mobile Android:
 - [x] FormData construction correct (no manual Content-Type)
 - [x] Signature params match backend
 - [x] Removed misleading precheck
-- [ ] Real mobile browser upload test — PENDING
-- [ ] Real mobile image display test — PENDING
+- [x] Google avatar: removed crossOrigin for non-Cloudinary URLs
+- [ ] Real mobile Google avatar display test — PENDING
+- [ ] Real mobile upload test — PENDING
+- [ ] Real mobile Cloudinary image display test — PENDING
 
 ## NEXT AI INSTRUCTIONS
-1. If mobile upload still fails: the issue is CORS at the browser level. Check if Cloudinary's Cloud Settings have `Allowed origins` configured. Also check if Cloudinary's upload endpoint returns `Access-Control-Allow-Origin` for POST with FormData from `velshop.vercel.app`.
-2. If upload works but image display fails: check Cloudinary delivery URL response headers for CORS/caching issues on mobile.
-3. As a last resort fallback: add a server-side proxy endpoint (POST through Convex HTTP action → Cloudinary) to bypass browser CORS entirely.
+1. If Google avatar still doesn't show on mobile after this fix: test direct URL `https://lh3.googleusercontent.com/...` on the mobile device to verify Google CDN connectivity.
+2. If upload still fails on mobile: the issue is CORS for `api.cloudinary.com` POST with FormData. Check Cloudinary Cloud Settings → Upload → Allowed origins.
+3. As a last resort: add a Convex HTTP action proxy for Cloudinary uploads to bypass browser CORS.
 4. Do NOT change: Convex architecture, Neon, authentication, Cloudinary account, signature algorithm, database schema.

@@ -65,6 +65,11 @@ export default function ShopAccount() {
 
   const dirty = name.trim() !== (profile?.name ?? "") || phone.trim() !== (profile?.phone ?? "");
 
+  // crossOrigin="anonymous" must only be set for Cloudinary images.
+  // Google CDN (lh3.googleusercontent.com) requires a Referer header;
+  // setting crossOrigin strips it → image blocked on mobile.
+  const isCloudinary = (url: string | null) => !!url && /cloudinary\.com/.test(url);
+
   const handleSave = async () => {
     const trimmedName = name.trim();
     if (trimmedName.length < 2 || trimmedName.length > 80) {
@@ -142,7 +147,7 @@ export default function ShopAccount() {
                       src={profile.avatarUrl}
                       alt=""
                       className="size-full object-cover"
-                      crossOrigin="anonymous"
+                      crossOrigin={isCloudinary(profile?.avatarUrl ?? null) ? "anonymous" : undefined}
                       loading="eager"
                       onError={(e) => {
                         (e.currentTarget as HTMLImageElement).style.display = "none";

@@ -132,6 +132,11 @@ export default function ShopProfile() {
   const avatarSrc = avatarPreview ?? profile?.avatarUrl ?? user?.image ?? null;
   const coverSrc = coverPreview ?? profile?.coverUrl ?? null;
 
+  // crossOrigin="anonymous" must only be set for Cloudinary images.
+  // Google CDN (lh3.googleusercontent.com) requires a Referer header;
+  // setting crossOrigin strips it → image blocked on mobile.
+  const isCloudinary = (url: string | null) => !!url && /cloudinary\.com/.test(url);
+
   const formatMemberSince = (ms: number) =>
     new Intl.DateTimeFormat("th-TH", { day: "numeric", month: "long", year: "numeric" }).format(
       new Date(ms),
@@ -169,7 +174,7 @@ export default function ShopProfile() {
                     src={coverSrc}
                     alt={t("profile.coverAlt", { name: displayName || "VelShop" })}
                     className="absolute inset-0 size-full object-cover"
-                    crossOrigin="anonymous"
+                    crossOrigin={isCloudinary(coverSrc) ? "anonymous" : undefined}
                     loading="eager"
                     onError={(e) => {
                       // Spec §89: never show a broken image — fall back to the gradient.
@@ -200,7 +205,7 @@ export default function ShopProfile() {
                         src={avatarSrc}
                         alt={t("profile.avatarAlt", { name: displayName || "VelShop" })}
                         className="size-full object-cover"
-                        crossOrigin="anonymous"
+                        crossOrigin={isCloudinary(avatarSrc) ? "anonymous" : undefined}
                         loading="eager"
                         onError={(e) => {
                           // Spec §89: broken avatar → initial-letter fallback.
