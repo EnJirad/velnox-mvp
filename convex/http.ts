@@ -60,16 +60,23 @@ http.route({
     }
 
     try {
-      // Read the raw body (ArrayBuffer) to avoid re-serializing multipart data.
-      const body = await request.arrayBuffer();
-      const contentType = request.headers.get("Content-Type") || "multipart/form-data";
+      // Parse the multipart form data from the browser request.
+      // Using formData() instead of arrayBuffer() ensures proper handling
+      // on Cloudflare Workers (Convex edge runtime) — raw ArrayBuffer
+      // forwarding can produce empty or corrupted bodies on some runtimes.
+      const incoming = await request.formData();
+      const outgoing = new FormData();
+      incoming.forEach((value, key) => {
+        outgoing.append(key, value);
+      });
 
       // Forward to Cloudinary — server-side requests have no CORS restrictions.
       const cloudinaryUrl = `https://api.cloudinary.com/v1_1/${cloudName}/image/upload`;
       const response = await fetch(cloudinaryUrl, {
         method: "POST",
-        headers: { "Content-Type": contentType },
-        body,
+        body: outgoing,
+        // Do NOT set Content-Type manually — the browser/runtime generates
+        // the multipart boundary automatically for FormData bodies.
       });
 
       const responseBody = await response.text();
