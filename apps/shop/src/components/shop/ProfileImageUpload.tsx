@@ -15,6 +15,17 @@ const UPLOAD_TIMEOUT_MS = 30_000;
 /** Number of automatic retries on network failure (1 = total 2 attempts). */
 const MAX_RETRIES = 1;
 
+/**
+ * Convex HTTP proxy endpoint for Cloudinary uploads.
+ * Used as a fallback when the browser cannot POST directly to
+ * api.cloudinary.com (mobile CORS preflight failure, carrier proxy, etc.).
+ */
+function getProxyUploadUrl(): string {
+  const convexUrl = import.meta.env.VITE_CONVEX_URL as string | undefined;
+  if (!convexUrl) return "";
+  return `${convexUrl}/cloudinary/upload`;
+}
+
 /** Server-issued signed upload permit (see backend/storage.ts UploadSignature). */
 interface UploadSignature {
   cloudName: string;
@@ -187,160 +198,109 @@ export function ProfileImageUpload({ kind, onPreview, onUploaded, children }: Pr
       body.append("signature", sig.signature);
       body.append("allowed_formats", sig.allowedFormats);
 
-      // Stage B — POST straight to Cloudinary.
-      // ==========================================
-      // DIAGNOSTIC: Full URL + FormData + network diagnostics
+      // Stage B — POST to Cloudinary (direct first, proxy fallback on mobile failure).
       // ==========================================
       failStage = 5;
-      const cloudinaryUrl = `https://api.cloudinary.com/v1_1/${sig.cloudName}/image/upload`;
+      const directCloudinaryUrl = `https://api.cloudinary.com/v1_1/${sig.cloudName}/image/upload`;
+      const proxyUrl = getProxyUploadUrl();
 
-      // Log the parsed URL components
-      let urlInfo: Record<string, string> = {};
-      try {
-        const urlObj = new URL(cloudinaryUrl);
-        urlInfo = {
-          full: cloudinaryUrl,
-          protocol: urlObj.protocol,
-          hostname: urlObj.hostname,
-          pathname: urlObj.pathname,
-          cloudName: sig.cloudName,
-        };
-      } catch {
-        urlInfo = { full: cloudinaryUrl, parseError: "URL constructor failed" };
-      }
-      console.log("[ProfileUpload] STEP 5 — Cloudinary URL", urlInfo);
-
-      // Log FormData entries (file name + size, key names, no secrets)
-      const formEntries: string[] = [];
-      body.forEach((val, key) => {
-        if (val instanceof File) {
-          formEntries.push(`${key}: (File: ${val.name}, ${val.size} bytes)`);
-        } else {
-          formEntries.push(`${key}: (string, ${String(val).length} chars)`);
-        }
-      });
-      console.log("[ProfileUpload] STEP 5 — FormData entries", formEntries);
-
-      // Verify no manual Content-Type header is set (critical for FormData)
-      console.log("[ProfileUpload] STEP 5 — Request config", {
-        method: "POST",
-        bodyType: body.constructor.name,
-        hasManualContentType: false, // We intentionally do NOT set Content-Type
-        browserWillSetContentType: true, // Browser auto-sets multipart/form-data + boundary
+      console.log("[ProfileUpload] STEP 5 — Upload targets", {
+        direct: directCloudinaryUrl,
+        proxy: proxyUrl || "(not configured)",
+        fileSize: file.size,
+        fileType: file.type,
       });
 
       // ==========================================
-      // ACTUAL UPLOAD: fetch to Cloudinary (with timeout + retry)
-      // The real upload POST IS the connectivity test — no separate precheck.
-      // A HEAD/OPTIONS precheck on the upload endpoint fails due to CORS
-      // preflight (browser blocks it before any HTTP response), while the
-      // actual POST works because Cloudinary returns proper CORS headers
-      // for POST with FormData. Direct browser navigation to api.cloudinary.com
-      // works (returns 403) because navigation is not subject to CORS.
+      // UPLOAD: direct to Cloudinary, fallback to proxy on mobile failure
       // ==========================================
       stepLog(5, "Starting Cloudinary upload", {
-        cloudinaryUrl,
-        method: "POST",
-        hasManualContentType: false,
+        directUrl: directCloudinaryUrl,
+        proxyUrl: proxyUrl || "(not configured)",
         fileSize: file.size,
         fileType: file.type,
         publicId: sig.publicId,
         folder: sig.folder,
-        timestamp: sig.timestamp,
       });
 
-      let attempt = 0;
       let res: Response | null = null;
       let lastFetchErr: unknown = null;
+      let usedProxy = false;
 
-      while (attempt <= MAX_RETRIES) {
-        attempt++;
+      // Helper: attempt a single fetch to a given URL
+      async function attemptFetch(url: string, label: string): Promise<Response> {
         const tFetchStart = performance.now();
         const controller = new AbortController();
         const timer = setTimeout(() => controller.abort(), UPLOAD_TIMEOUT_MS);
         try {
-          console.log(`[ProfileUpload] STEP 5 — Fetch attempt ${attempt}/${MAX_RETRIES + 1}`);
-          res = await fetch(cloudinaryUrl, {
+          console.log(`[ProfileUpload] STEP 5 — ${label} → ${url}`);
+          const r = await fetch(url, {
             method: "POST",
             body,
             signal: controller.signal,
-            // IMPORTANT: Do NOT set Content-Type manually.
-            // The browser MUST set "multipart/form-data; boundary=..." automatically.
-            // IMPORTANT: Do NOT use mode: "no-cors" — it would hide the response.
           });
-          const tFetchEnd = performance.now();
+          const ms = Math.round(performance.now() - tFetchStart);
           clearTimeout(timer);
-          console.log("[ProfileUpload] STEP 5 — Fetch completed", {
-            attempt,
-            status: res.status,
-            ok: res.ok,
-            statusText: res.statusText,
-            type: res.type,
-            url: res.url,
-            redirected: res.redirected,
-            ms: Math.round(tFetchEnd - tFetchStart),
+          console.log(`[ProfileUpload] STEP 5 — ${label} completed`, {
+            status: r.status,
+            ok: r.ok,
+            ms,
           });
-          // If we got a response (even HTTP error), Cloudinary is reachable.
-          break;
-        } catch (fetchErr) {
-          const tFetchEnd = performance.now();
+          return r;
+        } catch (err) {
+          const ms = Math.round(performance.now() - tFetchStart);
           clearTimeout(timer);
-          lastFetchErr = fetchErr;
-          const elapsed = Math.round(tFetchEnd - tFetchStart);
-          console.error(`[ProfileUpload] STEP 5 — Fetch attempt ${attempt} FAILED`, {
-            ms: elapsed,
-            message: fetchErr instanceof Error ? fetchErr.message : String(fetchErr),
-            name: fetchErr instanceof Error ? fetchErr.name : typeof fetchErr,
-            aborted: controller.signal.aborted,
+          console.error(`[ProfileUpload] STEP 5 — ${label} FAILED`, {
+            ms,
+            message: err instanceof Error ? err.message : String(err),
+            name: err instanceof Error ? err.name : typeof err,
           });
-          inspectError(fetchErr, `STEP 5 FETCH ATTEMPT ${attempt}`);
+          inspectError(err, `STEP 5 ${label}`);
+          throw err;
+        }
+      }
 
-          if (controller.signal.aborted) {
-            console.error("[ProfileUpload] STEP 5 — Fetch ABORTED (timeout)", {
-              timeoutMs: UPLOAD_TIMEOUT_MS,
-              elapsedMs: elapsed,
+      // 1) Try direct upload first (works on desktop)
+      try {
+        res = await attemptFetch(directCloudinaryUrl, "direct upload");
+      } catch (directErr) {
+        lastFetchErr = directErr;
+        console.log("[ProfileUpload] STEP 5 — Direct upload failed, trying proxy fallback...", {
+          proxyUrl: proxyUrl || "(not configured)",
+        });
+
+        // 2) Fallback: Convex proxy (bypasses browser CORS entirely)
+        if (proxyUrl) {
+          try {
+            res = await attemptFetch(proxyUrl, "proxy upload");
+            usedProxy = true;
+          } catch (proxyErr) {
+            lastFetchErr = proxyErr;
+            console.error("[ProfileUpload] STEP 5 — Proxy upload also failed", {
+              message: proxyErr instanceof Error ? proxyErr.message : String(proxyErr),
             });
-          }
-
-          if (attempt <= MAX_RETRIES) {
-            console.log("[ProfileUpload] STEP 5 — Retrying in 1s...");
-            await new Promise((r) => setTimeout(r, 1000));
           }
         }
       }
 
       if (!res) {
-        // All attempts failed — build diagnostic message
+        // Both direct and proxy failed
         const env = {
           origin: window.location.origin,
           online: navigator.onLine,
-          protocol: window.location.protocol,
-          target: urlInfo.hostname ?? "api.cloudinary.com",
-          userAgent: navigator.userAgent.slice(0, 120),
-          platform: navigator.platform,
+          target: directCloudinaryUrl.replace(/\/v1_1\/.*/, "/..."),
+          proxy: proxyUrl || "(not configured)",
         };
         const safeDetail = lastFetchErr instanceof Error
-          ? `${lastFetchErr.message} | origin: ${env.origin} | online: ${env.online} | target: ${env.target}`
-          : `Network error: ${String(lastFetchErr)} | origin: ${env.origin} | online: ${env.online}`;
-        console.error("[ProfileUpload] STEP 5 — All fetch attempts failed", env);
-
-        if (lastFetchErr instanceof TypeError) {
-          console.error("[ProfileUpload] STEP 5 — TypeError diagnosis", {
-            message: lastFetchErr.message,
-            possibleCauses: [
-              "1. Ad-blocker / browser extension blocking api.cloudinary.com",
-              "2. CORS policy — Cloudinary upload endpoint not returning Access-Control-Allow-Origin",
-              "3. Mobile carrier proxy or firewall blocking the POST",
-              "4. Network interruption during upload",
-              "5. Browser DevTools network throttling",
-              "6. Service Worker intercepting the request",
-              "NOTE: If https://api.cloudinary.com opens in the address bar, the server is reachable — the issue is CORS or request blocking at the browser level",
-            ],
-          });
-        }
-
+          ? `${lastFetchErr.message} | origin: ${env.origin} | online: ${env.online}`
+          : `Network error: ${String(lastFetchErr)} | origin: ${env.origin}`;
+        console.error("[ProfileUpload] STEP 5 — All upload attempts failed", env);
         fail(5, "profile.imageUploadFailed", safeDetail, lastFetchErr, preview);
         return;
+      }
+
+      if (usedProxy) {
+        console.log("[ProfileUpload] STEP 5 — Upload succeeded via proxy");
       }
 
       failStage = 6;

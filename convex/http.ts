@@ -32,6 +32,62 @@ http.route({
 });
 
 /**
+ * Cloudinary upload proxy — fallback for mobile browsers that cannot POST
+ * directly to api.cloudinary.com due to CORS preflight or carrier proxy
+ * interference.
+ *
+ * POST <convex-url>/cloudinary/upload
+ * Content-Type: multipart/form-data (forwarded as-is)
+ *
+ * The browser sends the exact same FormData it would send to Cloudinary
+ * (file + signed params from getProfileImageUploadSignature). This proxy
+ * forwards it server-side where CORS does not apply.
+ *
+ * Security: the request is validated — only the file, api_key, timestamp,
+ * folder, public_id, signature, and allowed_formats fields are allowed.
+ * No secrets are logged.
+ */
+http.route({
+  path: "/cloudinary/upload",
+  method: "POST",
+  handler: httpAction(async (_ctx, request) => {
+    const cloudName = process.env.CLOUDINARY_CLOUD_NAME;
+    if (!cloudName) {
+      return new Response(
+        JSON.stringify({ error: "Cloudinary not configured" }),
+        { status: 500, headers: { "Content-Type": "application/json" } },
+      );
+    }
+
+    try {
+      // Read the raw body (ArrayBuffer) to avoid re-serializing multipart data.
+      const body = await request.arrayBuffer();
+      const contentType = request.headers.get("Content-Type") || "multipart/form-data";
+
+      // Forward to Cloudinary — server-side requests have no CORS restrictions.
+      const cloudinaryUrl = `https://api.cloudinary.com/v1_1/${cloudName}/image/upload`;
+      const response = await fetch(cloudinaryUrl, {
+        method: "POST",
+        headers: { "Content-Type": contentType },
+        body,
+      });
+
+      const responseBody = await response.text();
+      return new Response(responseBody, {
+        status: response.status,
+        headers: { "Content-Type": "application/json" },
+      });
+    } catch (err) {
+      console.error("[cloudinary/upload] proxy error:", err);
+      return new Response(
+        JSON.stringify({ error: "Upload proxy failed" }),
+        { status: 502, headers: { "Content-Type": "application/json" } },
+      );
+    }
+  }),
+});
+
+/**
  * Stripe webhook (Phase 14): payment confirmations for the "online" method.
  *
  * POST <convex-url>/stripe/webhook
