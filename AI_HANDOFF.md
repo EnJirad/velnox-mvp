@@ -4,7 +4,7 @@
 
 ## CURRENT SNAPSHOT
 - date: 2026-08-18
-- commit: cloudinary-proxy-formdata-fix
+- commit: upload-debug-panel
 - branch: main
 
 ## ARCHITECTURE (LOCKED — ห้ามเปลี่ยน)
@@ -23,7 +23,8 @@
 - **Precheck-removed round**: Removed misleading HEAD precheck, kept retry+timeout
 - **Google avatar fix rounds**: Conditional crossOrigin, `||` chain, ShopAccount fallback, ShopHeader avatar
 - **Cloudinary upload proxy**: Convex HTTP proxy fallback for mobile browsers
-- **Proxy FormData fix (this round)**: Fixed 404 by switching from ArrayBuffer to FormData forwarding
+- **Proxy FormData fix**: Fixed 404 by switching from ArrayBuffer to FormData forwarding
+- **Visible debug panel (this round)**: On-failure debug panel with copy-to-clipboard for mobile debugging
 
 ## DESKTOP vs MOBILE COMPARISON
 
@@ -131,31 +132,73 @@ CLOUDINARY_API_SECRET  = ✅ present in Convex deployment
 ```
 These are Convex deployment env vars (NOT Vercel env vars). The proxy reads them via `process.env.CLOUDINARY_CLOUD_NAME`.
 
+## VISIBLE DEBUG PANEL — THIS ROUND
+
+### What was added
+A collapsible debug panel in `ProfileImageUpload.tsx` that appears when an upload fails. The user can:
+1. See the exact failure step, error, and all diagnostic data
+2. Press `[ คัดลอกข้อมูลDebug ]` to copy the full report to clipboard
+3. Send the copied text to the developer
+
+### What the debug panel exposes
+- Error ID (PROFILE_UPLOAD_YYYYMMDD_XXXX)
+- Failed step (STEP number + label)
+- Error detail, name, message
+- Upload route (DIRECT / PROXY / BOTH_FAILED)
+- Direct HTTP status (if reached)
+- Proxy HTTP status (if reached)
+- Target hostname + masked path
+- Signature request status (SUCCESS / FAILED)
+- All FormData field presence (PRESENT / MISSING — no values)
+- File name, type, size
+- Browser online status, origin, browser summary
+- HTTP response status + body (if received)
+- Cloudinary response (if received)
+- Timing (start, fail, duration ms)
+
+### What is masked/hidden
+- API key VALUE → only shows PRESENT/MISSING
+- Signature VALUE → only shows PRESENT/MISSING
+- Cloud name → masked (e.g. "abc***xy")
+- API secret → never shown
+- OAuth tokens → never shown
+- Cookies → never shown
+- Full User-Agent → summarized (e.g. "Chrome 139 · Android")
+
+### How it works
+1. Debug state (`DebugInfo`) is built incrementally during the upload flow
+2. On any failure, `setDebugInfo(d)` populates the panel
+3. On success, `setDebugInfo(null)` clears any previous failure
+4. `DebugPanel` component renders the collapsible panel + copy button
+5. `buildDebugReport()` generates the plain-text report for clipboard
+6. Copy uses `navigator.clipboard.writeText()` with textarea fallback
+
+### File changed
+- `apps/shop/src/components/shop/ProfileImageUpload.tsx` — Complete rewrite with debug state, DebugPanel component, copy functionality
+
+### TypeScript: ✅ PASS
+
 ## STILL PENDING — REQUIRES REAL DEVICE TESTING
 
-### Mobile Upload Test
-After deploying (Convex auto-deploys on git push):
-1. **Android:** Upload 100KB JPG → check console → should see `proxy upload completed` with status 200
-2. **iPhone:** Upload 100KB JPG → check console → should see `proxy upload completed` with status 200
-3. **Desktop:** Upload 100KB JPG → still uses direct path → should see `direct upload completed` with status 200
+### Mobile Upload Test with Debug Panel
+After deploying:
+1. **Android/iPhone:** Upload JPG → if fails, open "รายละเอียดทางเทคนิค" → press "คัดลอกข้อมูลDebug"
+2. **Desktop:** Upload JPG → should succeed, no debug panel shown
+3. Send the copied debug text to the developer
 
-**Expected console output:**
-```
-[ProfileUpload] STEP 5 — Upload targets
-  direct: "https://api.cloudinary.com/v1_1/.../image/upload"
-  proxy: "https://unique-clownfish-66.convex.site/cloudinary/upload"
-
-[ProfileUpload] STEP 5 — direct upload FAILED  ← (on mobile, expected)
-[ProfileUpload] STEP 5 — proxy upload → https://unique-clownfish-66.convex.site/cloudinary/upload
-[ProfileUpload] STEP 5 — proxy upload completed { status: 200, ok: true, ms: XXXX }
-[ProfileUpload] STEP 5 — Upload succeeded via proxy
-```
+### What to look for in the debug output
+- `Upload Route:` — DIRECT or PROXY or BOTH_FAILED
+- `FAILED AT:` — which step failed
+- `HTTP Status:` — Cloudinary response code
+- `Error:` — the actual error message
+- `Response Body:` — Cloudinary's error explanation
 
 ### Verification Checklist
-- [ ] Mobile: upload succeeds via proxy
-- [ ] Mobile: profile image appears after upload
-- [ ] Desktop: upload still succeeds via direct path
-- [ ] Desktop: profile image appears after upload
+- [ ] Mobile: debug panel appears on failure
+- [ ] Mobile: copy button works
+- [ ] Mobile: copied text contains all diagnostic fields
+- [ ] Desktop: no debug panel on success
+- [ ] No secrets exposed in debug panel
 - [ ] No TypeScript errors
 - [ ] AI_HANDOFF.md updated ✅
 
@@ -163,7 +206,7 @@ After deploying (Convex auto-deploys on git push):
 - `apps/shop/src/pages/ShopProfile.tsx` — `||` chain for avatar resolution, conditional crossOrigin
 - `apps/shop/src/pages/ShopAccount.tsx` — Google image fallback, `||` chain, conditional crossOrigin
 - `apps/shop/src/components/shop/ShopHeader.tsx` — User avatar with onError fallback
-- `apps/shop/src/components/shop/ProfileImageUpload.tsx` — Direct first + proxy fallback + retry + timeout
+- `apps/shop/src/components/shop/ProfileImageUpload.tsx` — Direct first + proxy fallback + retry + timeout + debug panel
 - `convex/http.ts` — Cloudinary upload proxy with FormData forwarding
 
 ## NEXT AI INSTRUCTIONS
