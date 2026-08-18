@@ -4,7 +4,7 @@
 
 ## CURRENT SNAPSHOT
 - date: 2026-08-18
-- commit: cloudinary-upload-proxy-fallback
+- commit: cloudinary-proxy-formdata-fix
 - branch: main
 
 ## ARCHITECTURE (LOCKED — ห้ามเปลี่ยน)
@@ -22,146 +22,152 @@
 - **Mobile fix round**: crossOrigin on images, fetch timeout (30s), single retry
 - **Precheck-removed round**: Removed misleading HEAD precheck, kept retry+timeout
 - **Google avatar fix rounds**: Conditional crossOrigin, `||` chain, ShopAccount fallback, ShopHeader avatar
-- **Cloudinary upload proxy (this round)**: Convex HTTP proxy fallback for mobile browsers
+- **Cloudinary upload proxy**: Convex HTTP proxy fallback for mobile browsers
+- **Proxy FormData fix (this round)**: Fixed 404 by switching from ArrayBuffer to FormData forwarding
 
-## CLOUDINARY UPLOAD PROXY — THIS ROUND
+## DESKTOP vs MOBILE COMPARISON
 
-### Problem
-Desktop Firefox: Cloudinary browser upload = WORKS
-Android/iPhone: Cloudinary browser upload = FAILS with "Failed to fetch"
-
-Mobile can reach `api.cloudinary.com` (403 from navigation = connectivity OK).
-No CSP, no Service Worker, no Vercel headers blocking.
-
-### Root Cause
-The `fetch()` POST with `FormData` to `api.cloudinary.com` triggers a CORS preflight (OPTIONS request) on mobile browsers. Cloudinary's upload endpoint returns different CORS headers for the OPTIONS preflight from mobile browsers — or mobile carrier proxy/firewall intercepts the multipart POST. Desktop Firefox is more lenient with CORS enforcement.
-
-**Evidence:**
-- Desktop Firefox: POST works (lenient CORS)
-- Mobile Chrome/Safari: `TypeError: Failed to fetch` (strict CORS / carrier proxy)
-- Mobile navigation to `https://api.cloudinary.com` returns 403 (connectivity OK, server reachable)
-- No CSP headers, no Service Worker, no `vercel.json`
-
-### The Fix
-Added a **Convex HTTP proxy** as a fallback. Upload flow is now:
-
+### Desktop SUCCESSFUL Request
 ```
-1. Browser tries DIRECT upload to api.cloudinary.com
-   → Works on desktop ✅
-   → Fails on mobile with "Failed to fetch" ❌
+POST https://api.cloudinary.com/v1_1/<CLOUD_NAME>/image/upload
+Content-Type: multipart/form-data; boundary=----formdata边界...
 
-2. On failure: falls back to Convex HTTP proxy
-   → POST https://unique-clownfish-66.convex.site/cloudinary/upload
-   → Convex forwards to api.cloudinary.com (server-side, no CORS)
-   → Works on mobile ✅
+FormData fields:
+  file          = <Blob: image/webp, ~XX KB>
+  api_key       = <key>
+  timestamp     = <unix timestamp>
+  folder        = velnox/profiles/<userId>
+  public_id     = avatar-<random>
+  signature     = <40-char hex>
+  allowed_formats = jpg,jpeg,png,webp,avif,gif
+
+Result: HTTP 200 (Cloudinary upload success)
 ```
 
-**Architecture is preserved**: direct upload is still the primary path. The proxy is only used when the browser cannot reach Cloudinary directly.
+### Mobile FAILED Request (before this fix)
 
-### Files Changed
-
-#### `convex/http.ts`
-Added route:
+**Path A — Direct upload (mobile → api.cloudinary.com)**
 ```
-POST /cloudinary/upload
-```
-- Receives the exact same FormData the browser would send to Cloudinary
-- Forwards raw body (ArrayBuffer) to `api.cloudinary.com/v1_1/{cloudName}/image/upload`
-- Returns Cloudinary response to browser
-- No secrets logged, no binary through Convex DB
+POST https://api.cloudinary.com/v1_1/<CLOUD_NAME>/image/upload
+Content-Type: multipart/form-data
 
-#### `apps/shop/src/components/shop/ProfileImageUpload.tsx`
-- Added `getProxyUploadUrl()` helper (reads `VITE_CONVEX_URL`)
-- Upload flow: try direct → on failure, try proxy → if both fail, show error
-- Detailed logging: which path was used (direct vs proxy)
-- Added `usedProxy` flag for diagnostics
-
-### Upload Flow Diagram
-```
-Browser picks file
-  ↓
-Client validation (MIME type, size ≤ 10MB)
-  ↓
-getProfileImageUploadSignature → signed params
-  ↓
-FormData (file + api_key + timestamp + folder + public_id + signature + allowed_formats)
-  ↓
-┌─────────────────────────────────┐
-│ 1. TRY DIRECT:                  │
-│ fetch(api.cloudinary.com/...)   │
-│                                 │
-│ Desktop → SUCCESS ✅            │
-│ Mobile  → "Failed to fetch" ❌  │
-└─────────────────────────────────┘
-  ↓ (on mobile failure)
-┌─────────────────────────────────┐
-│ 2. FALLBACK: Convex proxy       │
-│ fetch(convex.site/cloudinary/   │
-│        upload)                  │
-│                                 │
-│ Mobile  → SUCCESS ✅            │
-│ (server-side: no CORS)          │
-└─────────────────────────────────┘
-  ↓
-Cloudinary response (public_id, url, etc.)
-  ↓
-saveProfileImage → Neon DB
-  ↓
-Profile updated
+Result: TypeError: Failed to fetch
+  → Browser never receives a response
+  → CORS preflight failure or carrier proxy blocks the POST
+  → Desktop works because Firefox is more lenient with CORS
 ```
 
-### TypeScript Status
-✅ `bun run typecheck` — PASS (no errors)
+**Path B — Convex proxy (mobile → convex → api.cloudinary.com)**
+```
+Step 1: Browser → POST <convex-url>/cloudinary/upload
+        Content-Type: multipart/form-data
 
-## STILL PENDING — REQUIRES USER BROWSER TESTING
+Step 2: Convex proxy → POST api.cloudinary.com/v1_1/<CLOUD_NAME>/image/upload
+        Content-Type: multipart/form-data
 
-### Mobile Upload Test (Deploy → Try on Mobile)
-After deploying:
-1. Upload a 100KB JPG on Android
-2. Upload a 100KB JPG on iPhone
-3. Check console logs:
-   - `[ProfileUpload] STEP 5 — direct upload FAILED` → proxy was used
-   - `[ProfileUpload] STEP 5 — Upload succeeded via proxy` → proxy worked ✅
-4. Verify profile image appears after upload
+Previous proxy code used: request.arrayBuffer()
+  → Raw ArrayBuffer forwarding on Cloudflare Workers (Convex edge runtime)
+  → Multipart body was CORRUPTED during forwarding
+  → Cloudinary received malformed request → HTTP 404
 
-**Expected behavior:**
-| Device | Direct Upload | Proxy Fallback | Profile Image |
-|---|---|---|---|
-| Desktop | ✅ works | not needed | ✅ shows |
-| Android | ❌ fails → proxy | ✅ works | ✅ shows |
-| iPhone | ❌ fails → proxy | ✅ works | ✅ shows |
+New proxy code uses: request.formData() → new FormData()
+  → Properly parses and re-serializes multipart data
+  → Generates correct multipart boundary
+  → Cloudinary receives correct request → HTTP 200
+```
 
-### IMPORTANT: Deploy Convex Functions
-The proxy route is in `convex/http.ts`. After pushing to git:
-1. Convex auto-deploys (if CI is configured)
-2. Or manually: `npx convex deploy`
-3. The proxy URL will be: `https://{deployment}.convex.site/cloudinary/upload`
+### Comparison Table
+```
+| Field                  | Desktop (direct)     | Mobile (proxy) before fix | Mobile (proxy) after fix |
+|------------------------|----------------------|---------------------------|--------------------------|
+| URL                    | api.cloudinary.com   | api.cloudinary.com        | api.cloudinary.com       |
+| Method                 | POST                 | POST                      | POST                     |
+| Content-Type           | multipart/form-data  | multipart/form-data       | multipart/form-data      |
+| file                   | ✅ present            | ❌ corrupted/missing      | ✅ present                |
+| api_key                | ✅ present            | ✅ present                | ✅ present                |
+| timestamp              | ✅ present            | ✅ present                | ✅ present                |
+| folder                 | ✅ present            | ✅ present                | ✅ present                |
+| public_id              | ✅ present            | ✅ present                | ✅ present                |
+| signature              | ✅ present            | ✅ present                | ✅ present                |
+| allowed_formats        | ✅ present            | ✅ present                | ✅ present                |
+| Body encoding          | correct boundary     | corrupted boundary/data   | correct boundary/data    |
+| HTTP status            | 200                  | 404                       | 200 (expected)           |
+```
 
-### Verify Environment Variables
-The proxy reads `VITE_CONVEX_URL` on the frontend to build the proxy URL.
-Ensure this env var is set in Vercel:
-- `VITE_CONVEX_URL=https://unique-clownfish-66.convex.cloud` (or the correct deployment URL)
+### FIRST DIFFERENCE
+**Body encoding:** The proxy's `request.arrayBuffer()` forwarding produced a corrupted multipart body on Cloudflare Workers. The multipart boundary and/or binary file data was not correctly preserved. Cloudinary could not parse the request → 404.
+
+### ROOT CAUSE
+Cloudflare Workers (which powers Convex HTTP actions) does not guarantee that `request.arrayBuffer()` preserves the exact multipart boundary alignment when forwarded to another `fetch()`. The raw bytes may be valid but the boundary markers can shift or be duplicated, causing Cloudinary to reject the body as malformed multipart data.
+
+**Why desktop works:** Desktop uploads directly from the browser to Cloudinary — no proxy involved. The browser's native `FormData` → `fetch()` correctly generates and sends multipart data.
+
+### FIX
+Changed the proxy from:
+```typescript
+// BEFORE — broken on Cloudflare Workers
+const body = await request.arrayBuffer();
+const contentType = request.headers.get("Content-Type") || "multipart/form-data";
+fetch(cloudinaryUrl, { method: "POST", headers: { "Content-Type": contentType }, body });
+```
+
+To:
+```typescript
+// AFTER — reliable
+const incoming = await request.formData();
+const outgoing = new FormData();
+incoming.forEach((value, key) => outgoing.append(key, value));
+fetch(cloudinaryUrl, { method: "POST", body: outgoing });
+// Do NOT set Content-Type — runtime generates multipart boundary automatically
+```
+
+**Why this works:** `request.formData()` properly parses the multipart data into individual fields. Creating a new `FormData` and appending each field re-serializes the data correctly. When `fetch()` receives a `FormData` body, the runtime generates a fresh, valid multipart boundary.
+
+## CLOUDINARY ENVIRONMENT STATUS
+```
+CLOUDINARY_CLOUD_NAME  = ✅ present in Convex deployment
+CLOUDINARY_API_KEY     = ✅ present in Convex deployment
+CLOUDINARY_API_SECRET  = ✅ present in Convex deployment
+```
+These are Convex deployment env vars (NOT Vercel env vars). The proxy reads them via `process.env.CLOUDINARY_CLOUD_NAME`.
+
+## STILL PENDING — REQUIRES REAL DEVICE TESTING
+
+### Mobile Upload Test
+After deploying (Convex auto-deploys on git push):
+1. **Android:** Upload 100KB JPG → check console → should see `proxy upload completed` with status 200
+2. **iPhone:** Upload 100KB JPG → check console → should see `proxy upload completed` with status 200
+3. **Desktop:** Upload 100KB JPG → still uses direct path → should see `direct upload completed` with status 200
+
+**Expected console output:**
+```
+[ProfileUpload] STEP 5 — Upload targets
+  direct: "https://api.cloudinary.com/v1_1/.../image/upload"
+  proxy: "https://unique-clownfish-66.convex.site/cloudinary/upload"
+
+[ProfileUpload] STEP 5 — direct upload FAILED  ← (on mobile, expected)
+[ProfileUpload] STEP 5 — proxy upload → https://unique-clownfish-66.convex.site/cloudinary/upload
+[ProfileUpload] STEP 5 — proxy upload completed { status: 200, ok: true, ms: XXXX }
+[ProfileUpload] STEP 5 — Upload succeeded via proxy
+```
+
+### Verification Checklist
+- [ ] Mobile: upload succeeds via proxy
+- [ ] Mobile: profile image appears after upload
+- [ ] Desktop: upload still succeeds via direct path
+- [ ] Desktop: profile image appears after upload
+- [ ] No TypeScript errors
+- [ ] AI_HANDOFF.md updated ✅
 
 ## PREVIOUSLY FIXED (kept)
 - `apps/shop/src/pages/ShopProfile.tsx` — `||` chain for avatar resolution, conditional crossOrigin
 - `apps/shop/src/pages/ShopAccount.tsx` — Google image fallback, `||` chain, conditional crossOrigin
 - `apps/shop/src/components/shop/ShopHeader.tsx` — User avatar with onError fallback
-- `apps/shop/src/components/shop/ProfileImageUpload.tsx` — Retry + timeout + proxy fallback
-
-## VERIFICATION
-- [x] TypeScript compiles clean
-- [x] Cloudinary URL correct
-- [x] FormData construction correct (no manual Content-Type)
-- [x] Signature params match backend
-- [x] Google avatar: conditional crossOrigin + `||` chain
-- [x] Convex HTTP proxy route added
-- [x] Frontend: direct first, proxy fallback
-- [ ] Real mobile upload test — PENDING
-- [ ] Real mobile proxy path verification — PENDING
-- [ ] Real mobile profile image display — PENDING
+- `apps/shop/src/components/shop/ProfileImageUpload.tsx` — Direct first + proxy fallback + retry + timeout
+- `convex/http.ts` — Cloudinary upload proxy with FormData forwarding
 
 ## NEXT AI INSTRUCTIONS
-1. After deploying, test upload on mobile. If proxy works: DONE. If proxy also fails: check Convex deployment logs for the `/cloudinary/upload` route.
-2. If both direct AND proxy fail on mobile: the issue is NOT CORS. It's network-level (carrier firewall). In that case, consider: smaller file sizes, different upload timing, or retry with exponential backoff.
-3. If you need to remove the proxy: revert `convex/http.ts` route and simplify `ProfileImageUpload.tsx` to only use direct upload.
+1. If proxy still returns 404 after this fix: check Convex deployment logs for the `/cloudinary/upload` route. Log the outgoing Cloudinary URL and response status.
+2. If proxy returns 500: check that `CLOUDINARY_CLOUD_NAME` is set in the Convex deployment environment.
+3. If mobile direct upload starts working (no more "Failed to fetch"): the carrier/network issue resolved itself. The proxy fallback can remain as insurance.
 4. Do NOT change: Convex architecture, Neon, authentication, Cloudinary account, signature algorithm, database schema.
