@@ -143,7 +143,8 @@ const schema = defineSchema(
     // The users table brought in by authTables, extended with Velnox identity.
     users: defineTable({
       name: v.optional(v.string()),
-      image: v.optional(v.string()),
+      image: v.optional(v.string()),        // profile avatar URL
+      coverUrl: v.optional(v.string()),     // cover/banner image URL
       email: v.optional(v.string()),
       emailVerificationTime: v.optional(v.number()),
       isAnonymous: v.optional(v.boolean()),

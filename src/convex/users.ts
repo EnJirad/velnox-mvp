@@ -1,5 +1,6 @@
 import { getAuthUserId } from "@convex-dev/auth/server";
-import { query, QueryCtx } from "./_generated/server";
+import { v } from "convex/values";
+import { mutation, query, QueryCtx } from "./_generated/server";
 
 /**
  * Get the current signed in user. Returns null if the user is not signed in.
@@ -31,3 +32,27 @@ export const getCurrentUser = async (ctx: QueryCtx) => {
   }
   return await ctx.db.get(userId);
 };
+
+// ---------------------------------------------------------------------------
+// Image mutations (called by the upload action after Cloudinary succeeds)
+// ---------------------------------------------------------------------------
+
+/** Update the current user's profile avatar URL (called by upload action). */
+export const updateProfileImage = mutation({
+  args: { imageUrl: v.string() },
+  handler: async (ctx, args) => {
+    const userId = await getAuthUserId(ctx);
+    if (!userId) throw new Error("Not authenticated");
+    await ctx.db.patch(userId, { image: args.imageUrl });
+  },
+});
+
+/** Update the current user's cover image URL (called by upload action). */
+export const updateCoverImage = mutation({
+  args: { imageUrl: v.string() },
+  handler: async (ctx, args) => {
+    const userId = await getAuthUserId(ctx);
+    if (!userId) throw new Error("Not authenticated");
+    await ctx.db.patch(userId, { coverUrl: args.imageUrl });
+  },
+});

@@ -234,8 +234,7 @@ export const updateSellerProfile = mutation({
     if (args.shippingSettings !== undefined)
       patch.shippingSettings = args.shippingSettings;
     if (args.paymentInfo !== undefined) patch.paymentInfo = args.paymentInfo;
-    if (args.policies !== undefined)
-      patch.policies = args.policies.trim() || undefined;
+    if (args.policies !== undefined) patch.policies = args.policies.trim() || undefined;
     await ctx.db.patch(seller._id, patch as never);
   },
 });
@@ -304,5 +303,37 @@ export const myPayouts = query({
       .withIndex("by_seller", (q) => q.eq("sellerId", seller._id))
       .collect();
     return [...payouts].reverse();
+  },
+});
+
+// ---------------------------------------------------------------------------
+// Image mutations (called by the upload action after Cloudinary succeeds)
+// ---------------------------------------------------------------------------
+
+/** Update the seller's store logo URL (called by upload action). */
+export const updateStoreLogo = mutation({
+  args: { logoUrl: v.string() },
+  handler: async (ctx, args) => {
+    const user = await requireUser(ctx);
+    const seller = await ctx.db
+      .query("sellers")
+      .withIndex("by_user", (q) => q.eq("userId", user._id))
+      .first();
+    if (!seller) throw new Error("No seller account found.");
+    await ctx.db.patch(seller._id, { logo: args.logoUrl });
+  },
+});
+
+/** Update the seller's store banner URL (called by upload action). */
+export const updateStoreBanner = mutation({
+  args: { bannerUrl: v.string() },
+  handler: async (ctx, args) => {
+    const user = await requireUser(ctx);
+    const seller = await ctx.db
+      .query("sellers")
+      .withIndex("by_user", (q) => q.eq("userId", user._id))
+      .first();
+    if (!seller) throw new Error("No seller account found.");
+    await ctx.db.patch(seller._id, { banner: args.bannerUrl });
   },
 });
