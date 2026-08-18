@@ -131,7 +131,10 @@ export function ProfileImageUpload({ kind, onPreview, onUploaded, children }: Pr
 				requestAnimationFrame(() => URL.revokeObjectURL(preview));
 			} catch (err) {
 				console.error("Profile image save error (backend stage):", err);
-				toast.error(t("profile.imageSaveFailed"));
+				// The backend throws a user-friendly AppError message for this
+				// stage (e.g. “อัปโหลดรูปสำเร็จ แต่ไม่สามารถบันทึกโปรไฟล์ได้…”) —
+				// surface it instead of a generic fallback (spec §46).
+				toast.error(err instanceof Error && err.message ? err.message : t("profile.imageSaveFailed"));
 				onPreview(null);
 				URL.revokeObjectURL(preview);
 			}

@@ -4,7 +4,7 @@
 
 ## CURRENT SNAPSHOT
 - date: 2026-08-18
-- commit: ดู commit ล่าสุดในประวัติของ branch main
+- commit: ดู commit ล่าสุดในประวัติของ branch main (รอบ verify นี้ push commit ใหม่บน main)
 - branch: main
 
 ## ARCHITECTURE (LOCKED — ห้ามเปลี่ยน)
@@ -16,51 +16,56 @@
 
 ## COMPLETED (ตรวจสอบก่อนคิดว่า "ยังไม่มี")
 - VelShop storefront (apps/shop): product catalog/detail, cart, checkout, orders + order detail/tracking, wishlist, categories, VelRepeat, notifications, search
-- Home page de-clutter (task 2026-08-18): hero CTA ซ้ำออก, หมวดหมู่เป็น pills, section header เรียบ, grid สินค้าหน้าแรกเหลือชุดเดียว
-- Profile (ShopProfile.tsx + ShopAccount.tsx): avatar + cover upload ผ่าน **Cloudinary signed upload** (reuse backend/storage.ts; client+server validate type/size, preview, fallback, skeleton), edit profile (name/phone), logout อยู่ล่างสุด + confirmation dialog
-- Auth: Convex Auth (Google + guest), `use-auth.ts` แยก loading/authenticated/unauthenticated, `RequireAuth` guard, Auth page โชว์ loading เมื่อ `authLoading || isAuthenticated` (กัน login flash), redirect ตาม auth state (ไม่มี setTimeout)
-- Cookie consent (apps/shop/src/lib/cookie-consent.tsx): Necessary/Preferences/Analytics/Marketing — ห้ามเพิ่ม analytics/marketing provider เอง
-- Header/Footer (apps/shop) เป็นเวอร์ชัน compact แล้ว ใช้ร่วมทุกหน้า
-- **Task 2026-08-18 — Profile image 10 MB + FIXED CENTER-PIN map picker:**
-  - Profile avatar/cover max size = **10 MB ทุกชั้น**: client validation (`ProfileImageUpload.tsx` MAX_BYTES), backend signed-upload `max_bytes` + server re-validation (`backend/storage.ts` MAX_IMAGE_BYTES → `getSignedUploadParams` + `saveProfileImage`), ยังรองรับ JPG/PNG/WebP
-  - Upload failure debug: frontend อ่าน **Cloudinary JSON error body** + log HTTP status (error จริงไม่ถูกกลบ), แยก error ระหว่าง Cloudinary upload (`profile.imageUploadFailed`) กับ profile DB save (`profile.imageSaveFailed` + backend throw `PROFILE_SAVE_FAILED`), revoke object URL หลัง upload เสร็จ/ล้มเหลว
-  - Map picker เปลี่ยนเป็น **FIXED CENTER PIN**: หมุดเป็น HTML overlay ตรึงกลางจอ (`pointer-events-none`, z-450), ผู้ใช้ลากแผนที่, พิกัด = `map.getCenter()` จาก `moveend`, **ลบ map click select และ draggable marker ทิ้ง**, search/current location ใช้ `setView` (suppress moveend) แล้วรายงานพิกัดใหม่ → ผู้ใช้ต้องกด "ยืนยันตำแหน่งนี้" (`locationConfirmed=false` เสมอหลังเปลี่ยนตำแหน่ง)
-  - Satellite (Esri World Imagery) เป็น default — **ตรวจแล้ว tile ใช้งานได้จริง (HTTP 200)**, เพิ่ม `invalidateSize()` หลัง mount (rAF + 250ms) เพราะ MapPicker อยู่ใน Dialog (กันแผนที่เทา/ว่างจาก container วัดขนาด 0)
-  - Address save rule ไม่เปลี่ยน: ต้องมี lat/lng + locationConfirmed=true (backend ตรวจ `ADDRESS_GPS_REQUIRED` + `requireShippingAddress` ยังอยู่ครบ)
-  - i18n อัปเดตครบ th/en/my — key parity ยังเท่ากัน (แก้เฉพาะข้อความ ไม่เพิ่ม/ลบ key)
+- Home page de-clutter (task 2026-08-18)
+- Profile: avatar + cover upload ผ่าน Cloudinary signed upload (reuse backend/storage.ts), edit profile, logout ล่างสุด + confirmation
+- Auth: Convex Auth (Google + guest), use-auth แยก loading/authenticated/unauthenticated, RequireAuth, Auth page โชว์ loading (กัน login flash, ไม่มี setTimeout)
+- Cookie consent: Necessary/Preferences/Analytics/Marketing (ไม่มี provider เพิ่มเอง)
+- Header/Footer compact ใช้ร่วมทุกหน้า
+- Profile image 10 MB + FIXED CENTER-PIN map picker (task 2026-08-18) — ดูรายละเอียดเดิมในประวัติ AI_HANDOFF
+- **รอบ FINAL VERIFY (2026-08-18):**
+  - **พบและแก้ bug จริงจากรอบก่อน**: `convex/customer.ts` ใช้ `AppError("PROFILE_SAVE_FAILED", …)` แต่ `PROFILE_SAVE_FAILED` ไม่มีใน `ErrorCode` union ของ `backend/errors.ts` → **TypeScript fail** แก้โดยเพิ่ม code + Thai message ใน errors.ts (ห้ามใช้ @ts-ignore / any — แก้ type ให้ถูกต้อง)
+  - เพิ่ม `tests/storage.test.ts` (6 tests): ล็อก MAX_IMAGE_BYTES = 10 MB, signature = HMAC-SHA1 เหนือ 5 params ที่ browser ส่งพอดี (timestamp/folder/public_id/allowed_formats/max_bytes — กัน Invalid Signature), allowed formats ครอบคลุม JPG/PNG/WebP, extractPublicId round-trip
+  - `ProfileImageUpload.tsx`: ตอน save fail โชว์ข้อความจริงจาก backend (AppError message) แทน fallback generic — ตาม convention ของแอป
+  - Verify จริงในเครื่อง: typecheck / tests / shop build / tile URLs / Nominatim search
 
-## STILL PENDING
-- ยังไม่ได้ test บนเบราว์เซอร์จริง (ต้อง deploy/run `cd apps/shop && bun run dev`):
-  - Upload avatar/cover: 100KB / 1MB / 5MB / 10MB / >10MB (JPG, PNG, WebP) → 10MB ผ่าน, >10MB reject
-  - Refresh หลัง upload → รูปยังอยู่
-  - Map: เปิด Add Address → satellite แสดงจริง, ลากแผนที่ → พิกัด = center, แตะแผนที่ไม่เลือก, หมุดลากไม่ได้, confirm → save, search → center ไปผลค้นหา
-- Login flash: โค้ดกันไว้แล้ว — ยังไม่ได้ verify บน deployed app
+## STILL PENDING (ต้อง test บน browser จริง — ยังทำไม่ได้ใน environment นี้)
+- Upload avatar/cover จริง: 100KB / 1MB / 5MB / 9MB / 10MB / >10MB (JPG, PNG, WebP) + refresh → รูปยังอยู่
+- Cloudinary runtime config: ต้อง confirm ว่า CLOUDINARY_CLOUD_NAME / CLOUDINARY_API_KEY / CLOUDINARY_API_SECRET ตั้งอยู่ใน Convex deployment (Keys/API keys UI) แล้ว — environment นี้เข้าถึง deployment ไม่ได้
+- Map บน browser: satellite แสดงจริง, ลากแผนที่ → พิกัด = center, แตะแผนที่ไม่เลือก, หมุดลากไม่ได้, confirm → save, search → center ไปผลค้นหา, responsive (mobile/tablet/desktop)
+- Login flash verify บน deployed app
 
 ## KNOWN BUGS
-- ไม่พบ bug ที่ยืนยันได้ในโค้ด
-- สาเหตุ "อัปโหลดรูปไม่สำเร็จ" เดิมที่ user เจอ: frontend เดิมอ่าน error จาก Cloudinary ไม่ได้ (โยน generic message) — แก้ให้อ่าน error body แล้วแล้ว; ถ้ายัง fail หลัง deploy ให้ดู console.error "Cloudinary upload failed (HTTP …)" / "Profile image save error" เพื่อระบุ stage จริง (signature / Cloudinary / DB save)
-- Satellite เดิมอาจแสดงไม่เต็มเพราะ Leaflet init ใน Dialog โดยไม่ invalidateSize — เพิ่มแล้ว ต้อง verify จริงบน browser
+- ~~TypeScript error: PROFILE_SAVE_FAILED ไม่อยู่ใน ErrorCode~~ → **แก้แล้ว** (เพิ่มใน backend/errors.ts) — verify ด้วย `tsc -b --noEmit` exit 0
+- ไม่พบ bug ที่ยืนยันได้เหลือในโค้ด (static + unit test level)
+- สิ่งที่ยังไม่ยืนยัน: พฤติกรรม runtime บน browser (upload จริง / satellite render จริง) — ต้อง deploy แล้ว test
 
-## FILES CHANGED (ล่าสุด)
-- apps/shop/src/components/shop/MapPicker.tsx — rewrite: fixed center-pin UX (ไม่มี marker/click select)
-- apps/shop/src/components/shop/ProfileImageUpload.tsx — rewrite: 10 MB + อ่าน Cloudinary error body + แยก save error + revoke URL
-- backend/storage.ts — MAX_IMAGE_BYTES 5 MB → 10 MB (signature `max_bytes` + server check)
-- convex/customer.ts — error ข้อความ 10 MB + wrap DB update เป็น `PROFILE_SAVE_FAILED`
-- packages/shared/src/lib/i18n/locales/th.ts, en.ts, index.ts (myShopPatch) — ข้อความ 10 MB + center-pin hint
+## FILES CHANGED (รอบนี้)
+- backend/errors.ts — เพิ่ม `PROFILE_SAVE_FAILED` ใน ErrorCode + Thai message (fix typecheck)
+- tests/storage.test.ts — **สร้างใหม่** 6 tests (upload contract: 10MB + signed params)
+- apps/shop/src/components/shop/ProfileImageUpload.tsx — toast save-fail แสดงข้อความ backend จริง
 - AI_HANDOFF.md — อัปเดต
+- (รอบก่อน: MapPicker.tsx rewrite, ProfileImageUpload.tsx rewrite, backend/storage.ts 10MB, convex/customer.ts, i18n th/en/index)
 
 ## DATABASE / BACKEND CHANGES
-- Convex: ไม่มี function ใหม่ — แก้ error message + wrap DB update ใน `saveProfileImage`
+- Convex: ไม่มี function ใหม่ (รอบก่อนแก้ error message + wrap DB update เป็น PROFILE_SAVE_FAILED)
 - Neon: ไม่มีการเปลี่ยน schema
-- Env: ไม่มีการเปลี่ยน (Cloudinary keys เดิม; ห้าม hardcode API secret)
+- Env: ไม่มีการเปลี่ยนในโค้ด — ต้อง confirm Cloudinary keys ใน Convex deployment
 
-## VERIFICATION
-- Transpile check (`bun build --no-bundle`): MapPicker.tsx, ProfileImageUpload.tsx, backend/storage.ts — **PASS**
-- TypeScript เต็มรูปแบบ / tests / build / manual test: **ยังไม่ได้ run** ใน environment นี้ (repo ไม่ได้ checkout — แก้ผ่าน GitHub API) — ต้อง run หลัง deploy:
-  - `bun install` → `bun run typecheck` → `bun test` → `cd apps/shop && bun run build`
-  - Manual: upload avatar/cover 100KB/1MB/5MB/10MB/>10MB (JPG/PNG/WebP) + refresh, drag map → confirm → save, satellite แสดงจริง
-- locale parity: แก้เฉพาะข้อความ ไม่เพิ่ม/ลบ key → `tests/locale-parity.test.ts` ควรผ่าน (ยังไม่ได้ run)
+## VERIFICATION (ผลจริง รอบนี้ — run บนเครื่องจาก tarball ของ main)
+- TypeScript (`bun run typecheck` = tsc -b --noEmit): **PASS** (exit 0 — หลังแก้ backend/errors.ts; ก่อนแก้ FAIL ด้วย PROFILE_SAVE_FAILED)
+- Tests (`bun run test` = vitest run): **PASS** — 194/194 (20 files) รวม locale-parity 2/2 + storage ใหม่ 6/6
+- Lint (`bunx eslint` เฉพาะไฟล์ที่เปลี่ยน): **PASS**
+- Shop Build (`bun run build:shop` = vite build): **PASS** (10.9s)
+- Tile URLs: Esri World Imagery satellite **HTTP 200** (15.6KB JPEG), OSM standard **HTTP 200** — ใช้ได้จริง
+- Nominatim search: **HTTP 200 + JSON results** — ใช้ได้จริง
+- Avatar/cover upload จริง (browser + Cloudinary): **NOT VERIFIED** — ไม่มี browser + เข้า Convex deployment/keys ไม่ได้ใน environment นี้
+- 10 MB / >10MB rejection (real upload): **NOT VERIFIED** (ล็อกด้วย unit test แล้ว: constant 10MB ตรงกันทุกชั้น, >10MB ถูก reject ที่ client + `max_bytes` + server)
+- Satellite map render บน browser: **NOT VERIFIED** (tile 200 แล้ว; invalidateSize อยู่ในโค้ด)
+- Center pin / drag / click-selection-removed / marker-drag-removed: **code-level PASS** (ไม่มี `map.on("click")`, ไม่มี `L.marker`/draggable, moveend → getCenter) — browser test **NOT VERIFIED**
+- Address save rule: **PASS** (addresses.test.ts 7/7 + backend ADDRESS_GPS_REQUIRED/requireShippingAddress intact)
+- Cloudinary runtime env (CLOUDINARY_*): **NOT VERIFIED** — ต้อง check ใน Keys/API keys UI
 
 ## NEXT AI INSTRUCTIONS
-- AI ตัวถัดไป: deploy/run shop app แล้ว test ตาม VERIFICATION; ถ้า upload ยัง fail ให้ดู console.error จาก ProfileImageUpload (Cloudinary stage = HTTP status + error body, save stage = backend error) แล้วแก้ที่ stage นั้นจริง — ห้ามปิด validation หรือ swallow error
-- ห้ามแก้/รื้อ: architecture, Neon schema, Convex auth, Cloudinary system, Map center-pin UX ใหม่ (ลากแผนที่ = เลือกตำแหน่ง, หมุดกลางจอ), save rule (lat/lng + locationConfirmed=true), footer/header ที่ลดรกแล้ว
+- 1) deploy/run `cd apps/shop && bun run dev` 2) test checklist ด้านบน (upload จริง + map บน browser) 3) ถ้า upload fail ให้ดู console.error "Cloudinary upload failed (HTTP …)" (ตอนนี้อ่าน error body แล้ว — root cause จะเห็นชัด: signature/params/size) แล้วแก้ที่ stage นั้นจริง ห้ามปิด validation / swallow error
+- ก่อน test ต้อง confirm: Cloudinary 3 keys อยู่ใน Convex deployment env แล้ว
+- ห้ามแก้/รื้อ: architecture, Neon schema, Convex auth, Cloudinary system, Map center-pin UX ใหม่ (ลากแผนที่ = เลือกตำแหน่ง), save rule (lat/lng + locationConfirmed=true), footer/header ที่ลดรกแล้ว

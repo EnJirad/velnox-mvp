@@ -21,6 +21,7 @@ export type ErrorCode =
   | "INVALID_STATUS_TRANSITION"
   | "PAYMENT_FAILED"
   | "ADDRESS_GPS_REQUIRED"
+  | "PROFILE_SAVE_FAILED"
   | "CONFLICT";
 
 const THAI_MESSAGES: Record<ErrorCode, string> = {
@@ -40,6 +41,7 @@ const THAI_MESSAGES: Record<ErrorCode, string> = {
   INVALID_STATUS_TRANSITION: "ไม่สามารถเปลี่ยนสถานะนี้ได้",
   PAYMENT_FAILED: "การชำระเงินล้มเหลว",
   ADDRESS_GPS_REQUIRED: "ที่อยู่จัดส่งต้องมีพิกัด GPS (เลือกตำแหน่งบนแผนที่)",
+  PROFILE_SAVE_FAILED: "บันทึกรูปโปรไฟล์ไม่สำเร็จ กรุณาลองอีกครั้ง",
   CONFLICT: "ข้อมูลซ้ำกับรายการที่มีอยู่",
 };
 
