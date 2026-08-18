@@ -7,7 +7,7 @@ import { useAuth } from "@velnox/shared/hooks/use-auth";
 import { useCart } from "@/lib/cart";
 import { useLanguage } from "@/lib/i18n";
 import { Search, ShoppingCart, User } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router";
 
 /**
@@ -18,13 +18,19 @@ import { Link, useLocation, useNavigate } from "react-router";
  * hub, not the header.
  */
 export function ShopHeader() {
-  const { isAuthenticated, isLoading } = useAuth();
+  const { isAuthenticated, isLoading, user } = useAuth();
   const { count } = useCart();
   const { t } = useLanguage();
   const location = useLocation();
   const navigate = useNavigate();
   const [cartOpen, setCartOpen] = useState(false);
   const [query, setQuery] = useState("");
+  const [imgFailed, setImgFailed] = useState(false);
+
+  // Reset image-failed flag when user changes (e.g. re-login)
+  useEffect(() => {
+    setImgFailed(false);
+  }, [user?.image]);
 
   const submitSearch = (e: React.FormEvent) => {
     e.preventDefault();
@@ -116,7 +122,17 @@ export function ShopHeader() {
               className="flex size-10 items-center justify-center rounded-[10px] text-slate-600 transition-colors hover:bg-slate-100"
               aria-label={t("header.ariaProfile")}
             >
-              <User className="size-5" />
+              {user?.image && !imgFailed ? (
+                <img
+                  src={user.image}
+                  alt=""
+                  className="size-7 rounded-full object-cover"
+                  loading="eager"
+                  onError={() => setImgFailed(true)}
+                />
+              ) : (
+                <User className="size-5" />
+              )}
             </Link>
           ) : (
             <Button

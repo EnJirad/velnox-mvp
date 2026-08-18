@@ -118,19 +118,22 @@ export default function ShopProfile() {
 
   const handleAvatarUploaded = (url: string) => {
     setAvatarPreview(null);
-    setProfile((prev) => (prev ? { ...prev, avatarUrl: url || prev.avatarUrl } : prev));
+    // Store the Cloudinary URL; on next render avatarSrc picks it up via || chain.
+    setProfile((prev) => (prev ? { ...prev, avatarUrl: url } : prev));
   };
 
   const handleCoverUploaded = (url: string) => {
     setCoverPreview(null);
-    setProfile((prev) => (prev ? { ...prev, coverUrl: url || prev.coverUrl } : prev));
+    setProfile((prev) => (prev ? { ...prev, coverUrl: url } : prev));
   };
 
   const displayName = profile?.name ?? user?.name ?? user?.email ?? "";
   const displayEmail = profile?.email ?? user?.email ?? "";
   const memberSince = profile?.memberSince ?? null;
-  const avatarSrc = avatarPreview ?? profile?.avatarUrl ?? user?.image ?? null;
-  const coverSrc = coverPreview ?? profile?.coverUrl ?? null;
+  // Use || (not ??) so that empty strings from the backend are treated as "no image"
+  // and the fallback chain continues to user?.image (Google profile picture).
+  const avatarSrc = avatarPreview || profile?.avatarUrl || user?.image || null;
+  const coverSrc = coverPreview || profile?.coverUrl || null;
 
   // crossOrigin="anonymous" must only be set for Cloudinary images.
   // Google CDN (lh3.googleusercontent.com) requires a Referer header;
@@ -209,6 +212,7 @@ export default function ShopProfile() {
                         loading="eager"
                         onError={(e) => {
                           // Spec §89: broken avatar → initial-letter fallback.
+                          // Hide the broken image; the initial-letter span is the container's background.
                           (e.currentTarget as HTMLImageElement).style.display = "none";
                         }}
                       />

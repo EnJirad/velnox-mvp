@@ -4,7 +4,7 @@
 
 ## CURRENT SNAPSHOT
 - date: 2026-08-18
-- commit: google-avatar-crossorigin-fix
+- commit: google-avatar-mobile-fix
 - branch: main
 
 ## ARCHITECTURE (LOCKED — ห้ามเปลี่ยน)
@@ -21,94 +21,121 @@
 - **Network diagnostics round**: Full STEP logging, error ID, preflight test, fetch timing
 - **Mobile fix round**: crossOrigin on images, fetch timeout (30s), single retry
 - **Precheck-removed round**: Removed misleading HEAD precheck, kept retry+timeout
-- **Google avatar fix round**: Conditional crossOrigin for Cloudinary vs Google CDN images
+- **Google avatar fix round (previous)**: Conditional crossOrigin for Cloudinary vs Google CDN images
+- **Google avatar mobile fix (this round)**: Fixed `??` → `||` in avatar chains, added Google image fallback to ShopAccount, added avatar to ShopHeader
 
-## GOOGLE DEFAULT PROFILE IMAGE — ROOT CAUSE & FIX (THIS ROUND)
+## GOOGLE AVATAR MOBILE FIX — THIS ROUND
 
 ### Problem
-Google default profile image from OAuth works on Desktop Firefox but does NOT display on Mobile (Android + iPhone).
+Google default profile image from OAuth still does NOT display on Mobile (Android + iPhone) even after the previous `crossOrigin` conditional fix.
 
-### Root Cause
-The previous fix added `crossOrigin="anonymous"` to ALL profile `<img>` tags. This works for Cloudinary CDN images but **breaks Google CDN images**.
+### Root Causes Found (3 issues)
 
-**Why it fails:**
-- Google profile images are hosted on `lh3.googleusercontent.com`
-- Google's CDN requires a `Referer` header to serve images
-- `crossOrigin="anonymous"` on `<img>` causes the browser to send a CORS request **without** the `Referer` header
-- Google blocks the request → image is invisible → `onError` hides the element
-
-**Why Desktop Firefox still works:**
-- Desktop browsers are more lenient with `<img>` CORS enforcement
-- Mobile browsers (Chrome Android, Safari iOS) strictly enforce CORS for `<img>` tags
-
-### The Fix
-Changed from unconditional `crossOrigin="anonymous"` to **conditional**:
+#### Issue 1: `??` vs `||` in avatar resolution chain (ShopProfile.tsx)
+The avatar resolution chain used `??` (nullish coalescing):
 ```jsx
-crossOrigin={isCloudinary(url) ? "anonymous" : undefined}
+const avatarSrc = avatarPreview ?? profile?.avatarUrl ?? user?.image ?? null;
 ```
 
-Where `isCloudinary` checks if the URL contains `cloudinary.com`:
-- **Cloudinary** (`res.cloudinary.com`): supports CORS → `crossOrigin="anonymous"` → works ✅
-- **Google** (`lh3.googleusercontent.com`): requires Referer → no crossOrigin → works ✅
-- **Other CDNs**: no crossOrigin → default browser behavior → works ✅
+`??` only treats `null` and `undefined` as fallback triggers. If the backend returns an empty string `""` for `avatarUrl` (e.g. user has no profile image), then:
+- `avatarSrc = ""` (empty string)
+- `""` is falsy in JSX → shows initial letter, NOT the Google image
+- The Google image fallback (`user?.image`) is **never reached**
 
-### Image Flow (verified)
+**Fix:** Changed to `||` (logical OR):
+```jsx
+const avatarSrc = avatarPreview || profile?.avatarUrl || user?.image || null;
 ```
-Google OAuth → user.image (lh3.googleusercontent.com URL)
+
+`||` treats all falsy values (null, undefined, empty string) as fallback triggers → Google image is correctly reached.
+
+#### Issue 2: ShopAccount.tsx missing Google image fallback
+ShopAccount.tsx did NOT import `useAuth()` and did NOT use `user?.image`. It only used `profile?.avatarUrl`:
+```jsx
+// BEFORE: no Google fallback
+{profile?.avatarUrl ? (
+  <img src={profile.avatarUrl} ... />
+) : (
+  // initial letter
+)}
+```
+
+**Fix:** Import `useAuth()`, add `user?.image` to avatar resolution chain:
+```jsx
+const { user } = useAuth();
+const avatarDisplaySrc = profile?.avatarUrl || user?.image || null;
+// ...
+{avatarDisplaySrc ? (
+  <img src={avatarDisplaySrc} ... />
+) : (
+  // initial letter
+)}
+```
+
+#### Issue 3: ShopHeader.tsx showing generic User icon, not avatar
+The header profile link showed a generic `<User>` icon, never the user's actual avatar.
+
+**Fix:** Added `user?.image` rendering with `onError` fallback to generic icon:
+```jsx
+{user?.image && !imgFailed ? (
+  <img src={user.image} className="size-7 rounded-full object-cover" onError={() => setImgFailed(true)} />
+) : (
+  <User className="size-5" />
+)}
+```
+
+### Image Priority Chain (all pages)
+```
+1. Custom uploaded avatar (Cloudinary avatarUrl)
+2. Google profile image (user.image from OAuth)
+3. Initial letter fallback
+```
+
+### Image Flow
+```
+Google OAuth → user.image (lh3.googleusercontent.com)
   ↓
 useAuth() → user?.image
   ↓
-const avatarSrc = avatarPreview ?? profile?.avatarUrl ?? user?.image ?? null
+avatarSrc = avatarPreview || profile?.avatarUrl || user?.image || null
   ↓
 <img src={avatarSrc} crossOrigin={isCloudinary(avatarSrc) ? "anonymous" : undefined} />
 ```
 
-For Cloudinary-uploaded images:
-```
-Browser → Cloudinary signed upload → secure_url (res.cloudinary.com)
-  ↓
-saveProfileImage → database avatar_url
-  ↓
-myProfile() → avatarUrl
-  ↓
-const avatarSrc = profile.avatarUrl
-  ↓
-<img src={avatarSrc} crossOrigin="anonymous" />  ← works because Cloudinary supports CORS
-```
-
-### Files Changed
-- `apps/shop/src/pages/ShopProfile.tsx` — Added `isCloudinary()` helper; cover and avatar `<img>` use conditional `crossOrigin`
-- `apps/shop/src/pages/ShopAccount.tsx` — Added `isCloudinary()` helper; avatar `<img>` uses conditional `crossOrigin`
+### Files Changed (this round)
+- `apps/shop/src/pages/ShopProfile.tsx` — Changed `??` to `||` in avatar/cover resolution chains
+- `apps/shop/src/pages/ShopAccount.tsx` — Added `useAuth()` import, added `user?.image` fallback, used `||` chain, added `isCloudinary()` conditional crossOrigin
+- `apps/shop/src/components/shop/ShopHeader.tsx` — Added `useEffect` import, `imgFailed` state, renders user avatar with `onError` fallback to `<User>` icon
 
 ### TypeScript Status
 ✅ `bun run typecheck` — PASS (no errors)
 
 ## STILL PENDING — REQUIRES USER BROWSER TESTING
 
-### Mobile Upload Test (Deploy → Try on Mobile)
+### Mobile Google Avatar Test (Deploy → Try on Mobile)
+After deploying, test on mobile:
+1. Login with Google on mobile → check if Google default profile avatar shows in header, profile page, and account page
+2. Upload a Cloudinary avatar → check if it shows
+3. Check cover image
+
+**Expected results:**
+| Image Source | Desktop | Mobile (Android) | Mobile (iPhone) |
+|---|---|---|---|
+| Google default avatar | ✅ shows | ✅ should now show | ✅ should now show |
+| Cloudinary uploaded avatar | ✅ shows | ✅ should show | ✅ should show |
+| Cloudinary cover | ✅ shows | ✅ should show | ✅ should show |
+
+### Mobile Upload Test
 After deploying, test upload on mobile and check console:
 ```
 [ProfileUpload] STEP 5 — Fetch attempt 1/2     → completed or FAILED?
 ```
 
-### Mobile Image Display Test
-After deploying, test on mobile:
-1. Login with Google on mobile
-2. Check if Google default profile avatar shows
-3. Upload a Cloudinary avatar → check if it shows
-4. Check cover image
-
-**Expected results:**
-| Image Source | Desktop | Mobile |
-|---|---|---|
-| Google default avatar | ✅ shows | ✅ should now show |
-| Cloudinary uploaded avatar | ✅ shows | ✅ should show |
-| Cloudinary cover | ✅ shows | ✅ should show |
-
-## PREVIOUSLY FIXED
+## PREVIOUSLY FIXED (kept)
 - `apps/shop/src/components/shop/ProfileImageUpload.tsx` — Removed HEAD precheck, kept retry+timeout, improved diagnostics
-- `apps/shop/src/pages/ShopProfile.tsx` — Added crossOrigin (now conditional)
-- `apps/shop/src/pages/ShopAccount.tsx` — Added crossOrigin (now conditional)
+- `apps/shop/src/pages/ShopProfile.tsx` — Added crossOrigin (now conditional) + `||` chain
+- `apps/shop/src/pages/ShopAccount.tsx` — Added crossOrigin (now conditional) + Google image fallback + `||` chain
+- `apps/shop/src/components/shop/ShopHeader.tsx` — Added user avatar with onError fallback
 
 ## VERIFICATION
 - [x] TypeScript compiles clean
@@ -116,13 +143,16 @@ After deploying, test on mobile:
 - [x] FormData construction correct (no manual Content-Type)
 - [x] Signature params match backend
 - [x] Removed misleading precheck
-- [x] Google avatar: removed crossOrigin for non-Cloudinary URLs
+- [x] Google avatar: conditional crossOrigin for non-Cloudinary URLs
+- [x] Avatar chain uses `||` (handles empty strings from backend)
+- [x] ShopAccount includes Google image fallback
+- [x] ShopHeader shows user avatar with fallback
 - [ ] Real mobile Google avatar display test — PENDING
 - [ ] Real mobile upload test — PENDING
 - [ ] Real mobile Cloudinary image display test — PENDING
 
 ## NEXT AI INSTRUCTIONS
-1. If Google avatar still doesn't show on mobile after this fix: test direct URL `https://lh3.googleusercontent.com/...` on the mobile device to verify Google CDN connectivity.
-2. If upload still fails on mobile: the issue is CORS for `api.cloudinary.com` POST with FormData. Check Cloudinary Cloud Settings → Upload → Allowed origins.
-3. As a last resort: add a Convex HTTP action proxy for Cloudinary uploads to bypass browser CORS.
+1. If Google avatar still doesn't show on mobile after this fix: inspect browser Console → Network to see if `lh3.googleusercontent.com` request appears and what status it returns.
+2. If the Google image request returns 403 on mobile: Google may require referrer. Add `referrerPolicy="no-referrer"` to the `<img>` tag as a test.
+3. If upload still fails on mobile: the issue is CORS for `api.cloudinary.com` POST with FormData. Check Cloudinary Cloud Settings → Upload → Allowed origins.
 4. Do NOT change: Convex architecture, Neon, authentication, Cloudinary account, signature algorithm, database schema.
