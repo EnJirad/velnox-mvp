@@ -1,19 +1,29 @@
 import { useLanguage } from "@/lib/i18n";
-import { useCallback, useRef, useState, type ReactNode } from "react";
-import { toast } from "sonner";
+import { api } from "@convex/_generated/api";
+import { useAction } from "convex/react";
 import { Loader2 } from "lucide-react";
+import { useRef, useState, type ReactNode } from "react";
+import { toast } from "sonner";
 
 const ACCEPTED_TYPES = ["image/jpeg", "image/png", "image/webp"];
-const MAX_BYTES = 10 * 1024 * 1024; // 10 MB
+const MAX_BYTES = 10 * 1024 * 1024; // 10 MB — matches the backend re-validation limit (backend/storage.ts MAX_IMAGE_BYTES)
 
-/**
- * Get the Convex HTTP endpoint URL for server-side profile image upload.
- * The browser sends the file HERE; Convex handles Cloudinary + DB save.
- */
-function getUploadEndpoint(): string {
-  const convexUrl = import.meta.env.VITE_CONVEX_URL as string | undefined;
-  if (!convexUrl) return "";
-  return `${convexUrl}/cloudinary/upload-profile`;
+/** Upload timeout — 30 seconds. Mobile networks can be slow but anything
+ *  beyond 30 s likely means a hung connection. */
+const UPLOAD_TIMEOUT_MS = 30_000;
+
+/** Number of automatic retries on network failure (1 = total 2 attempts). */
+const MAX_RETRIES = 1;
+
+/** Server-issued signed upload permit (see backend/storage.ts UploadSignature). */
+interface UploadSignature {
+  cloudName: string;
+  apiKey: string;
+  timestamp: number;
+  folder: string;
+  publicId: string;
+  signature: string;
+  allowedFormats: string;
 }
 
 interface ProfileImageUploadProps {
@@ -27,7 +37,40 @@ interface ProfileImageUploadProps {
   children: ReactNode;
 }
 
-/** Unique error ID per failure — shown in toast + logged for correlation. */
+/** Step log — every stage of the upload pipeline is logged so a failure can
+ *  be traced to the exact step in the browser console and correlated with the
+ *  error ID shown in the UI. Only safe metadata is ever logged (never the
+ *  signature value, never the API secret). */
+function stepLog(step: number, label: string, extra?: Record<string, unknown>): void {
+  console.log(`[ProfileUpload] STEP ${step} - ${label}`, extra ?? "");
+}
+
+/**
+ * Full, safe inspection of whatever was thrown. Convex/transport errors are
+ * not always `Error` instances, so log type/name/message/cause/stack plus the
+ * enumerable keys and a JSON snapshot — without assuming the shape and without
+ * logging secrets.
+ */
+function inspectError(err: unknown, context: string): void {
+  const e = (err ?? {}) as { name?: unknown; message?: unknown; cause?: unknown; stack?: unknown };
+  console.error(`[ProfileUpload] ERROR TYPE (${context}):`, typeof err);
+  console.error(`[ProfileUpload] ERROR NAME (${context}):`, e?.name ?? null);
+  console.error(`[ProfileUpload] ERROR MESSAGE (${context}):`, e?.message ?? null);
+  console.error(`[ProfileUpload] ERROR CAUSE (${context}):`, e?.cause ?? null);
+  console.error(`[ProfileUpload] ERROR STACK (${context}):`, e?.stack ?? null);
+  try {
+    console.error(`[ProfileUpload] ERROR KEYS (${context}):`, Object.keys(err as object));
+    console.error(
+      `[ProfileUpload] ERROR JSON (${context}):`,
+      JSON.stringify(err, Object.getOwnPropertyNames(err as object)),
+    );
+  } catch {
+    console.error(`[ProfileUpload] ERROR RAW (${context}):`, err);
+  }
+}
+
+/** Unique id per failure — shown in the toast and logged, so a browser
+ *  session can be correlated with server/Convex logs (e.g. PROFILE_UPLOAD_20260818_A1B2). */
 function makeErrorId(): string {
   const d = new Date();
   const ymd = `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, "0")}${String(d.getDate()).padStart(2, "0")}`;
@@ -35,22 +78,25 @@ function makeErrorId(): string {
   return `PROFILE_UPLOAD_${ymd}_${rand}`;
 }
 
-function formatBytes(bytes: number): string {
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-}
-
 /**
  * VelShop profile image uploader (avatar + cover).
  *
- * Flow: pick file → client validation → instant preview → POST to Convex
- * server-side endpoint → Convex handles Cloudinary upload + DB save → result.
+ * Flow: pick a file → client-side validation (MIME type + size, max 10 MB) →
+ * instant preview → connectivity pre-check (HEAD) → ask the backend for a
+ * Cloudinary signed upload permit → POST the file straight to Cloudinary with
+ * timeout + retry (no binary through our server) → tell the backend to persist
+ * the canonical URL (old-image cleanup runs server-side inside saveProfileImage,
+ * after the DB row uses the new image).
  *
- * No direct browser→Cloudinary upload. No CORS issues on mobile.
+ * Failure handling: every failure logs `FAILED AT STEP X` with a unique error
+ * ID and full error inspection, and the toast ALWAYS shows the base message
+ * plus any safe detail (the real Cloudinary/server error) plus the error ID —
+ * the generic message is never the only thing the user sees during debugging.
  */
 export function ProfileImageUpload({ kind, onPreview, onUploaded, children }: ProfileImageUploadProps) {
   const { t } = useLanguage();
+  const getSignature = useAction(api.customer.getProfileImageUploadSignature);
+  const saveImage = useAction(api.customer.saveProfileImage);
   const inputRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
 
@@ -58,101 +104,397 @@ export function ProfileImageUpload({ kind, onPreview, onUploaded, children }: Pr
     if (inputRef.current) inputRef.current.value = "";
   };
 
-  const handleFile = async (file: File) => {
-    const tStart = performance.now();
+  /** Terminal failure: log FAILED AT STEP + error id + full error inspection,
+   *  then toast the base message + safe detail + error id. */
+  const fail = (step: number, baseKey: string, detail: string | null, err?: unknown, preview?: string) => {
     const errorId = makeErrorId();
-    const endpoint = getUploadEndpoint();
+    console.error(`[ProfileUpload] FAILED AT STEP ${step}`, { errorId, detail });
+    if (err !== undefined) inspectError(err, `FAILED AT STEP ${step}`);
+    toast.error(
+      <div className="flex flex-col gap-1 text-left">
+        <span>{t(baseKey)}</span>
+        {detail ? <span className="text-xs opacity-80">{detail}</span> : null}
+        <span className="text-xs opacity-60">
+          {t("profile.errorIdLabel")}: {errorId}
+        </span>
+      </div>,
+    );
+    if (preview !== undefined) {
+      onPreview(null);
+      URL.revokeObjectURL(preview);
+    }
+  };
 
-    // Stage 1 — client-side validation
+  const handleFile = async (file: File) => {
+    stepLog(1, "Started", { kind, fileName: file.name, fileSize: file.size, fileType: file.type });
+    // Stage E — client-side validation first (type + size). Never send a bad
+    // file: checked here, re-checked by the server, and (formats) by Cloudinary.
     if (!ACCEPTED_TYPES.includes(file.type)) {
-      console.error("[ProfileUpload] Rejected: unsupported file type", { fileType: file.type });
+      console.error("[ProfileUpload] FAILED AT STEP 2 (type rejected)", { fileType: file.type });
       toast.error(t("profile.imageTypeError"));
       resetInput();
       return;
     }
     if (file.size > MAX_BYTES) {
-      console.error("[ProfileUpload] Rejected: file too large", { fileSize: file.size });
+      console.error("[ProfileUpload] FAILED AT STEP 2 (size rejected)", { fileSize: file.size, maxBytes: MAX_BYTES });
       toast.error(t("profile.imageSizeError"));
       resetInput();
       return;
     }
-
-    console.log("[ProfileUpload] File validated", { kind, fileName: file.name, fileSize: file.size, fileType: file.type });
+    stepLog(2, "File validated", { fileSize: file.size, fileType: file.type });
     const preview = URL.createObjectURL(file);
     onPreview(preview);
     setUploading(true);
-
+    let failStage = 0;
     try {
-      // Stage 2 — POST to Convex server-side endpoint
-      if (!endpoint) {
-        throw new Error("Upload endpoint not configured (VITE_CONVEX_URL missing)");
+      // Stage A — the backend issues a Cloudinary signed upload permit.
+      failStage = 3;
+      stepLog(3, "Requesting signature", { kind });
+      const sig = (await getSignature({ kind })) as unknown as UploadSignature | null | undefined;
+      if (
+        !sig ||
+        !sig.cloudName ||
+        !sig.apiKey ||
+        !sig.timestamp ||
+        !sig.folder ||
+        !sig.publicId ||
+        !sig.signature ||
+        !sig.allowedFormats
+      ) {
+        fail(
+          4,
+          "profile.imageSignatureError",
+          "Backend returned an incomplete upload permit",
+          undefined,
+          preview,
+        );
+        return;
       }
+      stepLog(4, "Signature received", {
+        cloudName: sig.cloudName,
+        apiKey: sig.apiKey,
+        timestamp: sig.timestamp,
+        folder: sig.folder,
+        publicId: sig.publicId,
+        signaturePresent: Boolean(sig.signature),
+        allowedFormats: sig.allowedFormats,
+      });
+      const body = new FormData();
+      body.append("file", file);
+      body.append("api_key", sig.apiKey);
+      body.append("timestamp", String(sig.timestamp));
+      body.append("folder", sig.folder);
+      body.append("public_id", sig.publicId);
+      body.append("signature", sig.signature);
+      body.append("allowed_formats", sig.allowedFormats);
 
-      const formData = new FormData();
-      formData.append("file", file);
-      formData.append("uploadType", kind);
+      // Stage B — POST straight to Cloudinary.
+      // ==========================================
+      // DIAGNOSTIC: Full URL + FormData + network diagnostics
+      // ==========================================
+      failStage = 5;
+      const cloudinaryUrl = `https://api.cloudinary.com/v1_1/${sig.cloudName}/image/upload`;
 
-      console.log("[ProfileUpload] POST to Convex endpoint", { endpoint, kind, fileSize: file.size });
+      // Log the parsed URL components
+      let urlInfo: Record<string, string> = {};
+      try {
+        const urlObj = new URL(cloudinaryUrl);
+        urlInfo = {
+          full: cloudinaryUrl,
+          protocol: urlObj.protocol,
+          hostname: urlObj.hostname,
+          pathname: urlObj.pathname,
+          cloudName: sig.cloudName,
+        };
+      } catch {
+        urlInfo = { full: cloudinaryUrl, parseError: "URL constructor failed" };
+      }
+      console.log("[ProfileUpload] STEP 5 — Cloudinary URL", urlInfo);
 
-      const response = await fetch(endpoint, {
+      // Log FormData entries (file name + size, key names, no secrets)
+      const formEntries: string[] = [];
+      body.forEach((val, key) => {
+        if (val instanceof File) {
+          formEntries.push(`${key}: (File: ${val.name}, ${val.size} bytes)`);
+        } else {
+          formEntries.push(`${key}: (string, ${String(val).length} chars)`);
+        }
+      });
+      console.log("[ProfileUpload] STEP 5 — FormData entries", formEntries);
+
+      // Verify no manual Content-Type header is set (critical for FormData)
+      console.log("[ProfileUpload] STEP 5 — Request config", {
         method: "POST",
-        body: formData,
-        // Do NOT set Content-Type — browser generates multipart boundary automatically
+        bodyType: body.constructor.name,
+        hasManualContentType: false, // We intentionally do NOT set Content-Type
+        browserWillSetContentType: true, // Browser auto-sets multipart/form-data + boundary
       });
 
-      const result = await response.json() as {
-        success?: boolean;
-        code?: string;
-        message?: string;
-        profile?: {
-          name: string | null;
-          email: string | null;
-          phone: string | null;
-          role: string;
-          avatarUrl: string | null;
-          coverUrl: string | null;
-          memberSince: string;
+      // ==========================================
+      // CONNECTIVITY PRE-CHECK: lightweight HEAD to api.cloudinary.com
+      // Tests if the device can reach Cloudinary at all (different from
+      // the actual upload POST). If this fails, we know it's a network
+      // issue, not a CORS or request-construction issue.
+      // ==========================================
+      let connectivityOk = true;
+      try {
+        console.log("[ProfileUpload] STEP 5 — Connectivity pre-check", {
+          url: cloudinaryUrl,
+          test: "HEAD request to api.cloudinary.com",
+        });
+        const tPreStart = performance.now();
+        const preflight = await fetch(cloudinaryUrl, {
+          method: "HEAD",
+          mode: "cors",
+          cache: "no-store",
+        });
+        const tPreEnd = performance.now();
+        const preflightHeaders: Record<string, string> = {};
+        preflight.headers.forEach((v, k) => {
+          preflightHeaders[k] = v;
+        });
+        console.log("[ProfileUpload] STEP 5 — Connectivity result", {
+          status: preflight.status,
+          ok: preflight.ok,
+          ms: Math.round(tPreEnd - tPreStart),
+          corsAllowed: Boolean(preflightHeaders["access-control-allow-origin"]),
+          corsOrigin: preflightHeaders["access-control-allow-origin"] ?? "none",
+          corsMethods: preflightHeaders["access-control-allow-methods"] ?? "none",
+        });
+      } catch (preflightErr) {
+        connectivityOk = false;
+        console.error("[ProfileUpload] STEP 5 — Connectivity FAILED", preflightErr);
+        inspectError(preflightErr, "CONNECTIVITY");
+        // Log the specific failure type for diagnosis
+        const preflightEnv = {
+          origin: window.location.origin,
+          online: navigator.onLine,
+          protocol: window.location.protocol,
+          userAgent: navigator.userAgent.slice(0, 120),
+          platform: navigator.platform,
         };
-      };
+        console.error("[ProfileUpload] STEP 5 — Connectivity failure context", preflightEnv);
+        // Do NOT abort — connectivity pre-check may fail for different
+        // reasons than the actual POST. The real POST follows.
+      }
 
-      const elapsed = Math.round(performance.now() - tStart);
-      console.log("[ProfileUpload] Response", { status: response.status, success: result.success, code: result.code, elapsed });
+      // ==========================================
+      // ACTUAL UPLOAD: fetch to Cloudinary (with timeout + retry)
+      // ==========================================
+      stepLog(5, "Starting Cloudinary upload", {
+        cloudinaryUrl,
+        method: "POST",
+        hasManualContentType: false,
+        fileSize: file.size,
+        fileType: file.type,
+        publicId: sig.publicId,
+        folder: sig.folder,
+        timestamp: sig.timestamp,
+        connectivityPrecheckPassed: connectivityOk,
+      });
 
-      if (!response.ok || !result.success) {
-        const safeDetail = result.message || `HTTP ${response.status}`;
-        console.error("[ProfileUpload] Upload failed", { status: response.status, code: result.code, message: result.message });
+      /** Single fetch attempt with a 30-second timeout (AbortController). */
+      let attempt = 0;
+      let res: Response | null = null;
+      let lastFetchErr: unknown = null;
 
-        toast.error(
-          <div className="flex flex-col gap-1 text-left">
-            <span>{t("profile.imageUploadFailed")}</span>
-            <span className="text-xs opacity-80">{safeDetail}</span>
-            <span className="text-xs opacity-60">{t("profile.errorIdLabel")}: {errorId}</span>
-          </div>,
-        );
-        onPreview(null);
-        URL.revokeObjectURL(preview);
+      while (attempt <= MAX_RETRIES) {
+        attempt++;
+        const tFetchStart = performance.now();
+        const controller = new AbortController();
+        const timer = setTimeout(() => controller.abort(), UPLOAD_TIMEOUT_MS);
+        try {
+          console.log(`[ProfileUpload] STEP 5 — Fetch attempt ${attempt}/${MAX_RETRIES + 1}`);
+          res = await fetch(cloudinaryUrl, {
+            method: "POST",
+            body,
+            signal: controller.signal,
+            // IMPORTANT: Do NOT set Content-Type manually.
+            // The browser MUST set "multipart/form-data; boundary=..." automatically.
+            // IMPORTANT: Do NOT use mode: "no-cors" — it would hide the response.
+          });
+          const tFetchEnd = performance.now();
+          clearTimeout(timer);
+          console.log("[ProfileUpload] STEP 5 — Fetch completed", {
+            attempt,
+            status: res.status,
+            ok: res.ok,
+            statusText: res.statusText,
+            type: res.type,
+            url: res.url,
+            redirected: res.redirected,
+            ms: Math.round(tFetchEnd - tFetchStart),
+          });
+          // If we got a response (even HTTP error), we're done — Cloudinary is reachable.
+          break;
+        } catch (fetchErr) {
+          const tFetchEnd = performance.now();
+          clearTimeout(timer);
+          lastFetchErr = fetchErr;
+          const elapsed = Math.round(tFetchEnd - tFetchStart);
+          console.error(`[ProfileUpload] STEP 5 — Fetch attempt ${attempt} FAILED`, {
+            ms: elapsed,
+            message: fetchErr instanceof Error ? fetchErr.message : String(fetchErr),
+            name: fetchErr instanceof Error ? fetchErr.name : typeof fetchErr,
+            aborted: controller.signal.aborted,
+          });
+          inspectError(fetchErr, `STEP 5 FETCH ATTEMPT ${attempt}`);
+
+          if (controller.signal.aborted) {
+            console.error("[ProfileUpload] STEP 5 — Fetch ABORTED (timeout)", {
+              timeoutMs: UPLOAD_TIMEOUT_MS,
+              elapsedMs: elapsed,
+            });
+          }
+
+          if (attempt <= MAX_RETRIES) {
+            console.log("[ProfileUpload] STEP 5 — Retrying in 1s...");
+            await new Promise((r) => setTimeout(r, 1000));
+          }
+        }
+      }
+
+      if (!res) {
+        // All attempts failed — build diagnostic message
+        const env = {
+          origin: window.location.origin,
+          online: navigator.onLine,
+          protocol: window.location.protocol,
+          target: urlInfo.hostname ?? "api.cloudinary.com",
+          connectivityPrecheck: connectivityOk ? "PASS" : "FAIL",
+          userAgent: navigator.userAgent.slice(0, 120),
+          platform: navigator.platform,
+        };
+        const safeDetail = lastFetchErr instanceof Error
+          ? `${lastFetchErr.message} | origin: ${env.origin} | online: ${env.online} | target: ${env.target} | precheck: ${env.connectivityPrecheck}`
+          : `Network error: ${String(lastFetchErr)} | origin: ${env.origin} | online: ${env.online}`;
+        console.error("[ProfileUpload] STEP 5 — All fetch attempts failed", env);
+
+        if (lastFetchErr instanceof TypeError) {
+          console.error("[ProfileUpload] STEP 5 — TypeError diagnosis", {
+            message: lastFetchErr.message,
+            connectivityPrecheck: connectivityOk,
+            possibleCauses: connectivityOk
+              ? [
+                  "Connectivity pre-check PASSED but upload POST FAILED",
+                  "1. Ad-blocker / browser extension blocked the POST",
+                  "2. CORS policy blocked the upload request",
+                  "3. Network interruption during upload",
+                  "4. Mobile carrier proxy blocking the upload",
+                ]
+              : [
+                  "Connectivity pre-check ALSO FAILED",
+                  "1. Browser offline (navigator.onLine=" + navigator.onLine + ")",
+                  "2. DNS resolution failed for api.cloudinary.com",
+                  "3. Network unreachable (mobile carrier / Wi-Fi)",
+                  "4. VPN/proxy/firewall blocking api.cloudinary.com",
+                  "5. Service Worker intercepted the request",
+                ],
+          });
+        }
+
+        fail(5, "profile.imageUploadFailed", safeDetail, lastFetchErr, preview);
         return;
       }
 
-      // Stage 3 — success
-      console.log("[ProfileUpload] SUCCESS", { elapsed });
-      const profileUrl = kind === "cover" ? result.profile?.coverUrl : result.profile?.avatarUrl;
-      onUploaded(profileUrl ?? "");
-      URL.revokeObjectURL(preview);
+      failStage = 6;
+      stepLog(6, "Cloudinary response received", { status: res.status, ok: res.ok });
+      const responseText = await res.text();
+      let parsed: unknown = null;
+      try {
+        parsed = JSON.parse(responseText);
+      } catch {
+        // body was not JSON — keep parsed null
+      }
+      if (!res.ok) {
+        const errBody = (parsed ?? {}) as { error?: { message?: string } };
+        const cloudMsg = errBody?.error?.message ?? null;
+        console.error("[ProfileUpload] Cloudinary response", {
+          status: res.status,
+          ok: res.ok,
+          errorMessage: cloudMsg,
+          body: responseText,
+        });
+        fail(
+          6,
+          "profile.imageUploadFailed",
+          cloudMsg ? `Cloudinary ${res.status}: ${cloudMsg}` : `Cloudinary HTTP ${res.status}`,
+          undefined,
+          preview,
+        );
+        return;
+      }
+      const uploaded = (parsed ?? {}) as {
+        public_id: string;
+        format: string;
+        bytes: number;
+        width?: number;
+        height?: number;
+      };
+      stepLog(7, "Cloudinary parsed", {
+        publicId: uploaded?.public_id ?? null,
+        format: uploaded?.format ?? null,
+        bytes: uploaded?.bytes ?? null,
+      });
+      if (!uploaded.public_id) {
+        console.error("[ProfileUpload] Cloudinary 200 response without public_id", {
+          status: res.status,
+          body: responseText,
+        });
+        fail(7, "profile.imageUploadFailed", "Cloudinary 200 response missing public_id", undefined, preview);
+        return;
+      }
+      const imageArgs: {
+        kind: string;
+        publicId: string;
+        format?: string;
+        bytes?: number;
+        width?: number;
+        height?: number;
+      } = { kind, publicId: uploaded.public_id };
+      if (uploaded.format) imageArgs.format = uploaded.format;
+      if (uploaded.bytes != null) imageArgs.bytes = uploaded.bytes;
+      if (uploaded.width != null) imageArgs.width = uploaded.width;
+      if (uploaded.height != null) imageArgs.height = uploaded.height;
+      // Stage C — persist the canonical URL on the profile row. A failure here
+      // is a DIFFERENT error from a Cloudinary failure: the file is already
+      // uploaded, only the DB row failed.
+      failStage = 8;
+      stepLog(8, "Saving profile", {
+        kind,
+        publicId: uploaded.public_id,
+        format: uploaded.format,
+        bytes: uploaded.bytes,
+      });
+      const profile = (await saveImage(imageArgs)) as unknown as {
+        avatarUrl: string | null;
+        coverUrl: string | null;
+      };
+      failStage = 9;
+      stepLog(9, "Profile saved", {
+        kind,
+        avatarUrl: profile?.avatarUrl ?? null,
+        coverUrl: profile?.coverUrl ?? null,
+      });
+      onUploaded(kind === "cover" ? profile.coverUrl ?? "" : profile.avatarUrl ?? "");
+      // Old-image cleanup runs server-side inside saveProfileImage, after the
+      // DB row uses the new image (§31/§38 order: upload → save → delete old).
+      stepLog(10, "Cleanup old image (server-side, inside saveProfileImage)");
+      console.log("[ProfileUpload] SUCCESS");
+      // Let React swap the preview <img> to the canonical URL first, then
+      // release the blob (no leaked object URLs).
+      requestAnimationFrame(() => URL.revokeObjectURL(preview));
     } catch (err) {
-      const elapsed = Math.round(performance.now() - tStart);
-      const errMsg = err instanceof Error ? err.message : String(err);
-      console.error("[ProfileUpload] Network/unexpected error", { elapsed, error: errMsg });
-
-      toast.error(
-        <div className="flex flex-col gap-1 text-left">
-          <span>{t("profile.imageUploadFailed")}</span>
-          <span className="text-xs opacity-80">{errMsg}</span>
-          <span className="text-xs opacity-60">{t("profile.errorIdLabel")}: {errorId}</span>
-        </div>,
+      // Stage A/B/C — any unexpected throw (Convex transport error, network
+      // failure, CORS "Failed to fetch", response parsing, …). Show the actual
+      // safe error — never a generic-only message.
+      fail(
+        failStage || 3,
+        "profile.imageUploadFailed",
+        err instanceof Error && err.message ? err.message : `Unexpected error: ${typeof err}`,
+        err,
+        preview,
       );
-      onPreview(null);
-      URL.revokeObjectURL(preview);
     } finally {
       setUploading(false);
       resetInput();

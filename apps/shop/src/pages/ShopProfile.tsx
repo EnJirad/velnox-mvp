@@ -118,27 +118,19 @@ export default function ShopProfile() {
 
   const handleAvatarUploaded = (url: string) => {
     setAvatarPreview(null);
-    // Store the Cloudinary URL; on next render avatarSrc picks it up via || chain.
-    setProfile((prev) => (prev ? { ...prev, avatarUrl: url } : prev));
+    setProfile((prev) => (prev ? { ...prev, avatarUrl: url || prev.avatarUrl } : prev));
   };
 
   const handleCoverUploaded = (url: string) => {
     setCoverPreview(null);
-    setProfile((prev) => (prev ? { ...prev, coverUrl: url } : prev));
+    setProfile((prev) => (prev ? { ...prev, coverUrl: url || prev.coverUrl } : prev));
   };
 
   const displayName = profile?.name ?? user?.name ?? user?.email ?? "";
   const displayEmail = profile?.email ?? user?.email ?? "";
   const memberSince = profile?.memberSince ?? null;
-  // Use || (not ??) so that empty strings from the backend are treated as "no image"
-  // and the fallback chain continues to user?.image (Google profile picture).
-  const avatarSrc = avatarPreview || profile?.avatarUrl || user?.image || null;
-  const coverSrc = coverPreview || profile?.coverUrl || null;
-
-  // crossOrigin="anonymous" must only be set for Cloudinary images.
-  // Google CDN (lh3.googleusercontent.com) requires a Referer header;
-  // setting crossOrigin strips it → image blocked on mobile.
-  const isCloudinary = (url: string | null) => !!url && /cloudinary\.com/.test(url);
+  const avatarSrc = avatarPreview ?? profile?.avatarUrl ?? user?.image ?? null;
+  const coverSrc = coverPreview ?? profile?.coverUrl ?? null;
 
   const formatMemberSince = (ms: number) =>
     new Intl.DateTimeFormat("th-TH", { day: "numeric", month: "long", year: "numeric" }).format(
@@ -177,7 +169,7 @@ export default function ShopProfile() {
                     src={coverSrc}
                     alt={t("profile.coverAlt", { name: displayName || "VelShop" })}
                     className="absolute inset-0 size-full object-cover"
-                    crossOrigin={isCloudinary(coverSrc) ? "anonymous" : undefined}
+                    crossOrigin="anonymous"
                     loading="eager"
                     onError={(e) => {
                       // Spec §89: never show a broken image — fall back to the gradient.
@@ -208,11 +200,10 @@ export default function ShopProfile() {
                         src={avatarSrc}
                         alt={t("profile.avatarAlt", { name: displayName || "VelShop" })}
                         className="size-full object-cover"
-                        crossOrigin={isCloudinary(avatarSrc) ? "anonymous" : undefined}
+                        crossOrigin="anonymous"
                         loading="eager"
                         onError={(e) => {
                           // Spec §89: broken avatar → initial-letter fallback.
-                          // Hide the broken image; the initial-letter span is the container's background.
                           (e.currentTarget as HTMLImageElement).style.display = "none";
                         }}
                       />

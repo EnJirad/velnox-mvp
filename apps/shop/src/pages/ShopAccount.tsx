@@ -6,7 +6,6 @@ import { Input } from "@velnox/shared/components/ui/input";
 import { Label } from "@velnox/shared/components/ui/label";
 import { Skeleton } from "@velnox/shared/components/ui/skeleton";
 import { api } from "@convex/_generated/api";
-import { useAuth } from "@velnox/shared/hooks/use-auth";
 import { useAction } from "convex/react";
 import { CalendarDays, CheckCircle2, ChevronLeft, Loader2, Mail, ShieldCheck, UserRound } from "lucide-react";
 import { useEffect, useState } from "react";
@@ -23,7 +22,6 @@ interface ProfileData {
 
 export default function ShopAccount() {
   const { t } = useLanguage();
-  const { user } = useAuth();
   const myProfile = useAction(api.customer.myProfile);
   const updateProfile = useAction(api.customer.updateProfileAction);
 
@@ -66,15 +64,6 @@ export default function ShopAccount() {
   }, [myProfile]);
 
   const dirty = name.trim() !== (profile?.name ?? "") || phone.trim() !== (profile?.phone ?? "");
-
-  // crossOrigin="anonymous" must only be set for Cloudinary images.
-  // Google CDN (lh3.googleusercontent.com) requires a Referer header;
-  // setting crossOrigin strips it → image blocked on mobile.
-  const isCloudinary = (url: string | null) => !!url && /cloudinary\.com/.test(url);
-
-  // Avatar priority: custom Cloudinary → Google profile image → initial letter.
-  // Use || (not ??) so empty strings from the backend don't block the Google fallback.
-  const avatarDisplaySrc = profile?.avatarUrl || user?.image || null;
 
   const handleSave = async () => {
     const trimmedName = name.trim();
@@ -148,12 +137,12 @@ export default function ShopAccount() {
             <section className="mt-8 rounded-3xl border border-slate-200 bg-white p-5">
               <div className="flex items-center gap-3.5">
                 <span className="flex size-12 shrink-0 items-center justify-center overflow-hidden rounded-full bg-[#ECFDF5] text-lg font-bold text-[#10B981]">
-                  {avatarDisplaySrc ? (
+                  {profile?.avatarUrl ? (
                     <img
-                      src={avatarDisplaySrc}
+                      src={profile.avatarUrl}
                       alt=""
                       className="size-full object-cover"
-                      crossOrigin={isCloudinary(avatarDisplaySrc) ? "anonymous" : undefined}
+                      crossOrigin="anonymous"
                       loading="eager"
                       onError={(e) => {
                         (e.currentTarget as HTMLImageElement).style.display = "none";

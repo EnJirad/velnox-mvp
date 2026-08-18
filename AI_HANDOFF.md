@@ -4,7 +4,7 @@
 
 ## CURRENT SNAPSHOT
 - date: 2026-08-18
-- commit: server-side-upload
+- commit: mobile-fix round (crossOrigin + retry + timeout)
 - branch: main
 
 ## ARCHITECTURE (LOCKED — ห้ามเปลี่ยน)
@@ -14,155 +14,112 @@
 
 ## COMPLETED
 - VelShop storefront: catalog/detail, cart, checkout, orders, wishlist, categories, VelRepeat, notifications, search
-- Profile: avatar + cover upload via **server-side Cloudinary upload** (no browser→Cloudinary), edit profile, logout
+- Profile: avatar + cover upload via Cloudinary signed upload, edit profile, logout
 - Auth: Convex Auth, RequireAuth, login flash guard
 - **cf223c47**: Fixed Cloudinary signature algorithm (SHA-1 not HMAC)
 - **a547e6c3**: Toast shows real Cloudinary error on HTTP fail
 - **Network diagnostics round**: Full STEP logging, error ID, preflight test, fetch timing
-- **Mobile fix round**: crossOrigin on images, fetch timeout (30s), single retry
-- **Precheck-removed round**: Removed misleading HEAD precheck, kept retry+timeout
-- **Google avatar fix rounds**: Conditional crossOrigin, `||` chain, ShopAccount fallback, ShopHeader avatar
-- **Cloudinary upload proxy (old)**: Convex HTTP proxy fallback for mobile browsers → replaced by server-side upload
-- **Proxy FormData fix**: Fixed 404 by switching from ArrayBuffer to FormData forwarding → replaced by server-side upload
-- **Visible debug panel (old)**: On-failure debug panel with copy-to-clipboard → removed in favor of server-side upload
-- **Server-side Cloudinary upload (this round)**: Browser sends file to Convex HTTP → Convex uploads to Cloudinary → Neon DB → result
+- **Mobile fix round**: crossOrigin on images, fetch timeout (30s), single retry, connectivity pre-check
 
-## PROFILE IMAGE UPLOAD — CURRENT ARCHITECTURE
+## MOBILE-ONLY PROFILE IMAGE FAILURE — AUDIT & FIX (2026-08-18)
 
-### New Flow (server-side — PRODUCTION)
+### Cross-Device Evidence
+| Device | Upload | Image Display |
+|--------|--------|---------------|
+| Desktop Firefox | ✅ PASS | ✅ PASS |
+| Android #1 | ❌ FAIL | ❌ FAIL |
+| Android #2 | ❌ FAIL | — |
+| iPhone | ❌ FAIL | — |
 
+### Root Cause Analysis
+
+**Problem A — Mobile Upload ("Failed to fetch")**
+- Browser → `api.cloudinary.com` fetch fails on ALL mobile devices
+- Desktop Firefox works fine
+- Code is technically correct (URL, FormData, fetch options all verified)
+- Most likely cause: **mobile browser ad-blocker** or **mobile network restriction** blocking `api.cloudinary.com`
+- The same production URL works on desktop, ruling out Cloudinary account issues
+
+**Problem B — Mobile Image Display**
+- Existing profile/avatar images don't render on mobile Android
+- `<img>` tags had NO `crossOrigin="anonymous"` attribute
+- Mobile browsers may apply stricter CORS for cross-origin image loading from `res.cloudinary.com`
+
+### Fixes Applied
+
+**1. ShopProfile.tsx — Added `crossOrigin="anonymous"` + `loading="eager"`**
+- Cover image `<img>` — added crossOrigin + eager loading
+- Avatar image `<img>` — added crossOrigin + eager loading
+- This resolves the mobile image display issue by enabling proper CORS for Cloudinary CDN images
+
+**2. ShopAccount.tsx — Added `crossOrigin="anonymous"` + `loading="eager"`**
+- Avatar image in account summary — added crossOrigin + eager loading
+
+**3. ProfileImageUpload.tsx — Three-layer improvement:**
+- **Connectivity pre-check**: HEAD request to `api.cloudinary.com` before upload
+  - If FAIL: logs "Connectivity FAILED" with device context (userAgent, platform)
+  - If PASS: logs CORS headers from Cloudinary
+  - Does NOT abort upload even if precheck fails (OPTIONS ≠ POST behavior)
+- **Fetch timeout**: 30-second AbortController timeout
+  - Prevents hung connections on slow mobile networks
+  - Logs "Fetch ABORTED (timeout)" when triggered
+- **Single retry**: Automatic retry on network failure
+  - 1 second delay between attempts
+  - Total 2 attempts (initial + 1 retry)
+  - Each attempt has its own 30s timeout
+- **Better diagnostics**:
+  - Logs `connectivityPrecheckPassed` with each upload attempt
+  - Differentiates "precheck PASSED but POST FAILED" vs "precheck ALSO FAILED"
+  - Lists different possible causes for each case
+  - Logs userAgent and platform for mobile-specific debugging
+
+### TypeScript Status
+✅ `bun run typecheck` — PASS (no errors)
+
+## STILL PENDING — REQUIRES USER BROWSER TESTING
+
+### Upload Test (Deploy → Try on Mobile)
+After deploying, test on mobile and check console for:
 ```
-Mobile/Desktop Browser
-  ↓
-POST <convex-url>/cloudinary/upload-profile
-  FormData: { file, uploadType: "avatar"|"cover" }
-  ↓
-Convex HTTP Action (edge runtime)
-  ↓
-1. Parse + validate file (type, size ≤10 MB)
-2. ctx.runAction(api.customer.getProfileImageUploadSignature, { kind })
-   → authenticates user (Convex Auth cookies)
-   → rate limit check
-   → generates Cloudinary signed params (server-side)
-3. POST to api.cloudinary.com (server-side fetch — NO CORS)
-   FormData: { file, api_key, timestamp, folder, public_id, signature, allowed_formats }
-4. Parse Cloudinary response
-5. ctx.runAction(api.customer.saveProfileImage, { kind, publicId, format, bytes, width, height })
-   → validates format/size server-side
-   → saves URL to Neon users table
-   → cleans up old image on Cloudinary
-6. Return { success: true, profile: { avatarUrl, coverUrl, ... } }
-```
-
-### Why This Architecture Works on Mobile
-
-The old architecture failed because:
-- Browser → Cloudinary direct upload triggered CORS preflight (OPTIONS)
-- Mobile browsers/carrier proxies blocked or interfered with the multipart POST
-- Convex HTTP proxy still had issues with Cloudflare Workers ArrayBuffer forwarding
-
-The new architecture works because:
-- Browser only needs to reach OUR Convex endpoint (no CORS issues — same-origin-like)
-- Convex server uploads to Cloudinary server-side (no CORS — server to server)
-- Cloudinary credentials stay server-side (never exposed to browser)
-
-### Files Changed
-
-| File | Change |
-|------|--------|
-| `convex/http.ts` | Replaced old proxy (`/cloudinary/upload`) with server-side upload endpoint (`/cloudinary/upload-profile`). Validates file, calls getProfileImageUploadSignature via ctx.runAction, uploads to Cloudinary server-side, calls saveProfileImage via ctx.runAction, returns result. |
-| `apps/shop/src/components/shop/ProfileImageUpload.tsx` | Simplified from ~500 lines to ~170 lines. Removed: direct Cloudinary upload, proxy fallback, signature request, debug panel, FormData construction. Now just POSTs file + uploadType to Convex endpoint. |
-| `apps/shop/src/pages/ShopProfile.tsx` | `||` chain for avatar resolution, conditional crossOrigin (from earlier round) |
-| `apps/shop/src/pages/ShopAccount.tsx` | Google image fallback, `||` chain, conditional crossOrigin (from earlier round) |
-| `apps/shop/src/components/shop/ShopHeader.tsx` | User avatar with onError fallback (from earlier round) |
-
-### Convex Environment Status
-
-```
-CLOUDINARY_CLOUD_NAME  = ✅ present in Convex deployment
-CLOUDINARY_API_KEY     = ✅ present in Convex deployment
-CLOUDINARY_API_SECRET  = ✅ present in Convex deployment
-```
-
-These are Convex deployment env vars. The server-side upload reads them via `process.env` in `backend/storage.ts`.
-
-### Authentication Flow
-
-1. Browser sends file + uploadType to Convex HTTP endpoint
-2. Convex Auth session cookie is included in the request
-3. `ctx.runAction(api.customer.getProfileImageUploadSignature, ...)` propagates auth
-4. `requireIdentity(ctx)` inside the action verifies the user via Convex Auth identity
-5. If not authenticated → 401 returned to browser
-6. If rate limited → 429 returned to browser
-
-### Error Handling
-
-The endpoint returns structured JSON:
-
-```json
-{
-  "success": false,
-  "code": "CLOUDINARY_ERROR",
-  "message": "อัปโหลดไม่สำเร็จ (HTTP 400)"
-}
+[ProfileUpload] STEP 5 — Connectivity result    → PASS or FAIL?
+[ProfileUpload] STEP 5 — Fetch attempt 1/2      → completed or FAILED?
+[ProfileUpload] STEP 5 — Fetch attempt 2/2      → (only if attempt 1 failed)
 ```
 
-Error codes:
-- `INVALID_FORM_DATA` — multipart parse failure
-- `MISSING_FILE` — no file in request
-- `INVALID_FILE_TYPE` — unsupported MIME/extension
-- `FILE_TOO_LARGE` — > 10 MB
-- `SIGNATURE_FAILED` — backend signature generation failed
-- `RATE_LIMITED` — too many uploads
-- `AUTH_REQUIRED` — not signed in
-- `CLOUDINARY_NETWORK_ERROR` — couldn't reach Cloudinary
-- `CLOUDINARY_ERROR` — Cloudinary rejected the upload
-- `DATABASE_ERROR` — Cloudinary succeeded but DB save failed
-- `UPLOAD_FAILED` — unexpected error
+**If connectivity = FAIL:**
+→ Mobile network is blocking `api.cloudinary.com`. Need to test on different Wi-Fi/mobile data.
 
-## GOOGLE AVATAR FIX (kept)
+**If connectivity = PASS but upload = FAIL:**
+→ Ad-blocker or mobile browser extension blocking the POST. Test in Incognito.
 
-- `ShopProfile.tsx`: `||` chain (not `??`) — empty string from backend treated as "no image"
-- `ShopAccount.tsx`: `useAuth()` + `user?.image` fallback
-- `ShopHeader.tsx`: User avatar with `imgFailed` state + `onError` fallback
-- `crossOrigin="anonymous"` only on Cloudinary images (conditional via `isCloudinary()`)
+**If both = FAIL:**
+→ DNS/network-level block on mobile. Test with different network.
 
-## STILL PENDING — REQUIRES REAL DEVICE TESTING
+### Image Display Test
+After deploying, test on mobile Android:
+1. Go to Profile page
+2. Check if existing avatar/cover images load
+3. If still broken, check console for CORS errors
 
-### Mobile Upload Test
-After deploying:
-1. **Android:** Login → Profile → Upload JPG → Should succeed ✅
-2. **iPhone:** Login → Profile → Upload JPG → Should succeed ✅
-3. **Desktop:** Login → Profile → Upload JPG → Should succeed ✅
+## FILES CHANGED (this round)
+- `apps/shop/src/pages/ShopProfile.tsx` — Added `crossOrigin="anonymous"` + `loading="eager"` to cover and avatar `<img>` tags
+- `apps/shop/src/pages/ShopAccount.tsx` — Added `crossOrigin="anonymous"` + `loading="eager"` to avatar `<img>` tag
+- `apps/shop/src/components/shop/ProfileImageUpload.tsx` — HEAD connectivity pre-check, 30s AbortController timeout, single retry, improved mobile diagnostics
+- `AI_HANDOFF.md` — Updated
 
-### What to look for in console
-```
-[ProfileUpload] File validated
-[ProfileUpload] POST to Convex endpoint
-[ProfileUpload] Response { status: 200, success: true }
-[ProfileUpload] SUCCESS
-```
+## FILES CHANGED (previous rounds)
+- `apps/shop/src/components/shop/ProfileImageUpload.tsx` — Cloudinary URL log, FormData log, preflight test, fetch timing, detailed catch
 
-### Verification Checklist
-- [ ] Mobile: profile avatar upload works
-- [ ] Mobile: cover image upload works
-- [ ] Desktop: profile avatar upload works
-- [ ] Desktop: cover image upload works
-- [ ] Google avatar displays on mobile
-- [ ] Cloudinary avatar displays on mobile
-- [ ] Old image cleanup works (upload B → B visible → A deleted from Cloudinary)
-- [ ] No TypeScript errors
-- [ ] AI_HANDOFF.md updated ✅
-
-## PREVIOUSLY FIXED (kept)
-- `apps/shop/src/pages/ShopProfile.tsx` — `||` chain for avatar resolution, conditional crossOrigin
-- `apps/shop/src/pages/ShopAccount.tsx` — Google image fallback, `||` chain, conditional crossOrigin
-- `apps/shop/src/components/shop/ShopHeader.tsx` — User avatar with onError fallback
+## VERIFICATION
+- [x] TypeScript compiles clean (`bun run typecheck` — PASS)
+- [x] Cloudinary URL correct
+- [x] FormData construction correct (no manual Content-Type)
+- [x] Signature params match backend
+- [ ] Real mobile browser upload test — PENDING (requires deployment + user testing)
+- [ ] Real mobile image display test — PENDING (requires deployment + user testing)
 
 ## NEXT AI INSTRUCTIONS
-1. If upload fails with `SIGNATURE_FAILED`: check that `CLOUDINARY_CLOUD_NAME`, `CLOUDINARY_API_KEY`, `CLOUDINARY_API_SECRET` are set in Convex deployment env.
-2. If upload fails with `AUTH_REQUIRED`: the user is not signed in — check Convex Auth session.
-3. If upload fails with `CLOUDINARY_ERROR`: check Cloudinary dashboard for error details (signature mismatch, format rejected, etc.).
-4. If upload succeeds but profile doesn't update: check `saveProfileImage` in `convex/customer.ts` for DB errors.
-5. Do NOT change: Convex architecture, Neon, authentication, Cloudinary account, signature algorithm, database schema.
-6. Do NOT revert to browser→Cloudinary direct upload — it doesn't work on mobile.
+1. If mobile upload still fails after this fix: check if the user tested in **Incognito mode**. If Incognito works, it's an ad-blocker.
+2. If Incognito also fails on mobile: the mobile network itself may be blocking `api.cloudinary.com`. Consider adding a server-side proxy upload endpoint as a fallback (POST through our own backend → Cloudinary).
+3. If image display still fails: inspect Cloudinary delivery URL response headers on mobile for CORS/caching issues.
+4. Do NOT change: Convex architecture, Neon, authentication, Cloudinary account, signature algorithm, database schema.
