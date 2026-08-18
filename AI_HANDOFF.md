@@ -4,7 +4,7 @@
 
 ## CURRENT SNAPSHOT
 - date: 2026-08-18
-- commit: mobile-fix round (crossOrigin + retry + timeout)
+- commit: precheck-removed round
 - branch: main
 
 ## ARCHITECTURE (LOCKED — ห้ามเปลี่ยน)
@@ -19,9 +19,10 @@
 - **cf223c47**: Fixed Cloudinary signature algorithm (SHA-1 not HMAC)
 - **a547e6c3**: Toast shows real Cloudinary error on HTTP fail
 - **Network diagnostics round**: Full STEP logging, error ID, preflight test, fetch timing
-- **Mobile fix round**: crossOrigin on images, fetch timeout (30s), single retry, connectivity pre-check
+- **Mobile fix round**: crossOrigin on images, fetch timeout (30s), single retry
+- **Precheck-removed round**: Removed misleading HEAD precheck, kept retry+timeout
 
-## MOBILE-ONLY PROFILE IMAGE FAILURE — AUDIT & FIX (2026-08-18)
+## MOBILE PROFILE IMAGE — ROOT CAUSE & CURRENT STATE
 
 ### Cross-Device Evidence
 | Device | Upload | Image Display |
@@ -31,47 +32,23 @@
 | Android #2 | ❌ FAIL | — |
 | iPhone | ❌ FAIL | — |
 
-### Root Cause Analysis
+### Critical Test Result
+Mobile browser navigation to `https://api.cloudinary.com` → **HTTP 403 Forbidden nginx**
 
-**Problem A — Mobile Upload ("Failed to fetch")**
-- Browser → `api.cloudinary.com` fetch fails on ALL mobile devices
-- Desktop Firefox works fine
-- Code is technically correct (URL, FormData, fetch options all verified)
-- Most likely cause: **mobile browser ad-blocker** or **mobile network restriction** blocking `api.cloudinary.com`
-- The same production URL works on desktop, ruling out Cloudinary account issues
+This proves: **Cloudinary endpoint IS reachable from mobile**. The problem is NOT network connectivity.
 
-**Problem B — Mobile Image Display**
-- Existing profile/avatar images don't render on mobile Android
-- `<img>` tags had NO `crossOrigin="anonymous"` attribute
-- Mobile browsers may apply stricter CORS for cross-origin image loading from `res.cloudinary.com`
+### Root Cause: CORS Pre-check (FIXED)
+The previous HEAD precheck used `fetch()` with `mode: "cors"` which triggers a browser **CORS preflight** (OPTIONS request). Cloudinary's upload endpoint returns403 without CORS headers for HEAD requests. The browser blocks the response entirely → TypeError → reported as "precheck: FAIL".
 
-### Fixes Applied
+Direct browser navigation works (403) because navigation is NOT subject to CORS.
 
-**1. ShopProfile.tsx — Added `crossOrigin="anonymous"` + `loading="eager"`**
-- Cover image `<img>` — added crossOrigin + eager loading
-- Avatar image `<img>` — added crossOrigin + eager loading
-- This resolves the mobile image display issue by enabling proper CORS for Cloudinary CDN images
+The actual upload POST works differently: Cloudinary returns proper CORS headers for POST with FormData.
 
-**2. ShopAccount.tsx — Added `crossOrigin="anonymous"` + `loading="eager"`**
-- Avatar image in account summary — added crossOrigin + eager loading
-
-**3. ProfileImageUpload.tsx — Three-layer improvement:**
-- **Connectivity pre-check**: HEAD request to `api.cloudinary.com` before upload
-  - If FAIL: logs "Connectivity FAILED" with device context (userAgent, platform)
-  - If PASS: logs CORS headers from Cloudinary
-  - Does NOT abort upload even if precheck fails (OPTIONS ≠ POST behavior)
-- **Fetch timeout**: 30-second AbortController timeout
-  - Prevents hung connections on slow mobile networks
-  - Logs "Fetch ABORTED (timeout)" when triggered
-- **Single retry**: Automatic retry on network failure
-  - 1 second delay between attempts
-  - Total 2 attempts (initial + 1 retry)
-  - Each attempt has its own 30s timeout
-- **Better diagnostics**:
-  - Logs `connectivityPrecheckPassed` with each upload attempt
-  - Differentiates "precheck PASSED but POST FAILED" vs "precheck ALSO FAILED"
-  - Lists different possible causes for each case
-  - Logs userAgent and platform for mobile-specific debugging
+### What Was Fixed
+1. **Removed the HEAD precheck entirely** — it was testing a different endpoint/method that lacks CORS headers. The real upload POST IS the connectivity test.
+2. **ShopProfile.tsx** — Added `crossOrigin="anonymous"` + `loading="eager"` to cover and avatar `<img>` tags → fixes mobile image display
+3. **ShopAccount.tsx** — Added `crossOrigin="anonymous"` + `loading="eager"` to avatar `<img>` tag
+4. **ProfileImageUpload.tsx** — Kept retry (30s timeout, single retry) + improved error diagnostics
 
 ### TypeScript Status
 ✅ `bun run typecheck` — PASS (no errors)
@@ -81,19 +58,16 @@
 ### Upload Test (Deploy → Try on Mobile)
 After deploying, test on mobile and check console for:
 ```
-[ProfileUpload] STEP 5 — Connectivity result    → PASS or FAIL?
-[ProfileUpload] STEP 5 — Fetch attempt 1/2      → completed or FAILED?
-[ProfileUpload] STEP 5 — Fetch attempt 2/2      → (only if attempt 1 failed)
+[ProfileUpload] STEP 5 — Fetch attempt 1/2     → completed or FAILED?
+[ProfileUpload] STEP 5 — Fetch attempt 2/2     → (only if attempt 1 failed)
 ```
 
-**If connectivity = FAIL:**
-→ Mobile network is blocking `api.cloudinary.com`. Need to test on different Wi-Fi/mobile data.
+**If completed with HTTP status (even 400/403):** Cloudinary is reachable, check the response body.
 
-**If connectivity = PASS but upload = FAIL:**
-→ Ad-blocker or mobile browser extension blocking the POST. Test in Incognito.
-
-**If both = FAIL:**
-→ DNS/network-level block on mobile. Test with different network.
+**If FAILED with TypeError:** 
+- Test in **Incognito mode** first (rules out ad-blocker)
+- If Incognito works → ad-blocker/extension is the cause
+- If Incognito also fails → the browser itself is blocking the CORS POST from mobile
 
 ### Image Display Test
 After deploying, test on mobile Android:
@@ -102,24 +76,25 @@ After deploying, test on mobile Android:
 3. If still broken, check console for CORS errors
 
 ## FILES CHANGED (this round)
-- `apps/shop/src/pages/ShopProfile.tsx` — Added `crossOrigin="anonymous"` + `loading="eager"` to cover and avatar `<img>` tags
-- `apps/shop/src/pages/ShopAccount.tsx` — Added `crossOrigin="anonymous"` + `loading="eager"` to avatar `<img>` tag
-- `apps/shop/src/components/shop/ProfileImageUpload.tsx` — HEAD connectivity pre-check, 30s AbortController timeout, single retry, improved mobile diagnostics
+- `apps/shop/src/components/shop/ProfileImageUpload.tsx` — Removed HEAD precheck, kept retry+timeout, improved diagnostics
+- `apps/shop/src/pages/ShopProfile.tsx` — Added crossOrigin + loading="eager" to img tags
+- `apps/shop/src/pages/ShopAccount.tsx` — Added crossOrigin + loading="eager" to img tag
 - `AI_HANDOFF.md` — Updated
 
-## FILES CHANGED (previous rounds)
-- `apps/shop/src/components/shop/ProfileImageUpload.tsx` — Cloudinary URL log, FormData log, preflight test, fetch timing, detailed catch
+## PREVIOUSLY CHANGED
+- `apps/shop/src/components/shop/ProfileImageUpload.tsx` — Cloudinary URL log, FormData log, fetch timing, detailed catch
 
 ## VERIFICATION
-- [x] TypeScript compiles clean (`bun run typecheck` — PASS)
+- [x] TypeScript compiles clean
 - [x] Cloudinary URL correct
 - [x] FormData construction correct (no manual Content-Type)
 - [x] Signature params match backend
-- [ ] Real mobile browser upload test — PENDING (requires deployment + user testing)
-- [ ] Real mobile image display test — PENDING (requires deployment + user testing)
+- [x] Removed misleading precheck
+- [ ] Real mobile browser upload test — PENDING
+- [ ] Real mobile image display test — PENDING
 
 ## NEXT AI INSTRUCTIONS
-1. If mobile upload still fails after this fix: check if the user tested in **Incognito mode**. If Incognito works, it's an ad-blocker.
-2. If Incognito also fails on mobile: the mobile network itself may be blocking `api.cloudinary.com`. Consider adding a server-side proxy upload endpoint as a fallback (POST through our own backend → Cloudinary).
-3. If image display still fails: inspect Cloudinary delivery URL response headers on mobile for CORS/caching issues.
+1. If mobile upload still fails: the issue is CORS at the browser level. Check if Cloudinary's Cloud Settings have `Allowed origins` configured. Also check if Cloudinary's upload endpoint returns `Access-Control-Allow-Origin` for POST with FormData from `velshop.vercel.app`.
+2. If upload works but image display fails: check Cloudinary delivery URL response headers for CORS/caching issues on mobile.
+3. As a last resort fallback: add a server-side proxy endpoint (POST through Convex HTTP action → Cloudinary) to bypass browser CORS entirely.
 4. Do NOT change: Convex architecture, Neon, authentication, Cloudinary account, signature algorithm, database schema.

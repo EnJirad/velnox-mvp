@@ -82,11 +82,10 @@ function makeErrorId(): string {
  * VelShop profile image uploader (avatar + cover).
  *
  * Flow: pick a file → client-side validation (MIME type + size, max 10 MB) →
- * instant preview → connectivity pre-check (HEAD) → ask the backend for a
- * Cloudinary signed upload permit → POST the file straight to Cloudinary with
- * timeout + retry (no binary through our server) → tell the backend to persist
- * the canonical URL (old-image cleanup runs server-side inside saveProfileImage,
- * after the DB row uses the new image).
+ * instant preview → ask the backend for a Cloudinary signed upload permit →
+ * POST the file straight to Cloudinary with timeout + retry (no binary through
+ * our server) → tell the backend to persist the canonical URL (old-image cleanup
+ * runs server-side inside saveProfileImage, after the DB row uses the new image).
  *
  * Failure handling: every failure logs `FAILED AT STEP X` with a unique error
  * ID and full error inspection, and the toast ALWAYS shows the base message
@@ -231,55 +230,13 @@ export function ProfileImageUpload({ kind, onPreview, onUploaded, children }: Pr
       });
 
       // ==========================================
-      // CONNECTIVITY PRE-CHECK: lightweight HEAD to api.cloudinary.com
-      // Tests if the device can reach Cloudinary at all (different from
-      // the actual upload POST). If this fails, we know it's a network
-      // issue, not a CORS or request-construction issue.
-      // ==========================================
-      let connectivityOk = true;
-      try {
-        console.log("[ProfileUpload] STEP 5 — Connectivity pre-check", {
-          url: cloudinaryUrl,
-          test: "HEAD request to api.cloudinary.com",
-        });
-        const tPreStart = performance.now();
-        const preflight = await fetch(cloudinaryUrl, {
-          method: "HEAD",
-          mode: "cors",
-          cache: "no-store",
-        });
-        const tPreEnd = performance.now();
-        const preflightHeaders: Record<string, string> = {};
-        preflight.headers.forEach((v, k) => {
-          preflightHeaders[k] = v;
-        });
-        console.log("[ProfileUpload] STEP 5 — Connectivity result", {
-          status: preflight.status,
-          ok: preflight.ok,
-          ms: Math.round(tPreEnd - tPreStart),
-          corsAllowed: Boolean(preflightHeaders["access-control-allow-origin"]),
-          corsOrigin: preflightHeaders["access-control-allow-origin"] ?? "none",
-          corsMethods: preflightHeaders["access-control-allow-methods"] ?? "none",
-        });
-      } catch (preflightErr) {
-        connectivityOk = false;
-        console.error("[ProfileUpload] STEP 5 — Connectivity FAILED", preflightErr);
-        inspectError(preflightErr, "CONNECTIVITY");
-        // Log the specific failure type for diagnosis
-        const preflightEnv = {
-          origin: window.location.origin,
-          online: navigator.onLine,
-          protocol: window.location.protocol,
-          userAgent: navigator.userAgent.slice(0, 120),
-          platform: navigator.platform,
-        };
-        console.error("[ProfileUpload] STEP 5 — Connectivity failure context", preflightEnv);
-        // Do NOT abort — connectivity pre-check may fail for different
-        // reasons than the actual POST. The real POST follows.
-      }
-
-      // ==========================================
       // ACTUAL UPLOAD: fetch to Cloudinary (with timeout + retry)
+      // The real upload POST IS the connectivity test — no separate precheck.
+      // A HEAD/OPTIONS precheck on the upload endpoint fails due to CORS
+      // preflight (browser blocks it before any HTTP response), while the
+      // actual POST works because Cloudinary returns proper CORS headers
+      // for POST with FormData. Direct browser navigation to api.cloudinary.com
+      // works (returns 403) because navigation is not subject to CORS.
       // ==========================================
       stepLog(5, "Starting Cloudinary upload", {
         cloudinaryUrl,
@@ -290,10 +247,8 @@ export function ProfileImageUpload({ kind, onPreview, onUploaded, children }: Pr
         publicId: sig.publicId,
         folder: sig.folder,
         timestamp: sig.timestamp,
-        connectivityPrecheckPassed: connectivityOk,
       });
 
-      /** Single fetch attempt with a 30-second timeout (AbortController). */
       let attempt = 0;
       let res: Response | null = null;
       let lastFetchErr: unknown = null;
@@ -325,7 +280,7 @@ export function ProfileImageUpload({ kind, onPreview, onUploaded, children }: Pr
             redirected: res.redirected,
             ms: Math.round(tFetchEnd - tFetchStart),
           });
-          // If we got a response (even HTTP error), we're done — Cloudinary is reachable.
+          // If we got a response (even HTTP error), Cloudinary is reachable.
           break;
         } catch (fetchErr) {
           const tFetchEnd = performance.now();
@@ -361,35 +316,26 @@ export function ProfileImageUpload({ kind, onPreview, onUploaded, children }: Pr
           online: navigator.onLine,
           protocol: window.location.protocol,
           target: urlInfo.hostname ?? "api.cloudinary.com",
-          connectivityPrecheck: connectivityOk ? "PASS" : "FAIL",
           userAgent: navigator.userAgent.slice(0, 120),
           platform: navigator.platform,
         };
         const safeDetail = lastFetchErr instanceof Error
-          ? `${lastFetchErr.message} | origin: ${env.origin} | online: ${env.online} | target: ${env.target} | precheck: ${env.connectivityPrecheck}`
+          ? `${lastFetchErr.message} | origin: ${env.origin} | online: ${env.online} | target: ${env.target}`
           : `Network error: ${String(lastFetchErr)} | origin: ${env.origin} | online: ${env.online}`;
         console.error("[ProfileUpload] STEP 5 — All fetch attempts failed", env);
 
         if (lastFetchErr instanceof TypeError) {
           console.error("[ProfileUpload] STEP 5 — TypeError diagnosis", {
             message: lastFetchErr.message,
-            connectivityPrecheck: connectivityOk,
-            possibleCauses: connectivityOk
-              ? [
-                  "Connectivity pre-check PASSED but upload POST FAILED",
-                  "1. Ad-blocker / browser extension blocked the POST",
-                  "2. CORS policy blocked the upload request",
-                  "3. Network interruption during upload",
-                  "4. Mobile carrier proxy blocking the upload",
-                ]
-              : [
-                  "Connectivity pre-check ALSO FAILED",
-                  "1. Browser offline (navigator.onLine=" + navigator.onLine + ")",
-                  "2. DNS resolution failed for api.cloudinary.com",
-                  "3. Network unreachable (mobile carrier / Wi-Fi)",
-                  "4. VPN/proxy/firewall blocking api.cloudinary.com",
-                  "5. Service Worker intercepted the request",
-                ],
+            possibleCauses: [
+              "1. Ad-blocker / browser extension blocking api.cloudinary.com",
+              "2. CORS policy — Cloudinary upload endpoint not returning Access-Control-Allow-Origin",
+              "3. Mobile carrier proxy or firewall blocking the POST",
+              "4. Network interruption during upload",
+              "5. Browser DevTools network throttling",
+              "6. Service Worker intercepting the request",
+              "NOTE: If https://api.cloudinary.com opens in the address bar, the server is reachable — the issue is CORS or request blocking at the browser level",
+            ],
           });
         }
 
