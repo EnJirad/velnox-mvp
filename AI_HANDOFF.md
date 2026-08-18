@@ -3,7 +3,7 @@
 > และ **อัปเดตไฟล์นี้ทุกครั้งหลังทำงานเสร็จ** (ตามคู่มือ CONTINUE DEVELOPMENT)
 ## CURRENT SNAPSHOT
 - date: 2026-08-18
-- commit: push รอบนี้ (ดู commit ล่าสุดบน main — ต่อจาก a547e6c3)
+- commit: network-diagnostics round (ต่อจาก a547e6c3 + previous debug rounds)
 - branch: main
 ## ARCHITECTURE (LOCKED — ห้ามเปลี่ยน)
 - Bun-workspace monorepo: `apps/{shop,seller,center,corporate}` + `packages/shared` (@velnox/shared)
@@ -49,47 +49,46 @@ action SUCCESS — พิสูจน์ด้วย test vector จาก docs 
 - **i18n**: เพิ่ม key `profile.errorIdLabel` ครบ 3 ภาษา (th `รหัสข้อผิดพลาด` / en `Error code` /
   my `အမှားကုဒ์` ใน myShopPatch) — key parity คงเดิม (locale-parity test ผ่าน)
 ## FILES CHANGED (รอบนี้)
-- apps/shop/src/components/shop/ProfileImageUpload.tsx — STEP log, error ID, inspectError, toast มี detail+ID เสมอ
-- packages/shared/src/lib/i18n/locales/th.ts — เพิ่ม `profile.errorIdLabel`
-- packages/shared/src/lib/i18n/locales/en.ts — เพิ่ม `profile.errorIdLabel`
-- packages/shared/src/lib/i18n/locales/index.ts — เพิ่ม `profile.errorIdLabel` (myShopPatch)
+- apps/shop/src/components/shop/ProfileImageUpload.tsx — Cloudinary URL log, FormData log, preflight test, fetch timing, detailed catch with diagnostic summary
 - AI_HANDOFF.md — อัปเดต
-## VERIFICATION (ผลจริง — run บนเครื่องจาก tarball ของ main + แก้แล้ว)
+## VERIFICATION
 - TypeScript (`bun run typecheck`): **PASS** (exit 0)
-- Tests (`bun run test`): **PASS** — 194/194 (20 files) รวม locale-parity + storage contract
-- Lint (eslint ไฟล์ที่เปลี่ยน 4 ไฟล์): **PASS** (0 errors)
-- Shop Build (`bun run build:shop`): **PASS** (11.x s)
-- Signing contract เทียบ SDK ทางการ: **PASS** (รอบก่อน ตรวจแล้ว — ไม่แตะ signing logic รอบนี้)
-- Upload จริงบน browser + Cloudinary: **NOT VERIFIED** — environment นี้ไม่มี browser / ไม่มีสิทธิ์
-  เข้า Convex deployment หรือ Cloudinary account
+- Upload จริงบน browser + Cloudinary: **NOT VERIFIED** — environment นี้ไม่มี browser
 ## STILL PENDING (ต้อง test บน browser จริงหลัง deploy)
-- deploy main ล่าสุด (Convex + frontend) → upload JPG ~100KB → อ่าน **toast + console**:
-  - toast แสดง `FAILED` detail + error ID → เอาข้อความนั้น + error ID มาเทียบ Convex logs
-  - `(6xx/4xx: Cloudinary …)` → Cloudinary ตอบจริง — รายงานข้อความ
-  - `Failed to fetch` + `FAILED AT STEP 5` → network/CORS ระหว่าง browser → api.cloudinary.com
-  - `FAILED AT STEP 3` → Convex transport/action error (ดู inspectError log)
-  - ไม่มี log `[ProfileUpload]` เลย → frontend ยังเป็น build เก่า (cache/deploy ไม่ทัน)
-- upload ขนาด 1/5/9/10/>10 MB (JPG/PNG/WebP) + refresh → รูปยังอยู่
-- เปลี่ยนรูปซ้ำ → Media Library เหลือแค่รูปปัจจุบัน (cleanup — server-side ใน saveProfileImage)
-- Map บน browser, login flash, responsive — ตาม AI_HANDOFF รอบก่อน
+- deploy main ล่าสุด → upload JPG ~100KB → อ่าน **console**:
+  - `[ProfileUpload] STEP 5 — Cloudinary URL` → ตรวจ hostname ต้องเป็น `api.cloudinary.com`
+  - `[ProfileUpload] STEP 5 — FormData entries` → ต้องมี file, api_key, timestamp, folder, public_id, signature, allowed_formats
+  - `[ProfileUpload] STEP 5 — Preflight result` → ถ้า fail แสดงว่า browser ไป Cloudinary ไม่ได้
+  - `[ProfileUpload] STEP 5 — Fetch completed` → ถ้ามี status + ms แสดงว่า fetch สำเร็จ
+  - `[ProfileUpload] STEP 5 — Fetch EXCEPTION` → ดู message + possibleCauses
+  - `[ProfileUpload] STEP 5 — Diagnostic summary` → origin/online/target ใน toast
+- ถ้า preflight fail + fetch fail → ปัญหา network-level:
+  1. ตรวจ ad-blocker / VPN / firewall
+  2. ตรวจว่า browser ไป api.cloudinary.com ได้หรือไม่ (เปิด DevTools → Network)
+  3. ตรวจว่าไม่มี Service Worker intercept
+- ถ้า preflight pass แต่ fetch fail → ปัญหา CORS / request construction
+- upload ขนาด 1/5/9/10/>10 MB + refresh → รูปยังอยู่
+- เปลี่ยนรูปซ้ำ → Media Library เหลือแค่รูปปัจจุบัน
 ## KNOWN BUGS
 - ~~Invalid Signature (HMAC)~~ → แก้แล้ว cf223c47
 - ~~max_bytes → 400 Unknown parameter~~ → แก้แล้ว
 - ~~extractPublicId ตัด folder prefix~~ → แก้แล้ว
-- ~~generic-only toast ซ่อน error จริง~~ → แก้แล้วรอบนี้ (error ID + detail เสมอ)
-- ยังไม่ยืนยัน: E1 (deploy เก่า) / E2 (CLOUDINARY_API_SECRET ไม่ตรงกับ cloud/api_key) — environment
-  ตรวจจากโค้ดไม่ได้; รอบนี้มีเครื่องมือ (toast detail + error ID + STEP log) ที่พิสูจน์ได้แล้ว
+- ~~generic-only toast ซ่อน error จริง~~ → แก้แล้ว (error ID + detail เสมอ)
+- **Active: Failed to fetch ที่ STEP 5** — browser fetch() ไป Cloudinary ไม่สำเร็จ
+  - เพิ่ม network diagnostics รอบนี้ (preflight test, URL log, fetch timing, detailed catch)
+  - ต้อง deploy แล้วดู console output เพื่อหา root cause จริง
 - commerce.ts: eslint unused vars บรรทัด 205/551 (มีอยู่ก่อน ไม่เกี่ยวกับงานนี้)
 ## DATABASE / BACKEND CHANGES
 - Convex: ไม่มี function ใหม่/ลบรอบนี้
 - Neon: ไม่มีการเปลี่ยน schema
 - Env: ไม่มีการเปลี่ยน — Cloudinary 3 keys อยู่ใน deployment แล้ว (action SUCCESS ยืนยันว่าอ่านได้)
 ## NEXT AI INSTRUCTIONS
-- 1) deploy main ล่าสุด แล้ว test 100KB JPG ตาม STILL PENDING — toast/console จะบอกขั้นที่ fail ทันที
-- 2) ถ้า toast โชว์ `(401: Invalid Signature)` ทั้งที่ main ใหม่ → เช็ค E2: CLOUDINARY_API_SECRET
-   ต้องเป็นของ cloud/api_key ชุดเดียวกัน (Convex env) — **ห้าม hardcode**
-- 3) ถ้า toast โชว์ `Failed to fetch` ที่ STEP 5 → ตรวจ network/CORS/ภูมิภาค/ad-blocker
-- ห้ามแก้/รื้อ: architecture, Neon schema, Convex auth, Cloudinary system, map center-pin UX,
-  save rule (lat/lng + locationConfirmed=true), footer/header ที่ลดรกแล้ว
-- **ห้ามเปลี่ยน `sha1Sign` กลับเป็น HMAC-SHA1** — Cloudinary ใช้ SHA-1 แบบต่อ secret ต่อท้ายเท่านั้น
-- **ห้ามเพิ่ม `max_bytes` กลับเข้าไปใน request** — Cloudinary ตอบ 400 (ไม่ใช่ Upload API parameter)
+- 1) deploy main ล่าสุด → upload 100KB JPG → อ่าน console ตาม STILL PENDING
+- 2) ถ้า preflight FAIL: ปัญหาคือ browser ไป api.cloudinary.com ไม่ได้ → ตรวจ network/ad-blocker/VPN
+- 3) ถ้า preflight PASS แต่ POST FAIL: ปัญหาคือ CORS หรือ request construction
+- 4) ถ้า fetch EXCEPTION เป็น TypeError: ดู possibleCauses 7 ข้อใน console log
+- 5) ถ้า (401: Invalid Signature) → เช็ค CLOUDINARY_API_SECRET ต้องตรงกับ cloud/api_key
+- ห้ามแก้/รื้อ: architecture, Neon schema, Convex auth, Cloudinary system, signing logic
+- **ห้ามเปลี่ยน `sha1Sign` กลับเป็น HMAC-SHA1**
+- **ห้ามเพิ่ม `max_bytes` กลับเข้าไปใน request**
+- **ห้ามลบ network diagnostics ออก** — ยังต้องใช้ debug

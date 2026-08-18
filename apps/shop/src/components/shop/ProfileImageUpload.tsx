@@ -179,22 +179,159 @@ export function ProfileImageUpload({ kind, onPreview, onUploaded, children }: Pr
       body.append("public_id", sig.publicId);
       body.append("signature", sig.signature);
       body.append("allowed_formats", sig.allowedFormats);
-      // Stage B — POST straight to Cloudinary. Log the request metadata
-      // (never the signature), then ALWAYS read the response body so a 4xx
-      // shows the real Cloudinary message instead of a generic toast.
+
+      // Stage B — POST straight to Cloudinary.
+      // ==========================================
+      // DIAGNOSTIC: Full URL + FormData + network diagnostics
+      // ==========================================
       failStage = 5;
+      const cloudinaryUrl = `https://api.cloudinary.com/v1_1/${sig.cloudName}/image/upload`;
+
+      // Log the parsed URL components
+      let urlInfo: Record<string, string> = {};
+      try {
+        const urlObj = new URL(cloudinaryUrl);
+        urlInfo = {
+          full: cloudinaryUrl,
+          protocol: urlObj.protocol,
+          hostname: urlObj.hostname,
+          pathname: urlObj.pathname,
+          cloudName: sig.cloudName,
+        };
+      } catch {
+        urlInfo = { full: cloudinaryUrl, parseError: "URL constructor failed" };
+      }
+      console.log("[ProfileUpload] STEP 5 — Cloudinary URL", urlInfo);
+
+      // Log FormData entries (file name + size, key names, no secrets)
+      const formEntries: string[] = [];
+      body.forEach((val, key) => {
+        if (val instanceof File) {
+          formEntries.push(`${key}: (File: ${val.name}, ${val.size} bytes)`);
+        } else {
+          formEntries.push(`${key}: (string, ${String(val).length} chars)`);
+        }
+      });
+      console.log("[ProfileUpload] STEP 5 — FormData entries", formEntries);
+
+      // Verify no manual Content-Type header is set (critical for FormData)
+      console.log("[ProfileUpload] STEP 5 — Request config", {
+        method: "POST",
+        bodyType: body.constructor.name,
+        hasManualContentType: false, // We intentionally do NOT set Content-Type
+        browserWillSetContentType: true, // Browser auto-sets multipart/form-data + boundary
+      });
+
+      // ==========================================
+      // PRE-FLIGHT: Test connectivity to Cloudinary
+      // ==========================================
+      try {
+        console.log("[ProfileUpload] STEP 5 — Preflight connectivity test", {
+          url: cloudinaryUrl,
+          test: "OPTIONS request to api.cloudinary.com",
+        });
+        const tPreStart = performance.now();
+        const preflight = await fetch(cloudinaryUrl, {
+          method: "OPTIONS",
+          mode: "cors",
+        });
+        const tPreEnd = performance.now();
+        const preflightHeaders: Record<string, string> = {};
+        preflight.headers.forEach((v, k) => {
+          preflightHeaders[k] = v;
+        });
+        console.log("[ProfileUpload] STEP 5 — Preflight result", {
+          status: preflight.status,
+          ok: preflight.ok,
+          ms: Math.round(tPreEnd - tPreStart),
+          headers: preflightHeaders,
+          corsAllowed: Boolean(preflightHeaders["access-control-allow-origin"]),
+          corsOrigin: preflightHeaders["access-control-allow-origin"] ?? "none",
+          corsMethods: preflightHeaders["access-control-allow-methods"] ?? "none",
+        });
+      } catch (preflightErr) {
+        console.error("[ProfileUpload] STEP 5 — Preflight FAILED (connectivity issue)", preflightErr);
+        inspectError(preflightErr, "PREFLIGHT");
+        // Do NOT abort — OPTIONS may behave differently from POST.
+        // Just log for diagnosis. The real POST follows.
+      }
+
+      // ==========================================
+      // ACTUAL UPLOAD: fetch to Cloudinary
+      // ==========================================
       stepLog(5, "Starting Cloudinary upload", {
-        endpoint: `https://api.cloudinary.com/v1_1/${sig.cloudName}/image/upload`,
+        cloudinaryUrl,
+        method: "POST",
+        hasManualContentType: false,
         fileSize: file.size,
         fileType: file.type,
         publicId: sig.publicId,
         folder: sig.folder,
         timestamp: sig.timestamp,
       });
-      const res = await fetch(`https://api.cloudinary.com/v1_1/${sig.cloudName}/image/upload`, {
-        method: "POST",
-        body,
-      });
+
+      const tFetchStart = performance.now();
+      let res: Response;
+      try {
+        res = await fetch(cloudinaryUrl, {
+          method: "POST",
+          body,
+          // IMPORTANT: Do NOT set Content-Type manually.
+          // The browser MUST set "multipart/form-data; boundary=..." automatically.
+          // IMPORTANT: Do NOT use mode: "no-cors" — it would hide the response.
+        });
+        const tFetchEnd = performance.now();
+        console.log("[ProfileUpload] STEP 5 — Fetch completed", {
+          status: res.status,
+          ok: res.ok,
+          statusText: res.statusText,
+          type: res.type,
+          url: res.url,
+          redirected: res.redirected,
+          ms: Math.round(tFetchEnd - tFetchStart),
+        });
+      } catch (fetchErr) {
+        const tFetchEnd = performance.now();
+        console.error("[ProfileUpload] STEP 5 — Fetch EXCEPTION (this is the 'Failed to fetch')", {
+          ms: Math.round(tFetchEnd - tFetchStart),
+          message: fetchErr instanceof Error ? fetchErr.message : String(fetchErr),
+          name: fetchErr instanceof Error ? fetchErr.name : typeof fetchErr,
+        });
+        inspectError(fetchErr, "STEP 5 FETCH EXCEPTION");
+
+        // Diagnose common "Failed to fetch" causes
+        if (fetchErr instanceof TypeError) {
+          console.error("[ProfileUpload] STEP 5 — TypeError diagnosis", {
+            message: fetchErr.message,
+            possibleCauses: [
+              "1. Browser offline (navigator.onLine=" + navigator.onLine + ")",
+              "2. DNS resolution failed for api.cloudinary.com",
+              "3. CORS policy blocked the request",
+              "4. Ad-blocker / browser extension blocked the request",
+              "5. Mixed content (HTTPS page → HTTP request)",
+              "6. Service Worker intercepted the request",
+              "7. Browser DevTools network throttling",
+              "8. VPN/proxy/firewall blocking api.cloudinary.com",
+            ],
+          });
+        }
+
+        // Build a detailed diagnostic message for the toast
+        const env = {
+          origin: window.location.origin,
+          online: navigator.onLine,
+          protocol: window.location.protocol,
+          target: urlInfo.hostname ?? "api.cloudinary.com",
+        };
+        const safeDetail = fetchErr instanceof Error
+          ? `${fetchErr.message} | origin: ${env.origin} | online: ${env.online} | target: ${env.target}`
+          : `Network error: ${String(fetchErr)} | origin: ${env.origin} | online: ${env.online}`;
+        console.error("[ProfileUpload] STEP 5 — Diagnostic summary", env);
+
+        fail(5, "profile.imageUploadFailed", safeDetail, fetchErr, preview);
+        return;
+      }
+
       failStage = 6;
       stepLog(6, "Cloudinary response received", { status: res.status, ok: res.ok });
       const responseText = await res.text();
