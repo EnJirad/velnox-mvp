@@ -5,9 +5,8 @@
 
 ## CURRENT SNAPSHOT
 - date: 2026-08-18
-- commit: `f1b53f91b42ff7ef3abff962828d6c7c67dbad38` (main)
+- commit: ดู commit ล่าสุดในประวัติของ branch main
 - branch: main
-- note: เมื่อ 2026-08-18 main ถูกกู้กลับมาที่ f1b53f9 (commit `667d0cd` ที่ทับโปรเจกต์ด้วย starter app ถูกเอาออกจาก branch แล้ว)
 
 ## ARCHITECTURE (LOCKED — ห้ามเปลี่ยน)
 - Bun-workspace monorepo: `apps/{shop,seller,center,corporate}` + `packages/shared` (@velnox/shared)
@@ -18,6 +17,7 @@
 
 ## COMPLETED (ตรวจสอบก่อนคิดว่า "ยังไม่มี")
 - VelShop storefront (apps/shop): product catalog/detail, cart, checkout, orders + order detail/tracking, wishlist, categories, VelRepeat, notifications, search
+- **Home page de-clutter (task 2026-08-18)**: เอา hero CTA ซ้ำ (Shop Now) ออก, หมวดหมู่เป็น pills กะทัดรัด, section header เรียบ (title-only), grid สินค้าหน้าแรกเหลือ **ชุดเดียว** (personal recommendations เมื่อ memory มีจริง, ไม่เช่นนั้นโชว์ popular grid) — ฟีเจอร์/การ track ครบเหมือนเดิม
 - Profile (ShopProfile.tsx + ShopAccount.tsx): avatar + cover upload ผ่าน **Cloudinary signed upload** (reuse backend/storage.ts; client+server validate type/size, preview, fallback, skeleton), edit profile (name/phone), logout อยู่ล่างสุด + confirmation dialog
 - Addresses: MapPicker (Leaflet, satellite, current location, marker, search, location confirmation) — **ห้าม save ถ้าไม่มี lat/lng + locationConfirmed=true** (backend ตรวจ)
 - Auth: Convex Auth (Google + guest), `packages/shared/src/hooks/use-auth.ts` (isLoading = auth loading || user query loading), `RequireAuth` guard, Auth page โชว์ loading เมื่อ `authLoading || isAuthenticated` (กัน login flash), redirect ตาม auth state (ไม่มี setTimeout)
@@ -29,14 +29,15 @@
 ## STILL PENDING
 - งาน polish/fix/verify ตาม task ที่ได้รับในแต่ละรอบ (ดู docs/GAP_ANALYSIS.md + docs/IMPLEMENTATION_AUDIT_2026-08-15.md สำหรับ gap/audit ล่าสุด)
 - Login flash: โค้ดปัจจุบันกันไว้แล้ว (Auth.tsx gate) — ยังไม่ได้ test จริงบนเบราว์เซอร์กับ deployed app ควร verify ก่อนสรุป
+- Home page ที่ลดรกแล้ว ยังไม่ได้ทดสอบ runtime บนเบราว์เซอร์ (ต้อง deploy/run `cd apps/shop && bun run dev`)
 
 ## KNOWN BUGS
-- ไม่พบ bug ที่ยืนยันได้ในโค้ด f1b53f9
+- ไม่พบ bug ที่ยืนยันได้ในโค้ดปัจจุบัน
 
 ## FILES CHANGED (ล่าสุด)
-- (restore) main → f1b53f9 (undo commit 667d0cd ที่ flatten repo เป็น starter app)
-- AI_HANDOFF.md — สร้างใหม่
+- apps/shop/src/pages/ShopHome.tsx — ลดความรกหน้าแรก VelShop (ดู COMPLETED)
+- AI_HANDOFF.md — อัปเดต
 
 ## VERIFICATION
-- Repo ตรวจแล้วที่ f1b53f9: apps/*, packages/shared, backend/, convex/, db/, docs/, .github/workflows กลับมาครบ
-- TypeScript/build/test: ยังไม่ได้ run ใน environment นี้ (repo ไม่ได้ checkout ไว้) — ก่อน ship: `bun install` → `bun run typecheck` → `bun test` → `cd apps/shop && bun run build`
+- ShopHome.tsx: transpile check ผ่าน (bun build --no-bundle)
+- TypeScript/build/test: ยังไม่ได้ run เต็มรูปแบบใน environment นี้ (repo ไม่ได้ checkout ไว้) — ก่อน ship: `bun install` → `bun run typecheck` → `bun test` → `cd apps/shop && bun run build`

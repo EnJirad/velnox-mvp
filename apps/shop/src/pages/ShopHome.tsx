@@ -19,8 +19,6 @@ import { useTracking } from "@velnox/shared/lib/track";
 import { useAction } from "convex/react";
 import {
   ArrowRight,
-  BellRing,
-  History,
   Package,
   PackageOpen,
   RefreshCw,
@@ -28,7 +26,6 @@ import {
   ShoppingBag,
   ShoppingBasket,
   Sparkles,
-  TrendingUp,
   UtensilsCrossed,
   type LucideIcon,
 } from "lucide-react";
@@ -85,7 +82,6 @@ export default function ShopHome() {
   const { track } = useTracking();
   const navigate = useNavigate();
   const { add } = useCart();
-
   const productsData = useCommerceData(
     useCallback(() => listProducts({ status: "published", limit: 100 }), [listProducts]),
   );
@@ -98,11 +94,9 @@ export default function ShopHome() {
   const remindersData = useCommerceData(
     useCallback(() => remindersAction(), [remindersAction]),
   );
-
   const [query, setQuery] = useState("");
   const [detailProduct, setDetailProduct] = useState<StoreProduct | null>(null);
   const [subProduct, setSubProduct] = useState<StoreProduct | null>(null);
-
   const products = useMemo(() => productsData.data ?? [], [productsData.data]);
   const recommendations = useMemo(
     () => (recommendData.data?.items ?? []) as RecommendedRow[],
@@ -110,7 +104,6 @@ export default function ShopHome() {
   );
   const regulars = useMemo(() => regularsData.data ?? [], [regularsData.data]);
   const reminders = useMemo(() => remindersData.data ?? [], [remindersData.data]);
-
   /** Real categories (only ones that actually have published products). */
   const popularCategories = useMemo(() => {
     const counts = new Map<StoreProductCategory, number>();
@@ -121,7 +114,6 @@ export default function ShopHome() {
       .sort((a, b) => b[1] - a[1])
       .slice(0, 6);
   }, [products]);
-
   /** Popular products = real sold counts from the commerce core. */
   const popularProducts = useMemo(
     () =>
@@ -130,7 +122,13 @@ export default function ShopHome() {
         .slice(0, 8),
     [products],
   );
-
+  /**
+   * Only genuinely personalized recommendations get their own block.
+   * When the backend falls back to "popular" (e.g. signed-out shoppers or a
+   * customer without history yet), that content would duplicate the popular
+   * grid below — so we show exactly one products grid on the home page.
+   */
+  const showPersonalRecs = recommendations.length > 0 && recommendData.data?.source === "personal";
   // CPNS: a settled search is an interest signal.
   const lastSearchTracked = useRef("");
   useEffect(() => {
@@ -140,7 +138,6 @@ export default function ShopHome() {
       track("SEARCH", { value: term.slice(0, 60) });
     }
   }, [query, track]);
-
   const handleCategory = (id: StoreProductCategory) => {
     track("CATEGORY_VIEW", {
       entityId: id,
@@ -148,7 +145,6 @@ export default function ShopHome() {
       context: { label: PRODUCT_CATEGORY_META[id].label },
     });
   };
-
   const handleAdd = (product: StoreProduct, qty = 1) => {
     add(
       {
@@ -162,7 +158,6 @@ export default function ShopHome() {
     );
     toast.success(t("cart.added", { name: product.name }));
   };
-
   const openProduct = (product: StoreProduct, source: string) => {
     setDetailProduct(product);
     track("PRODUCT_CLICK", {
@@ -171,30 +166,28 @@ export default function ShopHome() {
       context: { category: product.category, source },
     });
   };
-
   useEffect(() => {
     setSeo({
       title: t("home.seoTitle", { shop: "VelShop" }),
       description: t("home.seoDesc", { tagline: "Commerce that remembers you · จำแทนคุณ" }),
     });
   }, [t]);
-
   const firstName = user?.name?.split(" ")[0] ?? user?.email?.split("@")[0] ?? "";
   // Show reorder reminders when due; otherwise fall back to regulars — one
   // personalization block at a time keeps the storefront clean.
   const showReorder = reminders.length > 0;
   const showRegulars = !showReorder && regulars.length > 0;
-
   return (
     <div className="flex min-h-screen flex-col bg-[#F8FAFC] text-slate-900">
       <ShopHeader />
-
       {/* Compact hero — search is the primary discovery action */}
       <section className="border-b border-slate-100 bg-white">
         <div className="mx-auto w-full max-w-6xl px-4 py-8 sm:px-6 sm:py-10">
           <div className="mx-auto max-w-2xl text-center">
             <p className="text-xs font-semibold uppercase tracking-wider text-[#10B981]">
-              {isAuthenticated && firstName ? t("home.heroWelcomeShort", { name: firstName }) : t("home.eyebrow")}
+              {isAuthenticated && firstName
+                ? t("home.heroWelcomeShort", { name: firstName })
+                : t("home.eyebrow")}
             </p>
             <h1 className="mt-2 text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl">
               {t("home.heroTitle")}
@@ -202,7 +195,6 @@ export default function ShopHome() {
             <p className="mx-auto mt-2 max-w-xl text-sm leading-6 text-slate-500">
               {t("home.heroDesc")}
             </p>
-
             <form
               className="mx-auto mt-5 flex max-w-xl items-center gap-2 rounded-full border border-slate-200 bg-white p-1.5 shadow-[0_8px_24px_rgba(15,23,42,0.06)] transition-shadow focus-within:border-[#10B981]/50 focus-within:shadow-[0_8px_24px_rgba(16,185,129,0.12)]"
               onSubmit={(e) => {
@@ -226,30 +218,17 @@ export default function ShopHome() {
                 <ArrowRight className="size-4" />
               </Button>
             </form>
-
-            <div className="mt-5">
-              <Button className="h-10 gap-1.5 rounded-full bg-[#10B981] px-6 text-white hover:bg-emerald-700" asChild>
-                <Link to="/products">
-                  <ShoppingBag className="size-4" />
-                  {t("home.shopNow")}
-                </Link>
-              </Button>
-            </div>
           </div>
         </div>
       </section>
-
-      {/* Popular categories — only categories that actually have products */}
+      {/* Popular categories — compact pills, only categories that actually have products */}
       {!productsData.loading && popularCategories.length > 0 && (
         <section className="border-b border-slate-100 bg-white">
-          <div className="mx-auto w-full max-w-6xl px-4 py-6 sm:px-6">
-            <div className="flex items-end justify-between gap-3">
-              <div>
-                <h2 className="text-base font-bold tracking-tight text-slate-900">
-                  {t("home.categoriesTitle")}
-                </h2>
-                <p className="mt-0.5 text-xs text-slate-400">{t("home.categoriesDesc")}</p>
-              </div>
+          <div className="mx-auto w-full max-w-6xl px-4 py-5 sm:px-6">
+            <div className="flex items-center justify-between gap-3">
+              <h2 className="text-sm font-bold tracking-tight text-slate-900">
+                {t("home.categoriesTitle")}
+              </h2>
               <Link
                 to="/categories"
                 onClick={() => track("CATEGORY_VIEW", { value: "all", context: { label: "explore" } })}
@@ -259,9 +238,8 @@ export default function ShopHome() {
                 <ArrowRight className="size-3.5" />
               </Link>
             </div>
-
-            <div className="mt-4 flex gap-3 overflow-x-auto pb-2 sm:grid sm:grid-cols-3 sm:overflow-visible lg:grid-cols-6">
-              {popularCategories.map(([id, count]) => {
+            <div className="mt-3 flex flex-wrap gap-2">
+              {popularCategories.map(([id]) => {
                 const Icon = CATEGORY_ICONS[id] ?? Package;
                 const meta = PRODUCT_CATEGORY_META[id];
                 return (
@@ -269,19 +247,10 @@ export default function ShopHome() {
                     key={id}
                     to={`/products?category=${id}`}
                     onClick={() => handleCategory(id)}
-                    className="group flex min-w-[110px] flex-col items-center gap-2 rounded-xl border border-slate-200 bg-white p-3.5 text-center transition-colors hover:border-[#10B981]/40 sm:min-w-0"
+                    className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-sm font-medium text-slate-600 transition-colors hover:border-[#10B981]/40 hover:text-slate-900"
                   >
-                    <span className="flex size-11 items-center justify-center rounded-[12px] bg-[#ECFDF5] text-[#10B981] transition-colors group-hover:bg-[#10B981] group-hover:text-white">
-                      <Icon className="size-5" />
-                    </span>
-                    <span className="min-w-0">
-                      <span className="block truncate text-sm font-semibold text-slate-900">
-                        {meta.label}
-                      </span>
-                      <span className="mt-0.5 block text-[11px] text-slate-400">
-                        {t("home.categoryCount", { count })}
-                      </span>
-                    </span>
+                    <Icon className="size-3.5 text-[#10B981]" />
+                    {meta.label}
                   </Link>
                 );
               })}
@@ -289,30 +258,20 @@ export default function ShopHome() {
           </div>
         </section>
       )}
-
       {/* Smart reorder — “ถึงเวลาสั่งซื้อซ้ำแล้ว” (real purchase-cycle memory) */}
       {!authLoading && isAuthenticated && !remindersData.loading && showReorder && (
         <section className="border-b border-slate-100 bg-white">
-          <div className="mx-auto w-full max-w-6xl px-4 py-6 sm:px-6">
-            <div className="flex items-center gap-2.5">
-              <span className="flex size-8 items-center justify-center rounded-[10px] bg-[#ECFDF5]">
-                <BellRing className="size-4 text-[#10B981]" />
-              </span>
-              <div>
-                <h2 className="text-base font-bold tracking-tight text-slate-900">
-                  {t("home.reorderDueTitle")}
-                </h2>
-                <p className="text-xs text-slate-400">{t("home.reorderDueDesc")}</p>
-              </div>
-            </div>
-
-            <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          <div className="mx-auto w-full max-w-6xl px-4 py-5 sm:px-6">
+            <h2 className="text-sm font-bold tracking-tight text-slate-900">
+              {t("home.reorderDueTitle")}
+            </h2>
+            <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
               {reminders.map((r) => (
                 <div
                   key={r.product.id}
-                  className="flex items-center gap-3 rounded-xl border border-slate-200 bg-white p-4 transition-colors hover:border-[#10B981]/40"
+                  className="flex items-center gap-3 rounded-xl border border-slate-200 bg-white p-3 transition-colors hover:border-[#10B981]/40"
                 >
-                  <span className="flex size-11 shrink-0 items-center justify-center rounded-[12px] bg-[#ECFDF5] text-xl">
+                  <span className="flex size-10 shrink-0 items-center justify-center rounded-[12px] bg-[#ECFDF5] text-xl">
                     {r.emoji}
                   </span>
                   <div className="min-w-0 flex-1">
@@ -341,24 +300,14 @@ export default function ShopHome() {
           </div>
         </section>
       )}
-
       {/* Continue shopping — this customer's regular items (real order history) */}
       {!authLoading && isAuthenticated && !regularsData.loading && showRegulars && (
         <section className="border-b border-slate-100 bg-white">
-          <div className="mx-auto w-full max-w-6xl px-4 py-6 sm:px-6">
-            <div className="flex items-center gap-2.5">
-              <span className="flex size-8 items-center justify-center rounded-[10px] bg-[#ECFDF5]">
-                <History className="size-4 text-[#10B981]" />
-              </span>
-              <div>
-                <h2 className="text-base font-bold tracking-tight text-slate-900">
-                  {t("home.continueShoppingTitle")}
-                </h2>
-                <p className="text-xs text-slate-400">{t("home.continueShoppingDesc")}</p>
-              </div>
-            </div>
-
-            <div className="mt-4 grid grid-cols-2 gap-3 lg:grid-cols-4">
+          <div className="mx-auto w-full max-w-6xl px-4 py-5 sm:px-6">
+            <h2 className="text-sm font-bold tracking-tight text-slate-900">
+              {t("home.continueShoppingTitle")}
+            </h2>
+            <div className="mt-3 grid grid-cols-2 gap-3 lg:grid-cols-4">
               {regulars.slice(0, 4).map(({ product }) => (
                 <ProductCard
                   key={product.id}
@@ -371,30 +320,14 @@ export default function ShopHome() {
           </div>
         </section>
       )}
-
-      {/* Recommended for you (real personalization or popular fallback) */}
-      {!authLoading && recommendations.length > 0 && (
+      {/* Recommended for you — only when truly personalized (real memory) */}
+      {!authLoading && showPersonalRecs && (
         <section className="border-b border-slate-100 bg-white">
-          <div className="mx-auto w-full max-w-6xl px-4 py-6 sm:px-6">
-            <div className="flex items-center gap-2.5">
-              <span className="flex size-8 items-center justify-center rounded-[10px] bg-[#ECFDF5]">
-                <Sparkles className="size-4 text-[#10B981]" />
-              </span>
-              <div>
-                <h2 className="text-base font-bold tracking-tight text-slate-900">
-                  {recommendData.data?.source === "personal"
-                    ? t("home.recsPersonal")
-                    : t("home.recsPopular")}
-                </h2>
-                <p className="text-xs text-slate-400">
-                  {recommendData.data?.source === "personal"
-                    ? t("home.recsPersonalDesc")
-                    : t("home.recsPopularDesc")}
-                </p>
-              </div>
-            </div>
-
-            <div className="mt-4 grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-4">
+          <div className="mx-auto w-full max-w-6xl px-4 py-5 sm:px-6">
+            <h2 className="text-sm font-bold tracking-tight text-slate-900">
+              {t("home.recsPersonal")}
+            </h2>
+            <div className="mt-3 grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-4">
               {recommendations.slice(0, 8).map(({ product }) => (
                 <ProductCard
                   key={product.id}
@@ -408,23 +341,14 @@ export default function ShopHome() {
           </div>
         </section>
       )}
-
       {/* Popular products — the main shopping grid (real sold counts) */}
-      {!productsData.loading && popularProducts.length > 0 && (
+      {!authLoading && !showPersonalRecs && !productsData.loading && popularProducts.length > 0 && (
         <section className="border-b border-slate-100 bg-white">
-          <div className="mx-auto w-full max-w-6xl px-4 py-6 sm:px-6">
+          <div className="mx-auto w-full max-w-6xl px-4 py-5 sm:px-6">
             <div className="flex items-center justify-between gap-3">
-              <div className="flex items-center gap-2.5">
-                <span className="flex size-8 items-center justify-center rounded-[10px] bg-[#ECFDF5]">
-                  <TrendingUp className="size-4 text-[#10B981]" />
-                </span>
-                <div>
-                  <h2 className="text-base font-bold tracking-tight text-slate-900">
-                    {t("home.trendingTitle")}
-                  </h2>
-                  <p className="text-xs text-slate-400">{t("home.trendingDesc")}</p>
-                </div>
-              </div>
+              <h2 className="text-sm font-bold tracking-tight text-slate-900">
+                {t("home.trendingTitle")}
+              </h2>
               <Link
                 to="/products"
                 className="hidden shrink-0 items-center gap-1 text-sm font-medium text-[#10B981] hover:text-emerald-700 sm:inline-flex"
@@ -433,8 +357,7 @@ export default function ShopHome() {
                 <ArrowRight className="size-3.5" />
               </Link>
             </div>
-
-            <div className="mt-4 grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-4">
+            <div className="mt-3 grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-4">
               {popularProducts.map((product) => (
                 <ProductCard
                   key={product.id}
@@ -447,21 +370,20 @@ export default function ShopHome() {
           </div>
         </section>
       )}
-
       {/* VelRepeat — slim strip (first-class feature, low clutter) */}
       <section className="border-b border-slate-100 bg-white">
-        <div className="mx-auto flex w-full max-w-6xl flex-col items-start justify-between gap-4 px-4 py-6 sm:flex-row sm:items-center sm:px-6">
-          <div className="flex items-start gap-3 sm:items-center">
-            <span className="flex size-10 shrink-0 items-center justify-center rounded-[12px] bg-[#ECFDF5] text-[#10B981]">
-              <RefreshCw className="size-5" />
+        <div className="mx-auto flex w-full max-w-6xl flex-col items-start justify-between gap-3 px-4 py-5 sm:flex-row sm:items-center sm:px-6">
+          <div className="flex items-center gap-3">
+            <span className="flex size-9 shrink-0 items-center justify-center rounded-[10px] bg-[#ECFDF5] text-[#10B981]">
+              <RefreshCw className="size-4" />
             </span>
             <div>
               <p className="text-sm font-bold text-slate-900">{t("home.velrepeatTitle")}</p>
-              <p className="mt-0.5 max-w-xl text-xs leading-5 text-slate-500">{t("home.velrepeatDesc")}</p>
+              <p className="mt-0.5 text-xs leading-5 text-slate-500">{t("home.velrepeatDesc")}</p>
             </div>
           </div>
           <Button
-            className="h-10 shrink-0 gap-1.5 rounded-full bg-[#10B981] px-5 text-white hover:bg-emerald-700"
+            className="h-9 shrink-0 gap-1.5 rounded-full bg-[#10B981] px-4 text-white hover:bg-emerald-700"
             asChild
           >
             <Link to={isAuthenticated ? "/velrepeat" : "/auth?returnTo=/velrepeat"}>
@@ -470,7 +392,6 @@ export default function ShopHome() {
           </Button>
         </div>
       </section>
-
       {/* Loading / empty fallback for the catalog */}
       <main className="mx-auto w-full max-w-6xl flex-1 px-4 py-8 sm:px-6">
         {productsData.loading ? (
@@ -489,9 +410,7 @@ export default function ShopHome() {
           </div>
         ) : null}
       </main>
-
       <ShopFooter />
-
       <ProductDetailModal
         product={detailProduct}
         open={detailProduct !== null}
