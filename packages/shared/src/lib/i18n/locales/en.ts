@@ -714,6 +714,7 @@ export const en: Dict = {
     imageUploadFailed: "Upload failed — please try again",
     imageSignatureError: "Couldn't prepare the upload — please try again",
     imageSaveFailed: "Couldn't save the photo — please try again",
+    errorIdLabel: "Error code",
     avatarAlt: "Profile photo of {name}",
     coverAlt: "Cover photo of {name}",
     session: "Session",

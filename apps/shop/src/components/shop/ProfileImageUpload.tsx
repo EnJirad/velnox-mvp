@@ -4,8 +4,10 @@ import { useAction } from "convex/react";
 import { Loader2 } from "lucide-react";
 import { useRef, useState, type ReactNode } from "react";
 import { toast } from "sonner";
+
 const ACCEPTED_TYPES = ["image/jpeg", "image/png", "image/webp"];
 const MAX_BYTES = 10 * 1024 * 1024; // 10 MB — matches the backend re-validation limit (backend/storage.ts MAX_IMAGE_BYTES)
+
 /** Server-issued signed upload permit (see backend/storage.ts UploadSignature). */
 interface UploadSignature {
   cloudName: string;
@@ -16,6 +18,7 @@ interface UploadSignature {
   signature: string;
   allowedFormats: string;
 }
+
 interface ProfileImageUploadProps {
   /** Which profile image this uploader replaces. */
   kind: "avatar" | "cover";
@@ -26,24 +29,61 @@ interface ProfileImageUploadProps {
   /** The upload button content (icon + label). */
   children: ReactNode;
 }
+
+/** Step log — every stage of the upload pipeline is logged so a failure can
+ *  be traced to the exact step in the browser console and correlated with the
+ *  error ID shown in the UI. Only safe metadata is ever logged (never the
+ *  signature value, never the API secret). */
+function stepLog(step: number, label: string, extra?: Record<string, unknown>): void {
+  console.log(`[ProfileUpload] STEP ${step} - ${label}`, extra ?? "");
+}
+
+/**
+ * Full, safe inspection of whatever was thrown. Convex/transport errors are
+ * not always `Error` instances, so log type/name/message/cause/stack plus the
+ * enumerable keys and a JSON snapshot — without assuming the shape and without
+ * logging secrets.
+ */
+function inspectError(err: unknown, context: string): void {
+  const e = (err ?? {}) as { name?: unknown; message?: unknown; cause?: unknown; stack?: unknown };
+  console.error(`[ProfileUpload] ERROR TYPE (${context}):`, typeof err);
+  console.error(`[ProfileUpload] ERROR NAME (${context}):`, e?.name ?? null);
+  console.error(`[ProfileUpload] ERROR MESSAGE (${context}):`, e?.message ?? null);
+  console.error(`[ProfileUpload] ERROR CAUSE (${context}):`, e?.cause ?? null);
+  console.error(`[ProfileUpload] ERROR STACK (${context}):`, e?.stack ?? null);
+  try {
+    console.error(`[ProfileUpload] ERROR KEYS (${context}):`, Object.keys(err as object));
+    console.error(
+      `[ProfileUpload] ERROR JSON (${context}):`,
+      JSON.stringify(err, Object.getOwnPropertyNames(err as object)),
+    );
+  } catch {
+    console.error(`[ProfileUpload] ERROR RAW (${context}):`, err);
+  }
+}
+
+/** Unique id per failure — shown in the toast and logged, so a browser
+ *  session can be correlated with server/Convex logs (e.g. PROFILE_UPLOAD_20260818_A1B2). */
+function makeErrorId(): string {
+  const d = new Date();
+  const ymd = `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, "0")}${String(d.getDate()).padStart(2, "0")}`;
+  const rand = Math.random().toString(36).slice(2, 6).toUpperCase();
+  return `PROFILE_UPLOAD_${ymd}_${rand}`;
+}
+
 /**
  * VelShop profile image uploader (avatar + cover).
  *
  * Flow: pick a file → client-side validation (MIME type + size, max 10 MB) →
  * instant preview → ask the backend for a Cloudinary signed upload permit →
  * POST the file straight to Cloudinary (no binary through our server) → tell
- * the backend to persist the canonical URL and delete the replaced image.
- * Reuses the exact same storage provider as product images — no new system.
+ * the backend to persist the canonical URL (old-image cleanup runs server-side
+ * inside saveProfileImage, after the DB row uses the new image).
  *
- * Failure handling is stage-specific so the real cause never hides behind a
- * generic toast:
- *   A. signature stage  — backend returned an incomplete/absent permit
- *   B. Cloudinary stage — HTTP status + JSON error body are logged
- *   C. database stage   — Cloudinary succeeded but the profile row failed
- *   D. auth failure     — surfaces as a Convex error on stage A
- *   E. file validation  — rejected client-side before any request
- * No credentials are ever logged; only safe metadata (never the signature
- * value or the API secret).
+ * Failure handling: every failure logs `FAILED AT STEP X` with a unique error
+ * ID and full error inspection, and the toast ALWAYS shows the base message
+ * plus any safe detail (the real Cloudinary/server error) plus the error ID —
+ * the generic message is never the only thing the user sees during debugging.
  */
 export function ProfileImageUpload({ kind, onPreview, onUploaded, children }: ProfileImageUploadProps) {
   const { t } = useLanguage();
@@ -51,30 +91,57 @@ export function ProfileImageUpload({ kind, onPreview, onUploaded, children }: Pr
   const saveImage = useAction(api.customer.saveProfileImage);
   const inputRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
+
   const resetInput = () => {
     if (inputRef.current) inputRef.current.value = "";
   };
+
+  /** Terminal failure: log FAILED AT STEP + error id + full error inspection,
+   *  then toast the base message + safe detail + error id. */
+  const fail = (step: number, baseKey: string, detail: string | null, err?: unknown, preview?: string) => {
+    const errorId = makeErrorId();
+    console.error(`[ProfileUpload] FAILED AT STEP ${step}`, { errorId, detail });
+    if (err !== undefined) inspectError(err, `FAILED AT STEP ${step}`);
+    toast.error(
+      <div className="flex flex-col gap-1 text-left">
+        <span>{t(baseKey)}</span>
+        {detail ? <span className="text-xs opacity-80">{detail}</span> : null}
+        <span className="text-xs opacity-60">
+          {t("profile.errorIdLabel")}: {errorId}
+        </span>
+      </div>,
+    );
+    if (preview !== undefined) {
+      onPreview(null);
+      URL.revokeObjectURL(preview);
+    }
+  };
+
   const handleFile = async (file: File) => {
+    stepLog(1, "Started", { kind, fileName: file.name, fileSize: file.size, fileType: file.type });
     // Stage E — client-side validation first (type + size). Never send a bad
     // file: checked here, re-checked by the server, and (formats) by Cloudinary.
     if (!ACCEPTED_TYPES.includes(file.type)) {
+      console.error("[ProfileUpload] FAILED AT STEP 2 (type rejected)", { fileType: file.type });
       toast.error(t("profile.imageTypeError"));
       resetInput();
       return;
     }
     if (file.size > MAX_BYTES) {
+      console.error("[ProfileUpload] FAILED AT STEP 2 (size rejected)", { fileSize: file.size, maxBytes: MAX_BYTES });
       toast.error(t("profile.imageSizeError"));
       resetInput();
       return;
     }
+    stepLog(2, "File validated", { fileSize: file.size, fileType: file.type });
     const preview = URL.createObjectURL(file);
     onPreview(preview);
     setUploading(true);
+    let failStage = 0;
     try {
       // Stage A — the backend issues a Cloudinary signed upload permit.
-      // The Convex action succeeding server-side is NOT enough: verify every
-      // field the request needs actually came back, otherwise the upload
-      // would silently POST "undefined" values to Cloudinary.
+      failStage = 3;
+      stepLog(3, "Requesting signature", { kind });
       const sig = (await getSignature({ kind })) as unknown as UploadSignature | null | undefined;
       if (
         !sig ||
@@ -86,21 +153,16 @@ export function ProfileImageUpload({ kind, onPreview, onUploaded, children }: Pr
         !sig.signature ||
         !sig.allowedFormats
       ) {
-        console.error("[ProfileUpload] Incomplete signature from backend", {
-          cloudName: Boolean(sig?.cloudName),
-          apiKey: Boolean(sig?.apiKey),
-          timestamp: typeof sig?.timestamp,
-          folder: Boolean(sig?.folder),
-          publicId: Boolean(sig?.publicId),
-          signaturePresent: Boolean(sig?.signature),
-          allowedFormats: Boolean(sig?.allowedFormats),
-        });
-        toast.error(t("profile.imageSignatureError"));
-        onPreview(null);
-        URL.revokeObjectURL(preview);
+        fail(
+          4,
+          "profile.imageSignatureError",
+          "Backend returned an incomplete upload permit",
+          undefined,
+          preview,
+        );
         return;
       }
-      console.log("[ProfileUpload] Signature received", {
+      stepLog(4, "Signature received", {
         cloudName: sig.cloudName,
         apiKey: sig.apiKey,
         timestamp: sig.timestamp,
@@ -119,9 +181,9 @@ export function ProfileImageUpload({ kind, onPreview, onUploaded, children }: Pr
       body.append("allowed_formats", sig.allowedFormats);
       // Stage B — POST straight to Cloudinary. Log the request metadata
       // (never the signature), then ALWAYS read the response body so a 4xx
-      // shows the real Cloudinary message (Invalid Signature, unknown
-      // parameter, file too large, bad api key…) instead of a generic toast.
-      console.log("[ProfileUpload] Starting Cloudinary upload", {
+      // shows the real Cloudinary message instead of a generic toast.
+      failStage = 5;
+      stepLog(5, "Starting Cloudinary upload", {
         endpoint: `https://api.cloudinary.com/v1_1/${sig.cloudName}/image/upload`,
         fileSize: file.size,
         fileType: file.type,
@@ -133,6 +195,8 @@ export function ProfileImageUpload({ kind, onPreview, onUploaded, children }: Pr
         method: "POST",
         body,
       });
+      failStage = 6;
+      stepLog(6, "Cloudinary response received", { status: res.status, ok: res.ok });
       const responseText = await res.text();
       let parsed: unknown = null;
       try {
@@ -149,17 +213,13 @@ export function ProfileImageUpload({ kind, onPreview, onUploaded, children }: Pr
           errorMessage: cloudMsg,
           body: responseText,
         });
-        // Surface Cloudinary's own (safe) error message in the toast — e.g.
-        // "Invalid Signature", "File too large", "Unknown parameter" — so the
-        // real cause is visible without opening DevTools. Cloudinary error
-        // messages never contain account secrets.
-        toast.error(
-          cloudMsg
-            ? `${t("profile.imageUploadFailed")} (${res.status}: ${cloudMsg})`
-            : `${t("profile.imageUploadFailed")} (HTTP ${res.status})`,
+        fail(
+          6,
+          "profile.imageUploadFailed",
+          cloudMsg ? `Cloudinary ${res.status}: ${cloudMsg}` : `Cloudinary HTTP ${res.status}`,
+          undefined,
+          preview,
         );
-        onPreview(null);
-        URL.revokeObjectURL(preview);
         return;
       }
       const uploaded = (parsed ?? {}) as {
@@ -169,21 +229,19 @@ export function ProfileImageUpload({ kind, onPreview, onUploaded, children }: Pr
         width?: number;
         height?: number;
       };
+      stepLog(7, "Cloudinary parsed", {
+        publicId: uploaded?.public_id ?? null,
+        format: uploaded?.format ?? null,
+        bytes: uploaded?.bytes ?? null,
+      });
       if (!uploaded.public_id) {
         console.error("[ProfileUpload] Cloudinary 200 response without public_id", {
           status: res.status,
           body: responseText,
         });
-        toast.error(t("profile.imageUploadFailed"));
-        onPreview(null);
-        URL.revokeObjectURL(preview);
+        fail(7, "profile.imageUploadFailed", "Cloudinary 200 response missing public_id", undefined, preview);
         return;
       }
-      console.log("[ProfileUpload] Cloudinary upload successful", {
-        publicId: uploaded.public_id,
-        format: uploaded.format,
-        bytes: uploaded.bytes,
-      });
       const imageArgs: {
         kind: string;
         publicId: string;
@@ -196,50 +254,51 @@ export function ProfileImageUpload({ kind, onPreview, onUploaded, children }: Pr
       if (uploaded.bytes != null) imageArgs.bytes = uploaded.bytes;
       if (uploaded.width != null) imageArgs.width = uploaded.width;
       if (uploaded.height != null) imageArgs.height = uploaded.height;
-      // Stage C — persist the canonical URL on the profile row. A failure
-      // here is a DIFFERENT error from a Cloudinary failure: the file is
-      // already uploaded, only the DB row failed.
-      try {
-        console.log("[ProfileUpload] Saving profile image", {
-          kind,
-          publicId: uploaded.public_id,
-          format: uploaded.format,
-          bytes: uploaded.bytes,
-        });
-        const profile = (await saveImage(imageArgs)) as unknown as {
-          avatarUrl: string | null;
-          coverUrl: string | null;
-        };
-        console.log("[ProfileUpload] Profile image saved successfully");
-        onUploaded(kind === "cover" ? profile.coverUrl ?? "" : profile.avatarUrl ?? "");
-        // Let React swap the preview <img> to the canonical URL first,
-        // then release the blob (no leaked object URLs).
-        requestAnimationFrame(() => URL.revokeObjectURL(preview));
-      } catch (err) {
-        console.error("Profile image save error (backend stage):", err);
-        // The backend throws a user-friendly AppError message for this
-        // stage (e.g. “อัปโหลดรูปสำเร็จ แต่ไม่สามารถบันทึกโปรไฟล์ได้…”) —
-        // surface it instead of a generic fallback.
-        toast.error(err instanceof Error && err.message ? err.message : t("profile.imageSaveFailed"));
-        onPreview(null);
-        URL.revokeObjectURL(preview);
-      }
+      // Stage C — persist the canonical URL on the profile row. A failure here
+      // is a DIFFERENT error from a Cloudinary failure: the file is already
+      // uploaded, only the DB row failed.
+      failStage = 8;
+      stepLog(8, "Saving profile", {
+        kind,
+        publicId: uploaded.public_id,
+        format: uploaded.format,
+        bytes: uploaded.bytes,
+      });
+      const profile = (await saveImage(imageArgs)) as unknown as {
+        avatarUrl: string | null;
+        coverUrl: string | null;
+      };
+      failStage = 9;
+      stepLog(9, "Profile saved", {
+        kind,
+        avatarUrl: profile?.avatarUrl ?? null,
+        coverUrl: profile?.coverUrl ?? null,
+      });
+      onUploaded(kind === "cover" ? profile.coverUrl ?? "" : profile.avatarUrl ?? "");
+      // Old-image cleanup runs server-side inside saveProfileImage, after the
+      // DB row uses the new image (§31/§38 order: upload → save → delete old).
+      stepLog(10, "Cleanup old image (server-side, inside saveProfileImage)");
+      console.log("[ProfileUpload] SUCCESS");
+      // Let React swap the preview <img> to the canonical URL first, then
+      // release the blob (no leaked object URLs).
+      requestAnimationFrame(() => URL.revokeObjectURL(preview));
     } catch (err) {
-      // Stage A/B network error (fetch never completed, CORS, Convex call
-      // rejected, …) — distinct from a Cloudinary HTTP error above.
-      console.error("Profile image upload error (signature/network stage):", err);
-      const msg = err instanceof Error && err.message ? err.message : "";
-      // Backend errors (AppError) carry a user-friendly Thai message — show
-      // it. Pure browser network failures (e.g. CORS surfaces as "Failed to
-      // fetch") mean nothing to the user, so keep the generic toast there.
-      toast.error(msg && msg !== "Failed to fetch" ? msg : t("profile.imageUploadFailed"));
-      onPreview(null);
-      URL.revokeObjectURL(preview);
+      // Stage A/B/C — any unexpected throw (Convex transport error, network
+      // failure, CORS "Failed to fetch", response parsing, …). Show the actual
+      // safe error — never a generic-only message.
+      fail(
+        failStage || 3,
+        "profile.imageUploadFailed",
+        err instanceof Error && err.message ? err.message : `Unexpected error: ${typeof err}`,
+        err,
+        preview,
+      );
     } finally {
       setUploading(false);
       resetInput();
     }
   };
+
   return (
     <>
       <input

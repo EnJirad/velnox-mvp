@@ -716,6 +716,7 @@ export const th = {
     imageUploadFailed: "อัปโหลดรูปไม่สำเร็จ กรุณาลองอีกครั้ง",
     imageSignatureError: "ไม่สามารถเตรียมการอัปโหลดรูปได้ กรุณาลองอีกครั้ง",
     imageSaveFailed: "บันทึกรูปไม่สำเร็จ กรุณาลองอีกครั้ง",
+    errorIdLabel: "รหัสข้อผิดพลาด",
     avatarAlt: "รูปโปรไฟล์ของ {name}",
     coverAlt: "รูปปกของ {name}",
     session: "เซสชัน",
