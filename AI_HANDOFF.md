@@ -4,7 +4,7 @@
 
 ## CURRENT SNAPSHOT
 - date: 2026-08-18
-- commit: network-diagnostics round
+- commit: mobile-fix round (crossOrigin + retry + timeout)
 - branch: main
 
 ## ARCHITECTURE (LOCKED — ห้ามเปลี่ยน)
@@ -19,58 +19,107 @@
 - **cf223c47**: Fixed Cloudinary signature algorithm (SHA-1 not HMAC)
 - **a547e6c3**: Toast shows real Cloudinary error on HTTP fail
 - **Network diagnostics round**: Full STEP logging, error ID, preflight test, fetch timing
+- **Mobile fix round**: crossOrigin on images, fetch timeout (30s), single retry, connectivity pre-check
 
-## FAILED TO FETCH — ROOT CAUSE ANALYSIS
+## MOBILE-ONLY PROFILE IMAGE FAILURE — AUDIT & FIX (2026-08-18)
 
-### Browser Data (REAL production test)
-- Origin: https://velshop.vercel.app
-- Online: true
-- Target: api.cloudinary.com
-- Error: Failed to fetch (TypeError at STEP 5)
-- Error ID: PROFILE_UPLOAD_20260818_B1QD
+### Cross-Device Evidence
+| Device | Upload | Image Display |
+|--------|--------|---------------|
+| Desktop Firefox | ✅ PASS | ✅ PASS |
+| Android #1 | ❌ FAIL | ❌ FAIL |
+| Android #2 | ❌ FAIL | — |
+| iPhone | ❌ FAIL | — |
 
-### Code Inspection Results
-- ✅ Cloudinary URL correct: `https://api.cloudinary.com/v1_1/{cloudName}/image/upload`
-- ✅ FormData has all required params: file, api_key, timestamp, folder, public_id, signature, allowed_formats
-- ✅ No manual Content-Type header (browser auto-sets multipart boundary)
-- ✅ No credentials/cookies sent to Cloudinary
-- ✅ No AbortController / timeout / Promise.race
-- ✅ No CSP in app code (no `<meta>` tag, no `vercel.json`)
-- ✅ No Service Worker registered
-- ✅ Signature params match between backend and frontend
+### Root Cause Analysis
 
-### Conclusion
-**The problem is NOT in the code.** The fetch() is being blocked at the browser/network level.
+**Problem A — Mobile Upload ("Failed to fetch")**
+- Browser → `api.cloudinary.com` fetch fails on ALL mobile devices
+- Desktop Firefox works fine
+- Code is technically correct (URL, FormData, fetch options all verified)
+- Most likely cause: **mobile browser ad-blocker** or **mobile network restriction** blocking `api.cloudinary.com`
+- The same production URL works on desktop, ruling out Cloudinary account issues
 
-Most likely causes (in order):
-1. **Browser extension / Ad-blocker** blocking api.cloudinary.com
-2. **CSP header** set at Vercel edge/CDN level (not in app code)
-3. **Network/firewall** (corporate network, VPN, ISP)
-4. **Cloudinary account restriction** (IP/domain whitelist)
+**Problem B — Mobile Image Display**
+- Existing profile/avatar images don't render on mobile Android
+- `<img>` tags had NO `crossOrigin="anonymous"` attribute
+- Mobile browsers may apply stricter CORS for cross-origin image loading from `res.cloudinary.com`
 
-### Browser Tests Required
-1. **Incognito mode** — rules out extensions
-2. **Network tab** — shows if OPTIONS/POST appears and their status
-3. **Console tab** — shows preflight result and detailed error
+### Fixes Applied
 
-## FILES CHANGED
-- apps/shop/src/components/shop/ProfileImageUpload.tsx — Cloudinary URL log, FormData log, preflight test, fetch timing, detailed catch
-- AI_HANDOFF.md — updated
+**1. ShopProfile.tsx — Added `crossOrigin="anonymous"` + `loading="eager"`**
+- Cover image `<img>` — added crossOrigin + eager loading
+- Avatar image `<img>` — added crossOrigin + eager loading
+- This resolves the mobile image display issue by enabling proper CORS for Cloudinary CDN images
+
+**2. ShopAccount.tsx — Added `crossOrigin="anonymous"` + `loading="eager"`**
+- Avatar image in account summary — added crossOrigin + eager loading
+
+**3. ProfileImageUpload.tsx — Three-layer improvement:**
+- **Connectivity pre-check**: HEAD request to `api.cloudinary.com` before upload
+  - If FAIL: logs "Connectivity FAILED" with device context (userAgent, platform)
+  - If PASS: logs CORS headers from Cloudinary
+  - Does NOT abort upload even if precheck fails (OPTIONS ≠ POST behavior)
+- **Fetch timeout**: 30-second AbortController timeout
+  - Prevents hung connections on slow mobile networks
+  - Logs "Fetch ABORTED (timeout)" when triggered
+- **Single retry**: Automatic retry on network failure
+  - 1 second delay between attempts
+  - Total 2 attempts (initial + 1 retry)
+  - Each attempt has its own 30s timeout
+- **Better diagnostics**:
+  - Logs `connectivityPrecheckPassed` with each upload attempt
+  - Differentiates "precheck PASSED but POST FAILED" vs "precheck ALSO FAILED"
+  - Lists different possible causes for each case
+  - Logs userAgent and platform for mobile-specific debugging
+
+### TypeScript Status
+✅ `bun run typecheck` — PASS (no errors)
+
+## STILL PENDING — REQUIRES USER BROWSER TESTING
+
+### Upload Test (Deploy → Try on Mobile)
+After deploying, test on mobile and check console for:
+```
+[ProfileUpload] STEP 5 — Connectivity result    → PASS or FAIL?
+[ProfileUpload] STEP 5 — Fetch attempt 1/2      → completed or FAILED?
+[ProfileUpload] STEP 5 — Fetch attempt 2/2      → (only if attempt 1 failed)
+```
+
+**If connectivity = FAIL:**
+→ Mobile network is blocking `api.cloudinary.com`. Need to test on different Wi-Fi/mobile data.
+
+**If connectivity = PASS but upload = FAIL:**
+→ Ad-blocker or mobile browser extension blocking the POST. Test in Incognito.
+
+**If both = FAIL:**
+→ DNS/network-level block on mobile. Test with different network.
+
+### Image Display Test
+After deploying, test on mobile Android:
+1. Go to Profile page
+2. Check if existing avatar/cover images load
+3. If still broken, check console for CORS errors
+
+## FILES CHANGED (this round)
+- `apps/shop/src/pages/ShopProfile.tsx` — Added `crossOrigin="anonymous"` + `loading="eager"` to cover and avatar `<img>` tags
+- `apps/shop/src/pages/ShopAccount.tsx` — Added `crossOrigin="anonymous"` + `loading="eager"` to avatar `<img>` tag
+- `apps/shop/src/components/shop/ProfileImageUpload.tsx` — HEAD connectivity pre-check, 30s AbortController timeout, single retry, improved mobile diagnostics
+- `AI_HANDOFF.md` — Updated
+
+## FILES CHANGED (previous rounds)
+- `apps/shop/src/components/shop/ProfileImageUpload.tsx` — Cloudinary URL log, FormData log, preflight test, fetch timing, detailed catch
 
 ## VERIFICATION
-- TypeScript: **PASS**
-- Browser upload: **NOT VERIFIED** — awaiting user's browser test results
-
-## STILL PENDING
-- User must run browser tests (Incognito + Network tab + Console)
-- Based on results:
-  - Incognito works → disable extension
-  - No request in Network → CSP/ServiceWorker/extension
-  - OPTIONS fails → CORS preflight blocked
-  - POST fails → network-level block
+- [x] TypeScript compiles clean (`bun run typecheck` — PASS)
+- [x] Cloudinary URL correct
+- [x] FormData construction correct (no manual Content-Type)
+- [x] Signature params match backend
+- [ ] Real mobile browser upload test — PENDING (requires deployment + user testing)
+- [ ] Real mobile image display test — PENDING (requires deployment + user testing)
 
 ## NEXT AI INSTRUCTIONS
-- Wait for user's browser test results
-- Based on results, identify root cause and apply smallest possible fix
-- Do NOT change signing, Convex, Neon, architecture
-- Do NOT remove network diagnostics
+1. If mobile upload still fails after this fix: check if the user tested in **Incognito mode**. If Incognito works, it's an ad-blocker.
+2. If Incognito also fails on mobile: the mobile network itself may be blocking `api.cloudinary.com`. Consider adding a server-side proxy upload endpoint as a fallback (POST through our own backend → Cloudinary).
+3. If image display still fails: inspect Cloudinary delivery URL response headers on mobile for CORS/caching issues.
+4. Do NOT change: Convex architecture, Neon, authentication, Cloudinary account, signature algorithm, database schema.

@@ -142,6 +142,8 @@ export default function ShopAccount() {
                       src={profile.avatarUrl}
                       alt=""
                       className="size-full object-cover"
+                      crossOrigin="anonymous"
+                      loading="eager"
                       onError={(e) => {
                         (e.currentTarget as HTMLImageElement).style.display = "none";
                       }}

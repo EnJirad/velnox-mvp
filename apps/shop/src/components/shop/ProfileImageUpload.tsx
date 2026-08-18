@@ -8,6 +8,13 @@ import { toast } from "sonner";
 const ACCEPTED_TYPES = ["image/jpeg", "image/png", "image/webp"];
 const MAX_BYTES = 10 * 1024 * 1024; // 10 MB — matches the backend re-validation limit (backend/storage.ts MAX_IMAGE_BYTES)
 
+/** Upload timeout — 30 seconds. Mobile networks can be slow but anything
+ *  beyond 30 s likely means a hung connection. */
+const UPLOAD_TIMEOUT_MS = 30_000;
+
+/** Number of automatic retries on network failure (1 = total 2 attempts). */
+const MAX_RETRIES = 1;
+
 /** Server-issued signed upload permit (see backend/storage.ts UploadSignature). */
 interface UploadSignature {
   cloudName: string;
@@ -75,10 +82,11 @@ function makeErrorId(): string {
  * VelShop profile image uploader (avatar + cover).
  *
  * Flow: pick a file → client-side validation (MIME type + size, max 10 MB) →
- * instant preview → ask the backend for a Cloudinary signed upload permit →
- * POST the file straight to Cloudinary (no binary through our server) → tell
- * the backend to persist the canonical URL (old-image cleanup runs server-side
- * inside saveProfileImage, after the DB row uses the new image).
+ * instant preview → connectivity pre-check (HEAD) → ask the backend for a
+ * Cloudinary signed upload permit → POST the file straight to Cloudinary with
+ * timeout + retry (no binary through our server) → tell the backend to persist
+ * the canonical URL (old-image cleanup runs server-side inside saveProfileImage,
+ * after the DB row uses the new image).
  *
  * Failure handling: every failure logs `FAILED AT STEP X` with a unique error
  * ID and full error inspection, and the toast ALWAYS shows the base message
@@ -223,41 +231,55 @@ export function ProfileImageUpload({ kind, onPreview, onUploaded, children }: Pr
       });
 
       // ==========================================
-      // PRE-FLIGHT: Test connectivity to Cloudinary
+      // CONNECTIVITY PRE-CHECK: lightweight HEAD to api.cloudinary.com
+      // Tests if the device can reach Cloudinary at all (different from
+      // the actual upload POST). If this fails, we know it's a network
+      // issue, not a CORS or request-construction issue.
       // ==========================================
+      let connectivityOk = true;
       try {
-        console.log("[ProfileUpload] STEP 5 — Preflight connectivity test", {
+        console.log("[ProfileUpload] STEP 5 — Connectivity pre-check", {
           url: cloudinaryUrl,
-          test: "OPTIONS request to api.cloudinary.com",
+          test: "HEAD request to api.cloudinary.com",
         });
         const tPreStart = performance.now();
         const preflight = await fetch(cloudinaryUrl, {
-          method: "OPTIONS",
+          method: "HEAD",
           mode: "cors",
+          cache: "no-store",
         });
         const tPreEnd = performance.now();
         const preflightHeaders: Record<string, string> = {};
         preflight.headers.forEach((v, k) => {
           preflightHeaders[k] = v;
         });
-        console.log("[ProfileUpload] STEP 5 — Preflight result", {
+        console.log("[ProfileUpload] STEP 5 — Connectivity result", {
           status: preflight.status,
           ok: preflight.ok,
           ms: Math.round(tPreEnd - tPreStart),
-          headers: preflightHeaders,
           corsAllowed: Boolean(preflightHeaders["access-control-allow-origin"]),
           corsOrigin: preflightHeaders["access-control-allow-origin"] ?? "none",
           corsMethods: preflightHeaders["access-control-allow-methods"] ?? "none",
         });
       } catch (preflightErr) {
-        console.error("[ProfileUpload] STEP 5 — Preflight FAILED (connectivity issue)", preflightErr);
-        inspectError(preflightErr, "PREFLIGHT");
-        // Do NOT abort — OPTIONS may behave differently from POST.
-        // Just log for diagnosis. The real POST follows.
+        connectivityOk = false;
+        console.error("[ProfileUpload] STEP 5 — Connectivity FAILED", preflightErr);
+        inspectError(preflightErr, "CONNECTIVITY");
+        // Log the specific failure type for diagnosis
+        const preflightEnv = {
+          origin: window.location.origin,
+          online: navigator.onLine,
+          protocol: window.location.protocol,
+          userAgent: navigator.userAgent.slice(0, 120),
+          platform: navigator.platform,
+        };
+        console.error("[ProfileUpload] STEP 5 — Connectivity failure context", preflightEnv);
+        // Do NOT abort — connectivity pre-check may fail for different
+        // reasons than the actual POST. The real POST follows.
       }
 
       // ==========================================
-      // ACTUAL UPLOAD: fetch to Cloudinary
+      // ACTUAL UPLOAD: fetch to Cloudinary (with timeout + retry)
       // ==========================================
       stepLog(5, "Starting Cloudinary upload", {
         cloudinaryUrl,
@@ -268,67 +290,110 @@ export function ProfileImageUpload({ kind, onPreview, onUploaded, children }: Pr
         publicId: sig.publicId,
         folder: sig.folder,
         timestamp: sig.timestamp,
+        connectivityPrecheckPassed: connectivityOk,
       });
 
-      const tFetchStart = performance.now();
-      let res: Response;
-      try {
-        res = await fetch(cloudinaryUrl, {
-          method: "POST",
-          body,
-          // IMPORTANT: Do NOT set Content-Type manually.
-          // The browser MUST set "multipart/form-data; boundary=..." automatically.
-          // IMPORTANT: Do NOT use mode: "no-cors" — it would hide the response.
-        });
-        const tFetchEnd = performance.now();
-        console.log("[ProfileUpload] STEP 5 — Fetch completed", {
-          status: res.status,
-          ok: res.ok,
-          statusText: res.statusText,
-          type: res.type,
-          url: res.url,
-          redirected: res.redirected,
-          ms: Math.round(tFetchEnd - tFetchStart),
-        });
-      } catch (fetchErr) {
-        const tFetchEnd = performance.now();
-        console.error("[ProfileUpload] STEP 5 — Fetch EXCEPTION (this is the 'Failed to fetch')", {
-          ms: Math.round(tFetchEnd - tFetchStart),
-          message: fetchErr instanceof Error ? fetchErr.message : String(fetchErr),
-          name: fetchErr instanceof Error ? fetchErr.name : typeof fetchErr,
-        });
-        inspectError(fetchErr, "STEP 5 FETCH EXCEPTION");
+      /** Single fetch attempt with a 30-second timeout (AbortController). */
+      let attempt = 0;
+      let res: Response | null = null;
+      let lastFetchErr: unknown = null;
 
-        // Diagnose common "Failed to fetch" causes
-        if (fetchErr instanceof TypeError) {
-          console.error("[ProfileUpload] STEP 5 — TypeError diagnosis", {
-            message: fetchErr.message,
-            possibleCauses: [
-              "1. Browser offline (navigator.onLine=" + navigator.onLine + ")",
-              "2. DNS resolution failed for api.cloudinary.com",
-              "3. CORS policy blocked the request",
-              "4. Ad-blocker / browser extension blocked the request",
-              "5. Mixed content (HTTPS page → HTTP request)",
-              "6. Service Worker intercepted the request",
-              "7. Browser DevTools network throttling",
-              "8. VPN/proxy/firewall blocking api.cloudinary.com",
-            ],
+      while (attempt <= MAX_RETRIES) {
+        attempt++;
+        const tFetchStart = performance.now();
+        const controller = new AbortController();
+        const timer = setTimeout(() => controller.abort(), UPLOAD_TIMEOUT_MS);
+        try {
+          console.log(`[ProfileUpload] STEP 5 — Fetch attempt ${attempt}/${MAX_RETRIES + 1}`);
+          res = await fetch(cloudinaryUrl, {
+            method: "POST",
+            body,
+            signal: controller.signal,
+            // IMPORTANT: Do NOT set Content-Type manually.
+            // The browser MUST set "multipart/form-data; boundary=..." automatically.
+            // IMPORTANT: Do NOT use mode: "no-cors" — it would hide the response.
           });
-        }
+          const tFetchEnd = performance.now();
+          clearTimeout(timer);
+          console.log("[ProfileUpload] STEP 5 — Fetch completed", {
+            attempt,
+            status: res.status,
+            ok: res.ok,
+            statusText: res.statusText,
+            type: res.type,
+            url: res.url,
+            redirected: res.redirected,
+            ms: Math.round(tFetchEnd - tFetchStart),
+          });
+          // If we got a response (even HTTP error), we're done — Cloudinary is reachable.
+          break;
+        } catch (fetchErr) {
+          const tFetchEnd = performance.now();
+          clearTimeout(timer);
+          lastFetchErr = fetchErr;
+          const elapsed = Math.round(tFetchEnd - tFetchStart);
+          console.error(`[ProfileUpload] STEP 5 — Fetch attempt ${attempt} FAILED`, {
+            ms: elapsed,
+            message: fetchErr instanceof Error ? fetchErr.message : String(fetchErr),
+            name: fetchErr instanceof Error ? fetchErr.name : typeof fetchErr,
+            aborted: controller.signal.aborted,
+          });
+          inspectError(fetchErr, `STEP 5 FETCH ATTEMPT ${attempt}`);
 
-        // Build a detailed diagnostic message for the toast
+          if (controller.signal.aborted) {
+            console.error("[ProfileUpload] STEP 5 — Fetch ABORTED (timeout)", {
+              timeoutMs: UPLOAD_TIMEOUT_MS,
+              elapsedMs: elapsed,
+            });
+          }
+
+          if (attempt <= MAX_RETRIES) {
+            console.log("[ProfileUpload] STEP 5 — Retrying in 1s...");
+            await new Promise((r) => setTimeout(r, 1000));
+          }
+        }
+      }
+
+      if (!res) {
+        // All attempts failed — build diagnostic message
         const env = {
           origin: window.location.origin,
           online: navigator.onLine,
           protocol: window.location.protocol,
           target: urlInfo.hostname ?? "api.cloudinary.com",
+          connectivityPrecheck: connectivityOk ? "PASS" : "FAIL",
+          userAgent: navigator.userAgent.slice(0, 120),
+          platform: navigator.platform,
         };
-        const safeDetail = fetchErr instanceof Error
-          ? `${fetchErr.message} | origin: ${env.origin} | online: ${env.online} | target: ${env.target}`
-          : `Network error: ${String(fetchErr)} | origin: ${env.origin} | online: ${env.online}`;
-        console.error("[ProfileUpload] STEP 5 — Diagnostic summary", env);
+        const safeDetail = lastFetchErr instanceof Error
+          ? `${lastFetchErr.message} | origin: ${env.origin} | online: ${env.online} | target: ${env.target} | precheck: ${env.connectivityPrecheck}`
+          : `Network error: ${String(lastFetchErr)} | origin: ${env.origin} | online: ${env.online}`;
+        console.error("[ProfileUpload] STEP 5 — All fetch attempts failed", env);
 
-        fail(5, "profile.imageUploadFailed", safeDetail, fetchErr, preview);
+        if (lastFetchErr instanceof TypeError) {
+          console.error("[ProfileUpload] STEP 5 — TypeError diagnosis", {
+            message: lastFetchErr.message,
+            connectivityPrecheck: connectivityOk,
+            possibleCauses: connectivityOk
+              ? [
+                  "Connectivity pre-check PASSED but upload POST FAILED",
+                  "1. Ad-blocker / browser extension blocked the POST",
+                  "2. CORS policy blocked the upload request",
+                  "3. Network interruption during upload",
+                  "4. Mobile carrier proxy blocking the upload",
+                ]
+              : [
+                  "Connectivity pre-check ALSO FAILED",
+                  "1. Browser offline (navigator.onLine=" + navigator.onLine + ")",
+                  "2. DNS resolution failed for api.cloudinary.com",
+                  "3. Network unreachable (mobile carrier / Wi-Fi)",
+                  "4. VPN/proxy/firewall blocking api.cloudinary.com",
+                  "5. Service Worker intercepted the request",
+                ],
+          });
+        }
+
+        fail(5, "profile.imageUploadFailed", safeDetail, lastFetchErr, preview);
         return;
       }
 

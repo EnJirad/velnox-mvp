@@ -169,6 +169,8 @@ export default function ShopProfile() {
                     src={coverSrc}
                     alt={t("profile.coverAlt", { name: displayName || "VelShop" })}
                     className="absolute inset-0 size-full object-cover"
+                    crossOrigin="anonymous"
+                    loading="eager"
                     onError={(e) => {
                       // Spec §89: never show a broken image — fall back to the gradient.
                       (e.currentTarget as HTMLImageElement).style.display = "none";
@@ -198,6 +200,8 @@ export default function ShopProfile() {
                         src={avatarSrc}
                         alt={t("profile.avatarAlt", { name: displayName || "VelShop" })}
                         className="size-full object-cover"
+                        crossOrigin="anonymous"
+                        loading="eager"
                         onError={(e) => {
                           // Spec §89: broken avatar → initial-letter fallback.
                           (e.currentTarget as HTMLImageElement).style.display = "none";
