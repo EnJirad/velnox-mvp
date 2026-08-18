@@ -142,13 +142,22 @@ export function ProfileImageUpload({ kind, onPreview, onUploaded, children }: Pr
       }
       if (!res.ok) {
         const errBody = (parsed ?? {}) as { error?: { message?: string } };
+        const cloudMsg = errBody?.error?.message ?? null;
         console.error("[ProfileUpload] Cloudinary response", {
           status: res.status,
           ok: res.ok,
-          errorMessage: errBody?.error?.message ?? null,
+          errorMessage: cloudMsg,
           body: responseText,
         });
-        toast.error(t("profile.imageUploadFailed"));
+        // Surface Cloudinary's own (safe) error message in the toast — e.g.
+        // "Invalid Signature", "File too large", "Unknown parameter" — so the
+        // real cause is visible without opening DevTools. Cloudinary error
+        // messages never contain account secrets.
+        toast.error(
+          cloudMsg
+            ? `${t("profile.imageUploadFailed")} (${res.status}: ${cloudMsg})`
+            : `${t("profile.imageUploadFailed")} (HTTP ${res.status})`,
+        );
         onPreview(null);
         URL.revokeObjectURL(preview);
         return;
@@ -219,7 +228,11 @@ export function ProfileImageUpload({ kind, onPreview, onUploaded, children }: Pr
       // Stage A/B network error (fetch never completed, CORS, Convex call
       // rejected, …) — distinct from a Cloudinary HTTP error above.
       console.error("Profile image upload error (signature/network stage):", err);
-      toast.error(t("profile.imageUploadFailed"));
+      const msg = err instanceof Error && err.message ? err.message : "";
+      // Backend errors (AppError) carry a user-friendly Thai message — show
+      // it. Pure browser network failures (e.g. CORS surfaces as "Failed to
+      // fetch") mean nothing to the user, so keep the generic toast there.
+      toast.error(msg && msg !== "Failed to fetch" ? msg : t("profile.imageUploadFailed"));
       onPreview(null);
       URL.revokeObjectURL(preview);
     } finally {
