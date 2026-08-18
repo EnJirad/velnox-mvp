@@ -1,11 +1,13 @@
 {
   "files": [],
   "references": [
-    { "path": "./apps/shop" },
-    { "path": "./apps/seller" },
-    { "path": "./apps/center" },
-    { "path": "./apps/corporate" },
-    { "path": "./packages/shared" },
+    { "path": "./tsconfig.app.json" },
     { "path": "./tsconfig.node.json" }
-  ]
+  ],
+  "compilerOptions": {
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["./src/*"]
+    }
+  }
 }

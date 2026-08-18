@@ -5,17 +5,17 @@
   "tsx": true,
   "tailwind": {
     "config": "",
-    "css": "packages/shared/src/index.css",
+    "css": "src/index.css",
     "baseColor": "neutral",
     "cssVariables": true,
     "prefix": ""
   },
   "aliases": {
-    "components": "@velnox/shared/components",
-    "utils": "@velnox/shared/lib/utils",
-    "ui": "@velnox/shared/components/ui",
-    "lib": "@velnox/shared/lib",
-    "hooks": "@velnox/shared/hooks"
+    "components": "@/components",
+    "utils": "@/lib/utils",
+    "ui": "@/components/ui",
+    "lib": "@/lib",
+    "hooks": "@/hooks"
   },
   "iconLibrary": "lucide"
 }
