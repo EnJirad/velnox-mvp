@@ -1,0 +1,3 @@
+# Scope the native `bun test` runner to the repo's own tests.
+[test]
+root = "./tests"

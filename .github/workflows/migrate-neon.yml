@@ -1,0 +1,55 @@
+name: Database Migration
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "db/**"
+      - "package.json"
+      - "bun.lock"
+      - ".github/workflows/migrate-neon.yml"
+
+  workflow_dispatch:
+
+jobs:
+  migrate:
+    name: Deploy Database Migration
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      # Velnox uses a plain-SQL migration system (db/schema.sql + db/migrations/*.sql
+      # applied by db/migrate.ts) — NOT Prisma. The repository has no
+      # prisma/schema.prisma, so `bunx prisma validate` can never pass here.
+      - name: Check migrations
+        run: |
+          test -f db/schema.sql && echo "OK db/schema.sql"
+          test -f db/migrate.ts && echo "OK db/migrate.ts (runner)"
+          test -d db/migrations && ls db/migrations/*.sql >/dev/null \
+            && echo "OK db/migrations/ ($(ls db/migrations/*.sql | wc -l) files)"
+
+      - name: Deploy Neon migrations
+        run: bun run db:migrate
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+
+      - name: Verify database (schema smoke test)
+        run: bun run db:smoke
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+
+      - name: Verify database (consistency check, read-only)
+        run: bun run db:consistency
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}

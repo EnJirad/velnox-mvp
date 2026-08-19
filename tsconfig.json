@@ -1,0 +1,11 @@
+{
+  "files": [],
+  "references": [
+    { "path": "./apps/shop" },
+    { "path": "./apps/seller" },
+    { "path": "./apps/center" },
+    { "path": "./apps/corporate" },
+    { "path": "./packages/shared" },
+    { "path": "./tsconfig.node.json" }
+  ]
+}

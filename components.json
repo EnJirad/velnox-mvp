@@ -1,0 +1,21 @@
+{
+  "$schema": "https://ui.shadcn.com/schema.json",
+  "style": "new-york",
+  "rsc": false,
+  "tsx": true,
+  "tailwind": {
+    "config": "",
+    "css": "packages/shared/src/index.css",
+    "baseColor": "neutral",
+    "cssVariables": true,
+    "prefix": ""
+  },
+  "aliases": {
+    "components": "@velnox/shared/components",
+    "utils": "@velnox/shared/lib/utils",
+    "ui": "@velnox/shared/components/ui",
+    "lib": "@velnox/shared/lib",
+    "hooks": "@velnox/shared/hooks"
+  },
+  "iconLibrary": "lucide"
+}

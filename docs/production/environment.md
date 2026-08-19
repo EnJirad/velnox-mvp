@@ -1,0 +1,38 @@
+# VELNOX — Environment (production reference)
+
+Version: 1.0 · Phase 9 — รายละเอียดเต็ม: [`../ENVIRONMENT.md`](../ENVIRONMENT.md)
+
+## Convex deployment env (backend/auth runtime — ต้องมีใน Convex prod env)
+
+| ตัวแปร | ใช้ทำอะไร | จำเป็น |
+|---|---|---|
+| `DATABASE_URL` | Neon connection (prod DB) | ✅ |
+| `SITE_URL` | fallback origin สำหรับ redirect หลัง OAuth (single URL) | ✅ |
+| `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | **Google Sign-In (วิธีล็อกอินหลัก)** — OAuth Client จาก Google Cloud; secret อยู่ฝั่ง server เท่านั้น + ตั้ง redirect URI `/api/auth/callback/google` ใน Google Cloud Console (ดู `docs/GOOGLE_OAUTH_UPGRADE_REPORT.md`) | ✅ |
+| `AUTH_ALLOWED_ORIGINS` | (ทางเลือก) JSON array ของ origins ที่ redirect หลัง OAuth ได้ | optional |
+| `EMAIL_OTP_ENABLED` | ปิด default (`"false"`) — Google OAuth = ON, Email OTP = OFF; ตั้ง `"true"` เพื่อเปิด | optional |
+| `JWT_PRIVATE_KEY` | Convex Auth signing (Convex จัดการ) | ✅ |
+| `JWKS` | Convex Auth public keys (Convex จัดการ) | ✅ |
+| `CLOUDINARY_CLOUD_NAME` / `_API_KEY` / `_API_SECRET` | product image storage | ✅ |
+| `FREEBUFF_EMAIL_API_KEY` | **เฉพาะเมื่อเปิด Email OTP** — Resend API key (`re_...`) — server-only | เปิดฟีเจอร์เท่านั้น |
+| `EMAIL_FROM` | sender ของ OTP email เช่น `Velnox <no-reply@velnox.com>` (domain ต้อง verify กับ Resend; ไม่ตั้ง = fail อย่างปลอดภัย ไม่มี sandbox fallback) | เปิดฟีเจอร์เท่านั้น |
+| `STRIPE_SECRET_KEY` | ชำระเงินออนไลน์ (วิธี "online" — บัตร/PromptPay, hosted Checkout) — ถ้าไม่มี วิธีนี้ถูกซ่อน + fallback manual | เปิดฟีเจอร์เท่านั้น |
+| `STRIPE_WEBHOOK_SECRET` | verify signature webhook `/stripe/webhook` (Stripe Dashboard ต้องตั้ง endpoint ชี้ `<convex-url>/stripe/webhook`) | เปิดฟีเจอร์เท่านั้น |
+| `BOOTSTRAP_OWNER_SECRET` | รหัสเปิดใช้งานเจ้าของบริษัทครั้งเดียว (velcenter) — ≥16 ตัวอักษร, ใช้แล้วปิดถาวร (มี owner แล้วใช้ซ้ำไม่ได้) | ตั้งก่อนเปิด velcenter ครั้งแรก |
+
+## Vercel env (frontend — ต่อ VITE_ เท่านั้น ไม่อย่างนั้นห้าม expose)
+
+| ตัวแปร | ใช้ทำอะไร | จำเป็น |
+|---|---|---|
+| `VITE_CONVEX_URL` | Convex client URL | ✅ (หรือ convex auto-inject) |
+| `VITE_SITE_BASENAME` | routing prefix ต่อ site (`/shop` `/seller` `/center`) | ✅ |
+| `VITE_VELSHOP_URL` / `VITE_VELSELLER_URL` / `VITE_VELCENTER_URL` | cross-site redirect | ✅ |
+| `VITE_SENTRY_DSN` | error monitoring (ไม่มี = no-op) | optional |
+| `VITE_VLY_APP_ID` / `VITE_VLY_MONITORING_URL` | platform preview monitoring | platform-managed |
+
+## กฎ (spec §6, §38, §51)
+
+- Dev / preview / prod แยก env — **ห้าม dev DB ใน prod**
+- Production credentials ห้ามใช้ใน dev (sandbox/test key แยก)
+- ห้าม commit `.env*` — อยู่ใน `.gitignore`; ตั้งค่าผ่าน Keys/API keys UI
+- ห้าม expose secret ผ่าน `VITE_*` (มีแค่ค่าที่ client ควรเห็น)
